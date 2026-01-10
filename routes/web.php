@@ -82,6 +82,7 @@ Route::group([
 
     Route::get('/complete/{id}', 'SaleController@orderComplete')->name('sale.order.complete');
     Route::get('/ship/{id}', 'SaleController@orderShip')->name('sale.order.ship');
+    Route::get('/hold/{id}', 'SaleController@orderHold')->name('sale.order.hold');
 
 
 });

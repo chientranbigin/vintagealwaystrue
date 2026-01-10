@@ -331,7 +331,7 @@
                                                         <span class="badge badge-light mr-2">{{ $order->status }}</span>
                                                     @elseif($order->status == 'ON HOLD')
                                                         <span class="badge badge-warning mr-2">{{ $order->status }}</span>
-                                                    @elseif($order->status == 'READY FOR SHIPPING')
+                                                    @elseif($order->status == 'READY FOR SHIPPING' || $order->status == 'A SHIP NOW')
                                                         <span class="badge badge-info mr-2">{{ $order->status }}</span>
                                                     @else
                                                         <span class="badge badge-success mr-2">{{ $order->status }}</span>
@@ -366,9 +366,14 @@
                                                         <a class="dropdown-item" href="{{ route('sale.order.create', ['consumer_id' => $order->consumer_id]) }}">
                                                             <i class="mdi mdi-plus-circle-outline mr-2"></i> Create Similar Order
                                                         </a>
-                                                        @if($order->status != 'A SHIP NOW')
+                                                        @if($order->status == 'NEW' || $order->status == 'ON HOLD')
                                                             <a class="dropdown-item" href="{{ route('sale.order.ship', $order->id) }}">
-                                                                <i class="mdi mdi-truck-delivery-outline mr-2"></i> Ready to Ship
+                                                                <i class="mdi mdi-truck mr-2"></i> Ready to Ship
+                                                            </a>
+                                                        @endif
+                                                        @if($order->status == 'NEW')
+                                                            <a class="dropdown-item" href="{{ route('sale.order.hold', $order->id) }}">
+                                                                <i class="mdi mdi-pause-circle-outline mr-2"></i> Mark On Hold
                                                             </a>
                                                         @endif
                                                         @if($order->status != 'COMPLETED')
@@ -392,7 +397,7 @@
                                             </div>
 
                                         {{-- Info --}}
-                                        <a href="{{ route('sale.order.detail', $order->id) }}" style="text-decoration: none; color: inherit;">
+                                       
                                             <div class="order-info">
                                                 <p><b>Họ tên:</b> {{ $order->name }}</p>
                                                 <p><b>SDT:</b> {{ $order->phone }}</p>
@@ -408,8 +413,7 @@
                                                     </p>
                                                 @endif
                                             </div>
-                                        </a>
-
+                     
                                         {{-- Products --}}
                                         <div class="order-products">
                                             @foreach($order->products as $product)

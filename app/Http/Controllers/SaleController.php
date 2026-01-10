@@ -343,6 +343,14 @@ class SaleController extends Controller
         return redirect()->back();
     }
 
+    public function orderHold($id)
+    {
+        Order::find($id)->update([
+            'status' => 'ON HOLD'
+        ]);
+        return redirect()->back();
+    }
+
     public function productCreate(Request $request)
     {
         if ($request->isMethod('POST')) {
