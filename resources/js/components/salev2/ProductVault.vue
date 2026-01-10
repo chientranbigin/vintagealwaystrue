@@ -119,11 +119,14 @@
             <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
             
             <!-- Quick Actions Overlay -->
-            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-3 p-4">
-                <el-button type="primary" size="small" class="w-28 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300" 
-                           @click="editProduct(product)">Edit</el-button>
-                <el-button type="success" size="small" class="w-28 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75" 
-                           icon="el-icon-document-copy" @click="copyProductInfo(product)">Copy</el-button>
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2 p-4 z-10"
+                 @click.stop="editProduct(product)">
+                <el-button type="primary" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300" 
+                           @click.stop="editProduct(product)">Edit</el-button>
+                <el-button type="success" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75" 
+                           icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">Copy</el-button>
+                <el-button type="danger" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100" 
+                           icon="el-icon-delete" @click.stop="confirmDelete(product)">Delete</el-button>
             </div>
           </div>
 
@@ -187,20 +190,6 @@ export default {
         'VAI': 'V', 'NGỰC': 'N', 'EO': 'E', 'DÀI ÁO': 'D', 'DÀI ÁO SAU': 'DS', 
         'DÀI TAY': 'DT', 'EO QUẦN': 'E', 'ĐÁY': 'ĐA', 'ĐÙI': 'Đ', 'DÀI QUẦN': 'D', 
         'ỐNG': 'Ô', 'DƯ LAI': 'L'
-      },
-      // Edit Modal Data
-      editVisible: false,
-      editLoading: false,
-      editQuickInput: '',
-      editForm: { id: null, type: '', price: 0, description: '', sizes: [], image: null, imagePreview: '' },
-      mappings: {
-            'BLAZER': { labels: 'Vai - Ngực - Dài trước - Dài tay', indices: [0, 1, 3, 5] },
-            'JACKET': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
-            'TROUSERS': { labels: 'Eo - Đáy - Đùi - Dài quần - Ống - Dư lai', indices: [6, 7, 8, 9, 10, 11] },
-            'SHIRT': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
-            'GILE': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
-            'POLO SHIRT': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
-            'SUIT': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
       },
       allSizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI']
     }
@@ -342,64 +331,22 @@ export default {
             this.$message.error('Failed to copy');
         }
     },
-    editProduct(product) {
-        this.editForm = {
-            id: product.id,
-            type: product.type,
-            price: product.price,
-            description: product.description,
-            sizes: this.allSizes.map(name => {
-                const existing = product.sizes.find(s => s.name === name);
-                return { name, value: existing ? existing.value : '' };
-            }),
-            image: null,
-            imagePreview: product.path_thumb
-        };
-        this.editVisible = true;
+    confirmDelete(product) {
+        this.$confirm('This will permanently delete the product and its images. Continue?', 'Warning', {
+          confirmButtonText: 'OK',
+          cancelButtonText: 'Cancel',
+          type: 'warning'
+        }).then(() => {
+          this.performDelete(product);
+        }).catch(() => {});
     },
-    handleEditFileChange(e) {
-        const file = e.target.files[0];
-        if(file) {
-            this.editForm.image = file;
-            this.editForm.imagePreview = URL.createObjectURL(file);
-        }
-    },
-    parseEditQuickInput(val) {
-        if(!val) return;
-        const nums = val.trim().split(/\s+/);
-        const config = this.mappings[this.editForm.type];
-        if(config && config.indices) {
-            config.indices.forEach((idx, i) => {
-                if(nums[i]) this.editForm.sizes[idx].value = nums[i];
-            });
-        }
-    },
-    async saveProduct() {
-        this.editLoading = true;
+    async performDelete(product) {
         try {
-            let formData = new FormData();
-            formData.append('type', this.editForm.type);
-            formData.append('price', this.editForm.price);
-            formData.append('description', this.editForm.description || '');
-            if(this.editForm.image) {
-                formData.append('banner', this.editForm.image);
-            }
-            this.editForm.sizes.forEach((s, i) => {
-                formData.append(`sizes[${i}][name]`, s.name);
-                formData.append(`sizes[${i}][value]`, s.value);
-            });
-
-            await axios.post(`/salev2/api/product/${this.editForm.id}/update`, formData, {
-                 headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            
-            this.$message.success('Product Updated');
-            this.editVisible = false;
+            await axios.delete(`/salev2/api/product/${product.id}`);
+            this.$message.success('Product deleted');
             this.fetchProducts(this.page);
-        } catch(e) {
-            this.$message.error('Update failed');
-        } finally {
-            this.editLoading = false;
+        } catch (err) {
+            this.$message.error('Delete failed');
         }
     }
   }

@@ -360,6 +360,29 @@ class SaleV2Controller extends Controller
         });
     }
 
+    public function destroyProduct($id)
+    {
+        $product = Product::findOrFail($id);
+        
+        return DB::transaction(function() use ($product) {
+            foreach ($product->images as $image) {
+                $path = str_replace('/storage/', 'public/', $image->file_path);
+                Storage::disk('public')->delete($path);
+            }
+            $product->images()->delete();
+            
+            if ($product->path_thumb) {
+                $path = str_replace('/storage/', 'public/', $product->path_thumb);
+                Storage::disk('public')->delete($path);
+            }
+            
+            $product->sizes()->delete();
+            $product->delete();
+            
+            return response()->json(['success' => true]);
+        });
+    }
+
     public function updateOrder(Request $request, $id)
     {
         $order = Order::with('products')->findOrFail($id);
@@ -434,5 +457,61 @@ class SaleV2Controller extends Controller
         // Implementation of folder-style upload grouped by product
         // Placeholder for now, will integrate Google Vision/OpenAI logic
         return response()->json(['message' => 'Smart Upload logic initialized']);
+    }
+    public function uploadSmartGroup(Request $request)
+    {
+        $sessionId = $request->input('session_id', 'SMART_' . uniqid());
+        $type = $request->input('type', 'T-SHIRT');
+        
+        // 1. Store Main Image
+        $mainPath = '';
+        $mainOriginalName = '';
+        if ($request->hasFile('main')) {
+            $file = $request->file('main');
+            $mainOriginalName = $file->getClientOriginalName();
+            // Use a unique name to avoid conflicts if same file is uploaded twice in different groups
+            $filename = 'main_' . uniqid() . '_' . $mainOriginalName;
+            $mainPath = str_replace('public', 'storage', $file->store('public/sale'));
+
+        } else {
+            return response()->json(['success' => false, 'message' => 'Main image is required'], 400);
+        }
+
+        // 2. Store Details
+        $detailPaths = [];
+        if ($request->hasFile('details')) {
+            foreach ($request->file('details') as $file) {
+                $filename = 'detail_' . uniqid() . '_' . $file->getClientOriginalName();
+                $path = str_replace('public', 'storage', $file->store('public/sale/detail'));
+
+                $detailPaths[] = $path;
+            }
+        }
+
+        // 3. Dispatch Job (Step 1 Recognition & Step 2 Attachment)
+        \App\Jobs\ProcessSmartImage::dispatch(
+            $mainPath, 
+            $detailPaths, 
+            $type, 
+            $sessionId, 
+            $mainOriginalName
+        );
+
+        return response()->json([
+            'success' => true, 
+            'session_id' => $sessionId,
+            'status' => 'DISPATCHED'
+        ]);
+    }
+
+    public function uploadLogs(Request $request)
+    {
+        $sessionIds = $request->input('session_ids', []);
+        if (is_string($sessionIds)) {
+            $sessionIds = explode(',', $sessionIds);
+        }
+
+        $logs = \App\ProductUploadLog::whereIn('session_id', $sessionIds)->get();
+        return response()->json($logs);
     }
 }

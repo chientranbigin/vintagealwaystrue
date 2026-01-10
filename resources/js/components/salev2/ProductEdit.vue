@@ -31,11 +31,24 @@
                         <span class="text-xs font-bold uppercase">Upload Image</span>
                     </div>
                     <!-- Overlay -->
-                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                        <span class="text-white font-bold uppercase tracking-widest text-xs border border-white px-4 py-2 rounded">Change</span>
+                     <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                         <span class="text-white font-bold uppercase tracking-widest text-xs border border-white px-4 py-2 rounded">Change</span>
+                     </div>
+                 </div>
+                 <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileChange">
+            </div>
+
+            <!-- Detail Images Gallery -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100" v-if="form.details && form.details.length">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-slate-400 font-bold text-xs uppercase tracking-wider">Detail Images ({{ form.details.length }})</label>
+                    <el-button type="success" size="mini" icon="el-icon-share" plain @click="shareImages">Share All</el-button>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div v-for="img in form.details" :key="img.id" class="aspect-square rounded overflow-hidden border border-slate-200">
+                        <img :src="img.file_path" class="w-full h-full object-cover">
                     </div>
                 </div>
-                <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileChange">
             </div>
          </div>
 
@@ -43,9 +56,11 @@
          <div class="md:col-span-2 space-y-6">
              <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                  <h2 class="font-bold text-slate-800 text-lg mb-4">Product Details</h2>
+                 <!-- ... existing ... -->
                  <div class="space-y-4">
                      <!-- Quick Input -->
-                     <div>
+                     <!-- Quick Input Hidden as requested -->
+                     <div v-if="false">
                          <label class="flex justify-between items-center text-slate-400 font-bold text-xs uppercase mb-2 tracking-wider">
                              <span>Quick Input (Space separated)</span>
                              <span class="text-blue-600 cursor-pointer" @click="$message.info('Format: ' + (activeMapping.labels || 'Select type first'))">
@@ -113,6 +128,7 @@ export default {
                 price: 0,
                 description: '',
                 image: null,
+                details: [], // For display logic
                 sizes: []
             },
             imagePreview: '',
@@ -154,6 +170,7 @@ export default {
                 this.form.type = product.type;
                 this.form.price = product.price;
                 this.form.description = product.description;
+                this.form.details = product.images || []; // Populate details
                 this.imagePreview = product.path_thumb;
 
                 // Populate sizes
@@ -169,6 +186,41 @@ export default {
             } finally {
                 this.loading = false;
             }
+        },
+        async shareImages() {
+             if (!navigator.share) return this.$message.warning('Browser does not support native sharing');
+             
+             const loading = this.$loading({ lock: true, text: 'Preparing images...' });
+             try {
+                 const files = [];
+                 
+                 // Main Image
+                 if (this.imagePreview) {
+                     const blob = await fetch(this.imagePreview).then(r => r.blob());
+                     files.push(new File([blob], `Main-${this.form.id}.jpg`, { type: blob.type }));
+                 }
+                 
+                 // Detail Images
+                 for (let i = 0; i < this.form.details.length; i++) {
+                     const img = this.form.details[i];
+                     const blob = await fetch(img.path).then(r => r.blob());
+                     // Detect type from path or blob
+                     files.push(new File([blob], `Detail-${i}.webp`, { type: blob.type }));
+                 }
+                 
+                 if (!files.length) throw new Error('No images to share');
+                 
+                 await navigator.share({
+                     title: `Product ${this.form.id}`,
+                     text: `Code: ${this.form.id} - Price: ${this.form.price}`,
+                     files: files
+                 });
+             } catch (e) {
+                 console.error(e);
+                 this.$message.error('Share failed: ' + e.message);
+             } finally {
+                 loading.close();
+             }
         },
         handleFileChange(e) {
             const file = e.target.files[0];

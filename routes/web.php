@@ -97,9 +97,18 @@ Route::group([
     Route::get('/api/products', 'SaleV2Controller@products')->name('salev2.api.products');
     Route::get('/api/orders', 'SaleV2Controller@orders')->name('salev2.api.orders');
     Route::get('/api/order/{id}', 'SaleV2Controller@orderDetail')->name('salev2.api.order-detail');
+    Route::get('/api/orders/{id}/history', 'SaleV2Controller@orderHistory')->name('salev2.orders.history');
+
+    // Expense Routes
+    Route::get('/api/expenses', 'ExpenseController@index');
+    Route::post('/api/expenses', 'ExpenseController@store');
+    Route::delete('/api/expenses/{id}', 'ExpenseController@destroy');
+    
     Route::get('/api/product/{id}', 'SaleV2Controller@productDetail')->name('salev2.api.product-detail');
     Route::post('/api/order', 'SaleV2Controller@storeOrder')->name('salev2.api.order.store');
     Route::post('/api/order/{id}', 'SaleV2Controller@updateOrder')->name('salev2.api.order.update');
+    Route::post('/api/upload-smart-group', 'SaleV2Controller@uploadSmartGroup');
+    Route::get('/api/upload-logs', 'SaleV2Controller@uploadLogs');
     Route::get('/api/customer-history/{phone}', 'SaleV2Controller@customerHistory')->name('salev2.api.customer-history');
     Route::get('/api/dashboard-stats', 'SaleV2Controller@dashboardStats')->name('salev2.api.dashboard-stats');
     Route::post('/api/smart-upload', 'SaleV2Controller@smartUpload')->name('salev2.api.smart-upload');
@@ -108,6 +117,7 @@ Route::group([
     Route::get('/api/consumers', 'SaleV2Controller@consumers')->name('salev2.api.consumers');
     Route::post('/api/product/store', 'SaleV2Controller@storeProduct')->name('salev2.api.product.store');
     Route::post('/api/product/{id}/update', 'SaleV2Controller@updateProduct')->name('salev2.api.product.update');
+    Route::delete('/api/product/{id}', 'SaleV2Controller@destroyProduct');
     Route::post('/api/order/{id}/update', 'SaleV2Controller@updateOrder')->name('salev2.api.order.explicit-update'); // For Edit Page
 
     Route::get('/{any?}', 'SaleV2Controller@index')->where('any', '.*')->name('salev2.index');

@@ -7,6 +7,7 @@
       </div>
       <div class="flex gap-2 w-full md:w-auto">
         <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="w-full md:w-64" @input="debouncedFetch"></el-input>
+        <el-button type="danger" plain icon="el-icon-money" @click="$router.push('/salev2/expenses')">Costs</el-button>
         <el-button type="primary" icon="el-icon-plus" @click="$router.push('/salev2/order/create')">New</el-button>
         <el-button icon="el-icon-refresh" @click="fetchOrders(1)"></el-button>
       </div>

@@ -18,18 +18,22 @@ import SmartUpload from './components/salev2/SmartUpload.vue';
 import CustomerManager from './components/salev2/CustomerManager.vue';
 import OrderCreate from './components/salev2/OrderCreate.vue';
 import ProductCreate from './components/salev2/ProductCreate.vue';
-import ProductEdit from './components/salev2/ProductEdit.vue';
+const ProductEdit = require('./components/salev2/ProductEdit.vue').default;
+const OrderEdit = require('./components/salev2/OrderEdit.vue').default;
+const ExpenseManager = require('./components/salev2/ExpenseManager.vue').default;
+const ProductBatchUpload = require('./components/salev2/ProductBatchUpload.vue').default;
 
 const routes = [
     { path: '/salev2', component: Dashboard },
-    { path: '/salev2/products', component: ProductVault },
-    { path: '/salev2/orders', component: OrderManager },
-    { path: '/salev2/upload', component: SmartUpload },
-    { path: '/salev2/customers', component: CustomerManager },
+    { path: '/salev2/products', component: ProductVault, name: 'product-vault' },
+    { path: '/salev2/orders', component: OrderManager, name: 'order-manager' },
+    { path: '/salev2/upload', component: ProductBatchUpload, name: 'smart-upload' },
+    { path: '/salev2/customers', component: CustomerManager, name: 'customer-manager' },
     { path: '/salev2/order/create', name: 'order-create', component: OrderCreate },
-    { path: '/salev2/order/:id/edit', name: 'order-edit', component: require('./components/salev2/OrderEdit.vue').default },
+    { path: '/salev2/order/:id/edit', name: 'order-edit', component: OrderEdit },
     { path: '/salev2/product/create', name: 'product-create', component: ProductCreate },
     { path: '/salev2/product/:id/edit', name: 'product-edit', component: ProductEdit },
+    { path: '/salev2/expenses', component: ExpenseManager, name: 'expense-manager' },
     { path: '*', redirect: '/salev2' }
 ];
 

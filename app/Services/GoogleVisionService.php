@@ -31,6 +31,7 @@ class GoogleVisionService
 
         $result = json_decode($response->getBody(), true);
 
+        \Illuminate\Support\Facades\Log::channel('product_upload')->info(asset($imageUrl));
         return $result['responses'][0]['fullTextAnnotation']['text'] ?? null;
     }
     function extractPrice($text)
