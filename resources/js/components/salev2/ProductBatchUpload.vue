@@ -131,7 +131,7 @@ export default {
             selectedIds: [],
             groups: [], // Array of { main, details, sessionId, status, error, productName }
             uploading: false,
-            batchType: 'T-SHIRT',
+            batchType: '',
             lastSelectedId: null,
             renderLimit: 48,
             pollInterval: null
@@ -284,9 +284,9 @@ export default {
                     const logs = res.data;
                     
                     logs.forEach(log => {
-                        const group = this.groups.find(g => g.sessionId === log.session_id);
+                        const group = this.groups.find(g => g.sessionId === log.session_id && g.main.file.name === log.file_name);
                         if (group) {
-                            group.status = log.status; // PROCESSING, SUCCESS, ERROR
+                            group.status = (log.status === 'FAILED' ? 'ERROR' : log.status); 
                             group.error = log.message;
                             group.productName = log.product_code;
                             group.productId = log.product_id;
@@ -308,6 +308,10 @@ export default {
         },
         async uploadAll() {
             if (!this.groups.length) return;
+            if (!this.batchType) {
+                this.$message.error('Please select a Product Type first');
+                return;
+            }
             this.uploading = true;
             
             // Unified ID for the batch

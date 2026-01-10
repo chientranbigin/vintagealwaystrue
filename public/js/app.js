@@ -1200,7 +1200,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       groups: [],
       // Array of { main, details, sessionId, status, error, productName }
       uploading: false,
-      batchType: 'T-SHIRT',
+      batchType: '',
       lastSelectedId: null,
       renderLimit: 48,
       pollInterval: null
@@ -1389,12 +1389,13 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               logs = res.data;
               logs.forEach(function (log) {
                 var group = _this5.groups.find(function (g) {
-                  return g.sessionId === log.session_id;
+                  return g.sessionId === log.session_id && g.main.file.name === log.file_name;
                 });
                 if (group) {
-                  group.status = log.status; // PROCESSING, SUCCESS, ERROR
+                  group.status = log.status === 'FAILED' ? 'ERROR' : log.status;
                   group.error = log.message;
                   group.productName = log.product_code;
+                  group.productId = log.product_id;
                 }
               });
               _context.n = 4;
@@ -1433,11 +1434,18 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               }
               return _context3.a(2);
             case 1:
+              if (_this6.batchType) {
+                _context3.n = 2;
+                break;
+              }
+              _this6.$message.error('Please select a Product Type first');
+              return _context3.a(2);
+            case 2:
               _this6.uploading = true;
 
               // Unified ID for the batch
               batchId = 'BATCH_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-              _context3.p = 2;
+              _context3.p = 3;
               _loop = /*#__PURE__*/_regenerator().m(function _loop() {
                 var gData, res, _t2;
                 return _regenerator().w(function (_context2) {
@@ -1484,38 +1492,38 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 }, _loop, null, [[2, 4]]);
               });
               i = 0;
-            case 3:
+            case 4:
               if (!(i < _this6.groups.length)) {
+                _context3.n = 7;
+                break;
+              }
+              return _context3.d(_regeneratorValues(_loop()), 5);
+            case 5:
+              if (!_context3.v) {
                 _context3.n = 6;
                 break;
               }
-              return _context3.d(_regeneratorValues(_loop()), 4);
-            case 4:
-              if (!_context3.v) {
-                _context3.n = 5;
-                break;
-              }
-              return _context3.a(3, 5);
-            case 5:
-              i++;
-              _context3.n = 3;
-              break;
+              return _context3.a(3, 6);
             case 6:
-              _this6.startPolling();
-              _context3.n = 8;
+              i++;
+              _context3.n = 4;
               break;
             case 7:
-              _context3.p = 7;
-              _t3 = _context3.v;
-              console.error(_t3);
+              _this6.startPolling();
+              _context3.n = 9;
+              break;
             case 8:
               _context3.p = 8;
-              _this6.uploading = false;
-              return _context3.f(8);
+              _t3 = _context3.v;
+              console.error(_t3);
             case 9:
+              _context3.p = 9;
+              _this6.uploading = false;
+              return _context3.f(9);
+            case 10:
               return _context3.a(2);
           }
-        }, _callee2, null, [[2, 7, 8, 9]]);
+        }, _callee2, null, [[3, 8, 9, 10]]);
       }))();
     }
   }

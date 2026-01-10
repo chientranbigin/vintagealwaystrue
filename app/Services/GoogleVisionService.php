@@ -19,7 +19,7 @@ class GoogleVisionService
                 "requests" => [
                     [
                         "image" => [
-                            "source" => ["imageUri" => asset($imageUrl)]
+                            "source" => ["imageUri" => asset('storage/' . $imageUrl)]
                         ],
                         "features" => [
                             ["type" => "TEXT_DETECTION"]
@@ -31,7 +31,7 @@ class GoogleVisionService
 
         $result = json_decode($response->getBody(), true);
 
-        \Illuminate\Support\Facades\Log::channel('product_upload')->info(asset($imageUrl));
+        \Illuminate\Support\Facades\Log::channel('product_upload')->info(asset('storage/' . $imageUrl));
         return $result['responses'][0]['fullTextAnnotation']['text'] ?? null;
     }
     function extractPrice($text)

@@ -56,10 +56,10 @@ class ProcessSmartImage implements ShouldQueue
             
             // A. Extract Code
             $prefix = \App\Contracts\SaleConfig::PRODUCT_KEY_TYPES[$this->type] ?? '';
-            $pattern = '/' . preg_quote($prefix, '/') . '\d+/';
+            $pattern = '/' . preg_quote($prefix, '/') . '\d+/i';
             
             preg_match($pattern, $detectedText, $matches);
-            $candidateName = $matches[0] ?? null;
+            $candidateName = isset($matches[0]) ? strtoupper($matches[0]) : null;
 
             
     
