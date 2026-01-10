@@ -469,8 +469,9 @@ class SaleV2Controller extends Controller
         if ($request->hasFile('main')) {
             $file = $request->file('main');
             $mainOriginalName = $file->getClientOriginalName();
-            // Store relative to 'public' disk root (storage/app/public)
-            $mainPath = $file->store('sale/smart', 'public');
+            // Use a unique name to avoid conflicts if same file is uploaded twice in different groups
+            $mainPath = str_replace('public', 'storage', $file->store('public/sale'));
+
         } else {
             return response()->json(['success' => false, 'message' => 'Main image is required'], 400);
         }
@@ -479,8 +480,8 @@ class SaleV2Controller extends Controller
         $detailPaths = [];
         if ($request->hasFile('details')) {
             foreach ($request->file('details') as $file) {
-                // Store relative to 'public' disk root
-                $path = $file->store('sale/smart/detail', 'public');
+                $path = str_replace('public', 'storage', $file->store('public/sale/detail'));
+
                 $detailPaths[] = $path;
             }
         }
