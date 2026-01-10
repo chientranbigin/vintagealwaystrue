@@ -144,7 +144,9 @@ class ProcessSmartImage implements ShouldQueue
 
     protected function processDetailImage($product, $relativePath)
     {
-        $fullPath = storage_path('app/public/' . $relativePath);
+        $fullPath = storage_path('app/public/' . str_replace('storage/', '', $relativePath));
+        \Illuminate\Support\Facades\Log::channel('product_upload')->info($fullPath);
+
         if (!file_exists($fullPath)) return;
 
         // 1. Load Image using GD
@@ -200,10 +202,10 @@ class ProcessSmartImage implements ShouldQueue
             @unlink($fullPath);
         }
 
-        // Create Database Record
+        // Create Database Record (Store relative path, controller handles asset() mapping)
         ProductImage::create([
             'product_id' => $product->id,
-            'file_path' => '/storage/' . $newPath
+            'file_path' => $newPath
         ]);
     }
 }

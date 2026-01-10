@@ -27,6 +27,20 @@ class SaleV2Controller extends Controller
 
     /** API Endpoints for SaleV2 SPA **/
 
+    private function formatImagePath($path)
+    {
+        if (!$path) return null;
+        if (strpos($path, 'http') === 0) return $path;
+        
+        // Clean up common prefixes that might cause double-prefixing
+        $cleanPath = ltrim($path, '/');
+        if (strpos($cleanPath, 'storage/') === 0) {
+            $cleanPath = substr($cleanPath, 8);
+        }
+        
+        return asset('storage/' . $cleanPath);
+    }
+
     public function products(Request $request)
     {
         $query = Product::with(['images', 'sizes'])->select('products.*')->distinct();
@@ -82,8 +96,9 @@ class SaleV2Controller extends Controller
         $products = $query->latest('products.id')->paginate($request->get('limit', 60));
 
         $products->getCollection()->transform(function($product) {
-            if ($product->path_thumb) {
-                $product->path_thumb = asset($product->path_thumb);
+            $product->path_thumb = $this->formatImagePath($product->path_thumb);
+            foreach ($product->images as $image) {
+                $image->file_path = $this->formatImagePath($image->file_path);
             }
             return $product;
         });
@@ -121,9 +136,7 @@ class SaleV2Controller extends Controller
             
             // Transform product images to absolute URLs
             foreach ($order->products as $product) {
-                if ($product->path_thumb) {
-                    $product->path_thumb = asset($product->path_thumb);
-                }
+                $product->path_thumb = $this->formatImagePath($product->path_thumb);
             }
             
             $order->created_at_human = $order->created_at->diffForHumans();
@@ -136,12 +149,19 @@ class SaleV2Controller extends Controller
     public function orderDetail($id)
     {
         $order = Order::with('products')->findOrFail($id);
+        foreach ($order->products as $product) {
+            $product->path_thumb = $this->formatImagePath($product->path_thumb);
+        }
         return response()->json($order);
     }
 
     public function productDetail($id)
     {
         $product = Product::with(['images', 'sizes'])->findOrFail($id);
+        $product->path_thumb = $this->formatImagePath($product->path_thumb);
+        foreach ($product->images as $image) {
+            $image->file_path = $this->formatImagePath($image->file_path);
+        }
         return response()->json($product);
     }
 
@@ -480,7 +500,7 @@ class SaleV2Controller extends Controller
         $detailPaths = [];
         if ($request->hasFile('details')) {
             foreach ($request->file('details') as $file) {
-                $path = str_replace('public', 'storage', $file->store('public/sale/detail'));
+                $path = str_replace('public', 'storage', $file->store('public/sale'));
 
                 $detailPaths[] = $path;
             }

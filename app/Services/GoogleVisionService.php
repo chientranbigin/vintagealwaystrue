@@ -14,12 +14,18 @@ class GoogleVisionService
             'timeout' => 120, // giây
             'connect_timeout' => 10,
         ]);
+        // Clean prefix to avoid double 'storage/' if imageUrl already has it
+        $cleanPath = ltrim($imageUrl, '/');
+        if (strpos($cleanPath, 'storage/') === 0) {
+            $cleanPath = substr($cleanPath, 8);
+        }
+
         $response = $client->post('https://vision.googleapis.com/v1/images:annotate?key=AIzaSyBCQwssnHoUNbueD6DGggilZou-Sd0NjU0', [
             'json' => [
                 "requests" => [
                     [
                         "image" => [
-                            "source" => ["imageUri" => asset('storage/' . $imageUrl)]
+                            "source" => ["imageUri" => asset('storage/' . $cleanPath)]
                         ],
                         "features" => [
                             ["type" => "TEXT_DETECTION"]
@@ -31,7 +37,7 @@ class GoogleVisionService
 
         $result = json_decode($response->getBody(), true);
 
-        \Illuminate\Support\Facades\Log::channel('product_upload')->info(asset('storage/' . $imageUrl));
+        \Illuminate\Support\Facades\Log::channel('product_upload')->info(asset('storage/' . $cleanPath));
         return $result['responses'][0]['fullTextAnnotation']['text'] ?? null;
     }
     function extractPrice($text)

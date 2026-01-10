@@ -67,23 +67,48 @@ class CleanupImages extends Command
 
         $imagesToKeep = array_unique(array_merge($activeProductThumbs, $recentlySoldThumbs, $activeDetailImages));
         
-        // Normalize paths (remove leading slash if any, ensuring it matches storage directory structure)
-        $imagesToKeep = array_map(function($path) {
-            return str_replace('storage/', '', $path);
-        }, $imagesToKeep);
+        // Normalize paths (remove leading slash, 'storage/', 'public/' if any)
+        $normalize = function($path) {
+            $path = ltrim($path, '/');
+            if (strpos($path, 'storage/') === 0) {
+                $path = substr($path, 8);
+            }
+            if (strpos($path, 'public/') === 0) {
+                $path = substr($path, 7);
+            }
+            return ltrim($path, '/');
+        };
 
+        $imagesToKeep = array_map($normalize, $imagesToKeep);
+        
         $this->info('Finding files in storage/app/public/sale...');
         $allFiles = \Storage::disk('public')->allFiles('sale');
         
         $deletedCount = 0;
+        $skippedRecent = 0;
+        $now = time();
+        $safeThreshold = 48 * 3600; // 48 hours for extra safety
+
         foreach ($allFiles as $file) {
-            if (!in_array($file, $imagesToKeep)) {
-                $this->info("Deleting: $file");
+            // Normalize current file path to check against DB
+            $normalizedFile = $normalize($file);
+            
+            if (!in_array($normalizedFile, $imagesToKeep)) {
+                // AGE CHECK: Never delete recent files to avoid race conditions with uploads/jobs
+                $lastModified = \Storage::disk('public')->lastModified($file);
+                if ($now - $lastModified < $safeThreshold) {
+                    $skippedRecent++;
+                    continue;
+                }
+
+                $this->info("Deleting orphaned: $file");
                 \Storage::disk('public')->delete($file);
                 $deletedCount++;
             }
         }
 
-        $this->info("Cleanup finished. Deleted $deletedCount files.");
+        $this->info("Cleanup finished.");
+        $this->info("- Deleted: $deletedCount files");
+        $this->info("- Skipped (Recent): $skippedRecent files");
     }
 }
