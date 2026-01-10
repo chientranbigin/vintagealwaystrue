@@ -1,0 +1,22 @@
+.logo .img-fluid {
+	height: 80px !important;
+	width: auto !important;
+}
+
+.logo {
+	width: 100px;
+}
+.gallery-post {
+	height: 400px;
+	width: 400px;
+	justify-content: center;
+	display: flex;
+	align-items: center;
+}
+
+.gallery-post .lightbox {
+	display: contents;
+}
+.gallery-post  img {
+	max-height: 100%;
+}

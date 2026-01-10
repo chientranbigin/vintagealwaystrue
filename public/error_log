@@ -1,0 +1,8 @@
+[29-Feb-2024 18:03:31 UTC] PHP Fatal error:  Uncaught ReflectionException: Class App\Http\Kernel does not exist in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php:779
+Stack trace:
+#0 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php(779): ReflectionClass->__construct('App\\Http\\Kernel')
+#1 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php(658): Illuminate\Container\Container->build('App\\Http\\Kernel')
+#2 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php(609): Illuminate\Container\Container->resolve('App\\Http\\Kernel', Array)
+#3 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(759): Illuminate\Container\Container->make('App\\Http\\Kernel', Array)
+#4 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php(264): Illuminate\Foundation\Application->make('App\\Http\\Kernel', Array)
+#5 /home/wxcowyfv/public_html/ven in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Container/Container.php on line 779
