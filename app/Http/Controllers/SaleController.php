@@ -953,7 +953,7 @@ class SaleController extends Controller
                 $price = $ocrPrice ?: array_get($defaultPrice, $product->type) ?: 0;
                 $price = $this->parsePrice($price);
 
-                $total_amount += $price;
+                // $total_amount += $price;
             }
 
             info("total: ", [$total_amount]);
@@ -1034,7 +1034,8 @@ class SaleController extends Controller
         $products = Product::whereIn('id', $request->products)->get();
 
 
-        $total_amount = array_sum($products->pluck('price')->toArray()) + intval($request->additional_amount) - intval($request->freeship_amount);
+        // $total_amount = array_sum($products->pluck('price')->toArray()) + intval($request->additional_amount) - intval($request->freeship_amount);
+        $total_amount = intval($request->additional_amount)- intval($request->freeship_amount);
 
         $request = $request->merge([
 
