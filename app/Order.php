@@ -21,7 +21,12 @@ class Order extends Model
         'is_freeship',
         'is_paid',
         'status',
-        'consumer_id'
+        'consumer_id',
+        'expenses'
+    ];
+
+    protected $casts = [
+        'expenses' => 'array'
     ];
 
     /**

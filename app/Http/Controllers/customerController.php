@@ -47,9 +47,9 @@ class CustomerController extends Controller
             $products->where('type', $request->type);
         }
 
-//        if ($request->status) {
-//            $products->where('status', $request->status);
-//        }
+        if ($request->status) {
+            $products->where('status', $request->status);
+        }
 
         if ($request->from_search_key || $request->to_search_key ){
 
