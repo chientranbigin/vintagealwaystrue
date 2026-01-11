@@ -1590,11 +1590,24 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
           indices: [0, 1, 3, 5]
         }
       },
-      // The global list of sizes from legacy Contract
       allSizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY',
       // Top (Indices 0-5)
       'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI' // Bottom (Indices 6-11)
-      ]
+      ],
+      sizeMapping: {
+        'VAI': 'V',
+        'NGỰC': 'N',
+        'EO': 'E',
+        'DÀI ÁO': 'D',
+        'DÀI ÁO SAU': 'DS',
+        'DÀI TAY': 'DT',
+        'EO QUẦN': 'E',
+        'ĐÁY': 'ĐA',
+        'ĐÙI': 'Đ',
+        'DÀI QUẦN': 'D',
+        'ỐNG': 'Ô',
+        'DƯ LAI': 'L'
+      }
     };
   },
   computed: {
@@ -1650,15 +1663,15 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     submitByAjax: function submitByAjax() {
       var _this2 = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee() {
-        var formData, _t;
+        var formData, res, product, sizesStr, _t;
         return _regenerator().w(function (_context) {
           while (1) switch (_context.p = _context.n) {
             case 0:
-              if (!(!_this2.form.type || !_this2.form.image)) {
+              if (_this2.form.type) {
                 _context.n = 1;
                 break;
               }
-              return _context.a(2, _this2.$message.error('Type and Image are required'));
+              return _context.a(2, _this2.$message.error('Product Type is required'));
             case 1:
               _this2.loading = true;
               _context.p = 2;
@@ -1666,9 +1679,9 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
               formData.append('type', _this2.form.type);
               formData.append('price', _this2.form.price);
               formData.append('description', _this2.form.description || '');
-              formData.append('banner', _this2.form.image);
-
-              // Append sizes as array of objects
+              if (_this2.form.image) {
+                formData.append('banner', _this2.form.image);
+              }
               _this2.form.sizes.forEach(function (s, i) {
                 formData.append("sizes[".concat(i, "][name]"), s.name);
                 formData.append("sizes[".concat(i, "][value]"), s.value);
@@ -1680,13 +1693,30 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
                 }
               });
             case 3:
-              _this2.$message.success('Product Created Successfully!');
-              _this2.$router.push('/salev2/products');
+              res = _context.v;
+              product = res.data.product;
+              sizesStr = _this2.formatSizes(product).join(' - ');
+              _this2.$alert("M\xE3 SP: ".concat(product.name, "<br/>Th\xF4ng s\u1ED1: ").concat(sizesStr), 'Tạo sản phẩm thành công', {
+                confirmButtonText: 'OK',
+                dangerouslyUseHTMLString: true,
+                type: 'success'
+              });
+
+              // Reset for next entry (Keep Type)
+              _this2.form.price = 0;
+              _this2.form.description = '';
+              _this2.form.image = null;
+              _this2.previewUrl = null;
+              _this2.quickInput = '';
+              _this2.form.sizes.forEach(function (s) {
+                return s.value = '';
+              });
               _context.n = 5;
               break;
             case 4:
               _context.p = 4;
               _t = _context.v;
+              console.error(_t);
               _this2.$message.error('Failed to create product');
             case 5:
               _context.p = 5;
@@ -1697,6 +1727,25 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
           }
         }, _callee, null, [[2, 4, 5, 6]]);
       }))();
+    },
+    formatSizes: function formatSizes(product) {
+      var _this3 = this;
+      if (!product.sizes) return [];
+      var results = [];
+      var duLai = product.sizes.find(function (s) {
+        return s.name === 'DƯ LAI';
+      });
+      product.sizes.forEach(function (size) {
+        if (size.name === 'DƯ LAI') return;
+        var label = _this3.sizeMapping[size.name] || size.name;
+        var value = Math.floor(size.value);
+        if (size.name === 'DÀI QUẦN' && duLai) {
+          results.push("".concat(label).concat(value, "(+").concat(Math.floor(duLai.value), ")"));
+        } else if (value > 0) {
+          results.push("".concat(label).concat(value));
+        }
+      });
+      return results;
     }
   },
   mounted: function mounted() {
@@ -1727,6 +1776,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       submitting: false,
       form: {
         id: null,
+        name: '',
         type: '',
         price: 0,
         description: '',
@@ -1805,6 +1855,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
               res = _context.v;
               product = res.data;
               _this.form.id = product.id;
+              _this.form.name = product.name;
               _this.form.type = product.type;
               _this.form.price = product.price;
               _this.form.description = product.description;
@@ -4932,7 +4983,7 @@ var render = function render() {
     }
   })], 1)]), _vm._v(" "), _c("div", [_c("label", {
     staticClass: "block text-sm font-bold text-slate-700 mb-2"
-  }, [_vm._v("Thumbnail Image (Required)")]), _vm._v(" "), _c("div", {
+  }, [_vm._v("Thumbnail Image (Optional)")]), _vm._v(" "), _c("div", {
     staticClass: "border-2 border-dashed border-slate-200 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer h-full min-h-[300px] flex flex-col items-center justify-center bg-white",
     on: {
       click: function click($event) {
@@ -5002,7 +5053,11 @@ var render = function render() {
     staticClass: "px-4 md:px-6 py-8"
   }, [_c("div", {
     staticClass: "flex justify-between items-center mb-6"
-  }, [_vm._m(0), _vm._v(" "), _c("el-button", {
+  }, [_c("div", [_c("h1", {
+    staticClass: "text-3xl font-bold text-gray-900 tracking-tight"
+  }, [_vm._v("Edit Product: " + _vm._s(_vm.form.name))]), _vm._v(" "), _c("p", {
+    staticClass: "text-slate-500 mt-1"
+  }, [_vm._v("Update product details and measurements")])]), _vm._v(" "), _c("el-button", {
     attrs: {
       icon: "el-icon-back",
       circle: ""
@@ -5071,7 +5126,7 @@ var render = function render() {
     staticClass: "el-icon-picture text-3xl mb-2"
   }), _vm._v(" "), _c("span", {
     staticClass: "text-xs font-bold uppercase"
-  }, [_vm._v("Upload Image")])]), _vm._v(" "), _vm._m(1)]), _vm._v(" "), _c("input", {
+  }, [_vm._v("Upload Image")])]), _vm._v(" "), _vm._m(0)]), _vm._v(" "), _c("input", {
     ref: "fileInput",
     staticClass: "hidden",
     attrs: {
@@ -5200,14 +5255,6 @@ var render = function render() {
   }, [_vm._v("\n                   Save Changes\n               ")])], 1)])])]);
 };
 var staticRenderFns = [function () {
-  var _vm = this,
-    _c = _vm._self._c;
-  return _c("div", [_c("h1", {
-    staticClass: "text-3xl font-bold text-gray-900 tracking-tight"
-  }, [_vm._v("Edit Product")]), _vm._v(" "), _c("p", {
-    staticClass: "text-slate-500 mt-1"
-  }, [_vm._v("Update product details and measurements")])]);
-}, function () {
   var _vm = this,
     _c = _vm._self._c;
   return _c("div", {
