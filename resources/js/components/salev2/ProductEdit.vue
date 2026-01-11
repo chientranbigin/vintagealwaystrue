@@ -2,7 +2,7 @@
   <div class="px-4 md:px-6 py-8">
      <div class="flex justify-between items-center mb-6">
        <div>
-         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Edit Product</h1>
+         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Edit Product: {{ form.name }}</h1>
          <p class="text-slate-500 mt-1">Update product details and measurements</p>
        </div>
        <el-button @click="$router.push('/salev2/products')" icon="el-icon-back" circle></el-button>
@@ -124,6 +124,7 @@ export default {
             submitting: false,
             form: {
                 id: null,
+                name: '',
                 type: '',
                 price: 0,
                 description: '',
@@ -167,6 +168,7 @@ export default {
                 const product = res.data;
                 
                 this.form.id = product.id;
+                this.form.name = product.name;
                 this.form.type = product.type;
                 this.form.price = product.price;
                 this.form.description = product.description;

@@ -56,7 +56,7 @@
 
             <!-- Right: Image -->
             <div>
-                 <label class="block text-sm font-bold text-slate-700 mb-2">Thumbnail Image (Required)</label>
+                 <label class="block text-sm font-bold text-slate-700 mb-2">Thumbnail Image (Optional)</label>
                  <div class="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors relative cursor-pointer h-full min-h-[300px] flex flex-col items-center justify-center bg-white" @click="$refs.fileInput.click()">
                      <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileChange">
                      <div v-if="previewUrl" class="w-full h-full flex items-center justify-center">
@@ -107,11 +107,15 @@ export default {
                 'POLO SHIRT': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
                 'SUIT': { labels: 'Vai - Ngực - Dài - Dài tay', indices: [0, 1, 3, 5] },
             },
-            // The global list of sizes from legacy Contract
             allSizes: [
                 'VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', // Top (Indices 0-5)
                 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI'   // Bottom (Indices 6-11)
-            ]
+            ],
+            sizeMapping: {
+                'VAI': 'V', 'NGỰC': 'N', 'EO': 'E', 'DÀI ÁO': 'D', 'DÀI ÁO SAU': 'DS', 
+                'DÀI TAY': 'DT', 'EO QUẦN': 'E', 'ĐÁY': 'ĐA', 'ĐÙI': 'Đ', 'DÀI QUẦN': 'D', 
+                'ỐNG': 'Ô', 'DƯ LAI': 'L'
+            }
         }
     },
     computed: {
@@ -157,7 +161,7 @@ export default {
             }
         },
         async submitByAjax() {
-            if(!this.form.type || !this.form.image) return this.$message.error('Type and Image are required');
+            if(!this.form.type) return this.$message.error('Product Type is required');
             
             this.loading = true;
             try {
@@ -165,25 +169,58 @@ export default {
                 formData.append('type', this.form.type);
                 formData.append('price', this.form.price);
                 formData.append('description', this.form.description || '');
-                formData.append('banner', this.form.image);
+                if (this.form.image) {
+                    formData.append('banner', this.form.image);
+                }
                 
-                // Append sizes as array of objects
                 this.form.sizes.forEach((s, i) => {
                     formData.append(`sizes[${i}][name]`, s.name);
                     formData.append(`sizes[${i}][value]`, s.value);
                 });
 
-                await axios.post('/salev2/api/product/store', formData, {
+                const res = await axios.post('/salev2/api/product/store', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
+
+                const product = res.data.product;
+                const sizesStr = this.formatSizes(product).join(' - ');
                 
-                this.$message.success('Product Created Successfully!');
-                this.$router.push('/salev2/products');
+                this.$alert(`Mã SP: ${product.name}<br/>Thông số: ${sizesStr}`, 'Tạo sản phẩm thành công', {
+                    confirmButtonText: 'OK',
+                    dangerouslyUseHTMLString: true,
+                    type: 'success'
+                });
+
+                // Reset for next entry (Keep Type)
+                this.form.price = 0;
+                this.form.description = '';
+                this.form.image = null;
+                this.previewUrl = null;
+                this.quickInput = '';
+                this.form.sizes.forEach(s => s.value = '');
+                
             } catch(e) {
+                console.error(e);
                 this.$message.error('Failed to create product');
             } finally {
                 this.loading = false;
             }
+        },
+        formatSizes(product) {
+          if (!product.sizes) return [];
+          const results = [];
+          const duLai = product.sizes.find(s => s.name === 'DƯ LAI');
+          product.sizes.forEach(size => {
+              if (size.name === 'DƯ LAI') return;
+              let label = this.sizeMapping[size.name] || size.name;
+              let value = Math.floor(size.value);
+              if (size.name === 'DÀI QUẦN' && duLai) {
+                  results.push(`${label}${value}(+${Math.floor(duLai.value)})`);
+              } else if (value > 0) {
+                  results.push(`${label}${value}`);
+              }
+          });
+          return results;
         }
     },
     mounted() {

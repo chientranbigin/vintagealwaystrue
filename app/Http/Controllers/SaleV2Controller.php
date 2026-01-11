@@ -299,14 +299,16 @@ class SaleV2Controller extends Controller
     {
         $validated = $request->validate([
             'type' => 'required',
-            'banner' => 'required|file|image',
+            'banner' => 'nullable|file|image',
             'sizes' => 'array'
         ]);
 
         return DB::transaction(function () use ($request) {
             // Upload File
-            $file = $request->file('banner');
-            $path = str_replace('public', 'storage', $file->store('public/sale'));
+            $path = '';
+            if ($file = $request->file('banner')) {
+                $path = $file->store('sale', 'public');
+            }
 
             // Auto-generate Name (Code)
             $lastProduct = Product::where('type', $request->type)->latest()->first();
@@ -326,7 +328,7 @@ class SaleV2Controller extends Controller
             // Save Sizes
             if($request->sizes) {
                 foreach ($request->sizes as $size) {
-                    if (!empty($size['value'])) {
+                    if (isset($size['value']) && $size['value'] !== null && $size['value'] !== '') {
                         Size::create([
                             'product_id' => $product->id,
                             'name' => $size['name'],
@@ -336,7 +338,7 @@ class SaleV2Controller extends Controller
                 }
             }
 
-            return response()->json(['success' => true, 'product' => $product]);
+            return response()->json(['success' => true, 'product' => $product->load('sizes')]);
         });
     }
 
