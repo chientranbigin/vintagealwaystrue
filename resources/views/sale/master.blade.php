@@ -319,6 +319,12 @@
                             Upload
                         </a>
                     </li>
+
+                    <li class="nav-item">
+                        <a href="/salev2" class="nav-link text-primary font-weight-bold">
+                            <i class="mdi mdi-swap-horizontal mr-1"></i> Switch to V2
+                        </a>
+                    </li>
                 </div>
             </ul>
 
@@ -345,6 +351,11 @@
                 <li class="nav-item {{ in_array($routeName, ['sale.product.create']) ? 'active' : '' }}">
                     <a href="{{ route('sale.product.create') }}" class="nav-link">
                         <i class="mdi mdi-plus-box-outline mr-2"></i> Create Product
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/salev2" class="nav-link text-primary">
+                        <i class="mdi mdi-swap-horizontal mr-2"></i> Switch to V2
                     </a>
                 </li>
             </ul>

@@ -119,14 +119,14 @@
             <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
             
             <!-- Quick Actions Overlay -->
-            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2 p-4 z-10"
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-3 p-6 z-10"
                  @click.stop="editProduct(product)">
-                <el-button type="primary" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300" 
-                           @click.stop="editProduct(product)">Edit</el-button>
-                <el-button type="success" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75" 
-                           icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">Copy</el-button>
-                <el-button type="danger" size="mini" class="w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100" 
-                           icon="el-icon-delete" @click.stop="confirmDelete(product)">Delete</el-button>
+                <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold" 
+                           @click.stop="editProduct(product)">EDIT</el-button>
+                <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold" 
+                           icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY</el-button>
+                <el-button type="danger" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
+                           icon="el-icon-delete" @click.stop="confirmDelete(product)">DELETE</el-button>
             </div>
           </div>
 

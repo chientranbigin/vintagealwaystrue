@@ -69,6 +69,11 @@
                         <i class="el-icon-upload text-lg"></i>
                         <span>Upload</span>
                     </router-link>
+                    
+                    <a href="/sale" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-blue-50 text-blue-600 font-bold text-sm ml-2 border border-blue-100">
+                        <i class="el-icon-refresh-left text-lg"></i>
+                        <span>Switch to V1</span>
+                    </a>
                 </nav>
 
                 <!-- Profile -->
@@ -108,6 +113,10 @@
                     <i class="el-icon-user text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Customers</span>
                 </router-link>
+                <a href="/sale" class="flex flex-col items-center justify-center w-full h-full text-blue-500 font-bold bg-blue-50">
+                    <i class="el-icon-refresh-left text-xl"></i>
+                    <span class="text-[10px] font-bold uppercase mt-1">V1</span>
+                </a>
             </nav>
         </div>
     </div>
