@@ -144,68 +144,16 @@ class ProcessSmartImage implements ShouldQueue
 
     protected function processDetailImage($product, $relativePath)
     {
-        $fullPath = storage_path('app/public/' . str_replace('storage/', '', $relativePath));
+        $relativePath = str_replace('storage/', '', $relativePath);
+        $fullPath = storage_path('app/public/' . $relativePath );
         \Illuminate\Support\Facades\Log::channel('product_upload')->info($fullPath);
 
         if (!file_exists($fullPath)) return;
 
-        // 1. Load Image using GD
-        list($origWidth, $origHeight, $type) = getimagesize($fullPath);
-        $src = null;
-        switch ($type) {
-            case IMAGETYPE_JPEG: $src = imagecreatefromjpeg($fullPath); break;
-            case IMAGETYPE_PNG:  $src = imagecreatefrompng($fullPath);  break;
-            case IMAGETYPE_GIF:  $src = imagecreatefromgif($fullPath);  break;
-            case IMAGETYPE_WEBP: $src = imagecreatefromwebp($fullPath); break;
-        }
-        if (!$src) return;
-
-        // 2. Resize Logic (Constraint: Max width 1024)
-        $maxWidth = 1024;
-        $newWidth = $origWidth;
-        $newHeight = $origHeight;
-
-        if ($origWidth > $maxWidth) {
-            $ratio = $maxWidth / $origWidth;
-            $newWidth = $maxWidth;
-            $newHeight = round($origHeight * $ratio);
-        }
-
-        $dst = imagecreatetruecolor($newWidth, $newHeight);
-        
-        // Handle transparency for PNG/GIF/WEBP
-        if ($type == IMAGETYPE_PNG || $type == IMAGETYPE_GIF || $type == IMAGETYPE_WEBP) {
-            imagealphablending($dst, false);
-            imagesavealpha($dst, true);
-            $transparent = imagecolorallocatealpha($dst, 255, 255, 255, 127);
-            imagefilledrectangle($dst, 0, 0, $newWidth, $newHeight, $transparent);
-        }
-
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
-
-        // 3. Save Image (Fallback to JPEG if WebP not supported)
-        if (function_exists('imagewebp')) {
-            $newPath = preg_replace('/\.[^.]+$/', '.webp', $relativePath);
-            $targetFullPath = storage_path('app/public/' . $newPath);
-            imagewebp($dst, $targetFullPath, 60);
-        } else {
-            $newPath = preg_replace('/\.[^.]+$/', '.jpg', $relativePath);
-            $targetFullPath = storage_path('app/public/' . $newPath);
-            imagejpeg($dst, $targetFullPath, 75);
-        }
-
-        // 4. Cleanup
-        imagedestroy($src);
-        imagedestroy($dst);
-
-        if ($newPath !== $relativePath) {
-            @unlink($fullPath);
-        }
-
         // Create Database Record (Store relative path, controller handles asset() mapping)
         ProductImage::create([
             'product_id' => $product->id,
-            'file_path' => $newPath
+            'file_path' => $relativePath
         ]);
     }
 }
