@@ -203,15 +203,6 @@ export default {
              try {
                  const files = [];
                  
-                 // Main Image
-                 if (this.imagePreview) {
-                     const response = await fetch(this.imagePreview);
-                     if (response.ok) {
-                         const blob = await response.blob();
-                         files.push(new File([blob], `Main-${this.form.id}.jpg`, { type: 'image/jpeg' }));
-                     }
-                 }
-                 
                  // Detail Images
                  if (this.form.details && this.form.details.length) {
                      for (let i = 0; i < this.form.details.length; i++) {
@@ -239,8 +230,6 @@ export default {
                  
                  if (navigator.canShare && navigator.canShare({ files: files })) {
                      await navigator.share({
-                         title: `Product ${this.form.name}`,
-                         text: `Code: ${this.form.name} - Price: ${this.formatPrice(this.form.price)}`,
                          files: files
                      });
                  } else {
