@@ -93,10 +93,12 @@ class ProcessSmartImage implements ShouldQueue
                 throw new \Exception("Sản phẩm mã ($candidateName) không tồn tại. Vui lòng tạo sp trước.");
             }
 
-            // Update record: Price only
+            // Update record: Price & Path Thumb
+            $updateData = ['path_thumb' => $this->mainImagePath];
             if ($price > 0) {
-                $existing->update(['price' => $price]);
+                $updateData['price'] = $price;
             }
+            $existing->update($updateData);
 
             // Update Log with detected info
             \App\ProductUploadLog::where('session_id', $this->sessionId)

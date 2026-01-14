@@ -160,6 +160,10 @@ export default {
         initializeSizes() {
             this.form.sizes = this.allSizes.map(name => ({ name, value: '' }));
         },
+        formatPrice(val) {
+            if (!val) return '0';
+            return new Intl.NumberFormat('vi-VN').format(val);
+        },
         async fetchProduct() {
             this.loading = true;
             try {
@@ -190,36 +194,61 @@ export default {
             }
         },
         async shareImages() {
-             if (!navigator.share) return this.$message.warning('Browser does not support native sharing');
+             if (!navigator.share) {
+                 alert('Browser does not support native sharing (or not HTTPS). Try Mobile Safari/Chrome.');
+                 return;
+             }
              
-             const loading = this.$loading({ lock: true, text: 'Preparing images...' });
+             const loading = this.$loading({ lock: true, text: 'Preparing images...', background: 'rgba(0,0,0,0.7)' });
              try {
                  const files = [];
                  
                  // Main Image
                  if (this.imagePreview) {
-                     const blob = await fetch(this.imagePreview).then(r => r.blob());
-                     files.push(new File([blob], `Main-${this.form.id}.jpg`, { type: blob.type }));
+                     const response = await fetch(this.imagePreview);
+                     if (response.ok) {
+                         const blob = await response.blob();
+                         files.push(new File([blob], `Main-${this.form.id}.jpg`, { type: 'image/jpeg' }));
+                     }
                  }
                  
                  // Detail Images
-                 for (let i = 0; i < this.form.details.length; i++) {
-                     const img = this.form.details[i];
-                     const blob = await fetch(img.path).then(r => r.blob());
-                     // Detect type from path or blob
-                     files.push(new File([blob], `Detail-${i}.webp`, { type: blob.type }));
+                 if (this.form.details && this.form.details.length) {
+                     for (let i = 0; i < this.form.details.length; i++) {
+                         const img = this.form.details[i];
+                         // FIX: Use file_path instead of path
+                         const imgUrl = img.file_path || img.path; 
+                         
+                         if (imgUrl) {
+                            try {
+                                 const response = await fetch(imgUrl);
+                                 if (!response.ok) throw new Error('Fetch failed');
+                                 const blob = await response.blob();
+                                 files.push(new File([blob], `Detail-${this.form.id}-${i+1}.jpg`, { type: 'image/jpeg' }));
+                            } catch (err) {
+                                console.warn('Failed to load detail image: ' + imgUrl);
+                            }
+                         }
+                     }
                  }
                  
-                 if (!files.length) throw new Error('No images to share');
+                 if (!files.length) {
+                    alert('No valid images to share');
+                    return;
+                 }
                  
-                 await navigator.share({
-                     title: `Product ${this.form.id}`,
-                     text: `Code: ${this.form.id} - Price: ${this.form.price}`,
-                     files: files
-                 });
+                 if (navigator.canShare && navigator.canShare({ files: files })) {
+                     await navigator.share({
+                         title: `Product ${this.form.name}`,
+                         text: `Code: ${this.form.name} - Price: ${this.formatPrice(this.form.price)}`,
+                         files: files
+                     });
+                 } else {
+                     alert('Browser cannot share these files (limit or format issue).');
+                 }
              } catch (e) {
                  console.error(e);
-                 this.$message.error('Share failed: ' + e.message);
+                 if (e.name !== 'AbortError') alert('Share failed: ' + e.message);
              } finally {
                  loading.close();
              }
