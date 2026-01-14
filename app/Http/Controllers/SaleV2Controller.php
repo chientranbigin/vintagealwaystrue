@@ -112,7 +112,8 @@ class SaleV2Controller extends Controller
 
         if ($request->filled('status')) {
             if ($request->status === 'NEW') {
-                $query->whereIn('status', ['NEW', 'ON HOLD']);
+                // Show everything except COMPLETED as requested
+                $query->where('status', '!=', 'COMPLETED');
             } else {
                 $query->where('status', $request->status);
             }

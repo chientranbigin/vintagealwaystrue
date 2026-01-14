@@ -1839,6 +1839,10 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
         };
       });
     },
+    formatPrice: function formatPrice(val) {
+      if (!val) return '0';
+      return new Intl.NumberFormat('vi-VN').format(val);
+    },
     fetchProduct: function fetchProduct() {
       var _this = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee() {
@@ -1889,7 +1893,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     shareImages: function shareImages() {
       var _this2 = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee2() {
-        var loading, files, blob, i, img, _blob, _t2;
+        var loading, files, response, blob, i, img, imgUrl, _response, _blob, _t2, _t3;
         return _regenerator().w(function (_context2) {
           while (1) switch (_context2.p = _context2.n) {
             case 0:
@@ -1897,78 +1901,121 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
                 _context2.n = 1;
                 break;
               }
-              return _context2.a(2, _this2.$message.warning('Browser does not support native sharing'));
+              alert('Browser does not support native sharing (or not HTTPS). Try Mobile Safari/Chrome.');
+              return _context2.a(2);
             case 1:
               loading = _this2.$loading({
                 lock: true,
-                text: 'Preparing images...'
+                text: 'Preparing images...',
+                background: 'rgba(0,0,0,0.7)'
               });
               _context2.p = 2;
               files = []; // Main Image
               if (!_this2.imagePreview) {
-                _context2.n = 4;
+                _context2.n = 5;
                 break;
               }
               _context2.n = 3;
-              return fetch(_this2.imagePreview).then(function (r) {
-                return r.blob();
-              });
+              return fetch(_this2.imagePreview);
             case 3:
-              blob = _context2.v;
-              files.push(new File([blob], "Main-".concat(_this2.form.id, ".jpg"), {
-                type: blob.type
-              }));
-            case 4:
-              i = 0;
-            case 5:
-              if (!(i < _this2.form.details.length)) {
-                _context2.n = 8;
+              response = _context2.v;
+              if (!response.ok) {
+                _context2.n = 5;
                 break;
               }
-              img = _this2.form.details[i];
-              _context2.n = 6;
-              return fetch(img.path).then(function (r) {
-                return r.blob();
-              });
-            case 6:
-              _blob = _context2.v;
-              // Detect type from path or blob
-              files.push(new File([_blob], "Detail-".concat(i, ".webp"), {
-                type: _blob.type
+              _context2.n = 4;
+              return response.blob();
+            case 4:
+              blob = _context2.v;
+              files.push(new File([blob], "Main-".concat(_this2.form.id, ".jpg"), {
+                type: 'image/jpeg'
               }));
-            case 7:
-              i++;
-              _context2.n = 5;
-              break;
+            case 5:
+              if (!(_this2.form.details && _this2.form.details.length)) {
+                _context2.n = 13;
+                break;
+              }
+              i = 0;
+            case 6:
+              if (!(i < _this2.form.details.length)) {
+                _context2.n = 13;
+                break;
+              }
+              img = _this2.form.details[i]; // FIX: Use file_path instead of path
+              imgUrl = img.file_path || img.path;
+              if (!imgUrl) {
+                _context2.n = 12;
+                break;
+              }
+              _context2.p = 7;
+              _context2.n = 8;
+              return fetch(imgUrl);
             case 8:
-              if (files.length) {
+              _response = _context2.v;
+              if (_response.ok) {
                 _context2.n = 9;
                 break;
               }
-              throw new Error('No images to share');
+              throw new Error('Fetch failed');
             case 9:
               _context2.n = 10;
-              return navigator.share({
-                title: "Product ".concat(_this2.form.id),
-                text: "Code: ".concat(_this2.form.id, " - Price: ").concat(_this2.form.price),
-                files: files
-              });
+              return _response.blob();
             case 10:
+              _blob = _context2.v;
+              files.push(new File([_blob], "Detail-".concat(_this2.form.id, "-").concat(i + 1, ".jpg"), {
+                type: 'image/jpeg'
+              }));
               _context2.n = 12;
               break;
             case 11:
               _context2.p = 11;
               _t2 = _context2.v;
-              console.error(_t2);
-              _this2.$message.error('Share failed: ' + _t2.message);
+              console.warn('Failed to load detail image: ' + imgUrl);
             case 12:
-              _context2.p = 12;
-              loading.close();
-              return _context2.f(12);
+              i++;
+              _context2.n = 6;
+              break;
             case 13:
+              if (files.length) {
+                _context2.n = 14;
+                break;
+              }
+              alert('No valid images to share');
+              return _context2.a(2);
+            case 14:
+              if (!(navigator.canShare && navigator.canShare({
+                files: files
+              }))) {
+                _context2.n = 16;
+                break;
+              }
+              _context2.n = 15;
+              return navigator.share({
+                title: "Product ".concat(_this2.form.name),
+                text: "Code: ".concat(_this2.form.name, " - Price: ").concat(_this2.formatPrice(_this2.form.price)),
+                files: files
+              });
+            case 15:
+              _context2.n = 17;
+              break;
+            case 16:
+              alert('Browser cannot share these files (limit or format issue).');
+            case 17:
+              _context2.n = 19;
+              break;
+            case 18:
+              _context2.p = 18;
+              _t3 = _context2.v;
+              console.error(_t3);
+              if (_t3.name !== 'AbortError') alert('Share failed: ' + _t3.message);
+            case 19:
+              _context2.p = 19;
+              loading.close();
+              return _context2.f(19);
+            case 20:
               return _context2.a(2);
           }
-        }, _callee2, null, [[2, 11, 12, 13]]);
+        }, _callee2, null, [[7, 11], [2, 18, 19, 20]]);
       }))();
     },
     handleFileChange: function handleFileChange(e) {
@@ -2001,7 +2048,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     submit: function submit() {
       var _this4 = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee3() {
-        var formData, _t3;
+        var formData, _t4;
         return _regenerator().w(function (_context3) {
           while (1) switch (_context3.p = _context3.n) {
             case 0:
@@ -2031,8 +2078,8 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
               break;
             case 3:
               _context3.p = 3;
-              _t3 = _context3.v;
-              console.error(_t3);
+              _t4 = _context3.v;
+              console.error(_t4);
               _this4.$message.error('Failed to update product');
             case 4:
               _context3.p = 4;
@@ -5609,7 +5656,7 @@ var render = function render() {
     }, [_c("i", {
       staticClass: "el-icon-picture text-4xl"
     })]), _vm._v(" "), _c("div", {
-      staticClass: "absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-2 p-4 z-10",
+      staticClass: "absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-3 p-6 z-10",
       on: {
         click: function click($event) {
           $event.stopPropagation();
@@ -5617,10 +5664,10 @@ var render = function render() {
         }
       }
     }, [_c("el-button", {
-      staticClass: "w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300",
+      staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold",
       attrs: {
         type: "primary",
-        size: "mini"
+        size: "medium"
       },
       on: {
         click: function click($event) {
@@ -5628,11 +5675,11 @@ var render = function render() {
           return _vm.editProduct(product);
         }
       }
-    }, [_vm._v("Edit")]), _vm._v(" "), _c("el-button", {
-      staticClass: "w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75",
+    }, [_vm._v("EDIT")]), _vm._v(" "), _c("el-button", {
+      staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold",
       attrs: {
         type: "success",
-        size: "mini",
+        size: "medium",
         icon: "el-icon-document-copy"
       },
       on: {
@@ -5641,11 +5688,11 @@ var render = function render() {
           return _vm.copyProductInfo(product);
         }
       }
-    }, [_vm._v("Copy")]), _vm._v(" "), _c("el-button", {
-      staticClass: "w-24 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100",
+    }, [_vm._v("COPY")]), _vm._v(" "), _c("el-button", {
+      staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold",
       attrs: {
         type: "danger",
-        size: "mini",
+        size: "medium",
         icon: "el-icon-delete"
       },
       on: {
@@ -5654,7 +5701,7 @@ var render = function render() {
           return _vm.confirmDelete(product);
         }
       }
-    }, [_vm._v("Delete")])], 1)]), _vm._v(" "), _c("div", {
+    }, [_vm._v("DELETE")])], 1)]), _vm._v(" "), _c("div", {
       staticClass: "p-3"
     }, [_c("div", {
       staticClass: "text-center mb-2"
