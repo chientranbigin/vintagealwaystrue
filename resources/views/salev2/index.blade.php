@@ -109,11 +109,11 @@
                     <i class="el-icon-box text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Products</span>
                 </router-link>
-                <router-link to="/salev2/customers" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+                <!-- <router-link to="/salev2/customers" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
                     <i class="el-icon-user text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Customers</span>
-                </router-link>
-                <a href="/sale" class="flex flex-col items-center justify-center w-full h-full text-blue-500 font-bold bg-blue-50">
+                </router-link> -->
+                <a href="/sale" class="flex flex-col items-center justify-center w-full h-full text-blue-500 ">
                     <i class="el-icon-refresh-left text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">V1</span>
                 </a>

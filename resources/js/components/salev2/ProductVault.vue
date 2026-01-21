@@ -118,14 +118,16 @@
             <img v-if="product.path_thumb" :src="product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1">
             <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
             
-            <!-- Quick Actions Overlay -->
-            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-3 p-6 z-10"
+            <!-- Quick Actions Overlay (Desktop Only) -->
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10"
                  @click.stop="editProduct(product)">
                 <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold" 
-                           @click.stop="editProduct(product)">EDIT</el-button>
+                           @click.stop="editProduct(product)">DETAIL</el-button>
                 <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold" 
-                           icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY</el-button>
-                <el-button type="danger" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
+                           icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
+                <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
+                           icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
+                <el-button type="danger" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-150 font-bold" 
                            icon="el-icon-delete" @click.stop="confirmDelete(product)">DELETE</el-button>
             </div>
           </div>
@@ -145,12 +147,34 @@
                 </span>
             </div>
             
-            <!-- Footer: Status Left, Checkbox Right -->
-            <div class="flex justify-between items-center pt-2 border-t border-slate-50">
-                <el-tag :type="getStatusTagType(product.status)" size="mini" class="text-[8px] font-bold tracking-tighter uppercase rounded-md px-1">
-                    {{ product.status }}
-                </el-tag>
-                <el-checkbox :value="isSelected(product.id)" @change="toggleSelection(product)" class="transform scale-125"></el-checkbox>
+            <!-- Footer: Mobile[Check-Status-Actions] | Desktop[Status-Check] -->
+            <div class="flex justify-between items-center pt-2 border-t border-slate-50 gap-2">
+                <!-- Checkbox: Order 1 (Mobile Left) / Order 2 (Desktop Right) -->
+                <div class="order-1 md:order-2 flex items-center">
+                    <el-checkbox :value="isSelected(product.id)" @change="toggleSelection(product)" class="transform scale-125"></el-checkbox>
+                </div>
+
+                <!-- Status: Order 2 (Mobile Center) / Order 1 (Desktop Left) -->
+                <div class="order-2 md:order-1 flex-1 text-center md:text-left">
+                    <el-tag :type="getStatusTagType(product.status)" size="mini" class="text-[8px] font-bold tracking-tighter uppercase rounded-md px-1">
+                        {{ product.status }}
+                    </el-tag>
+                </div>
+
+                <!-- Mobile Actions: Order 3 (Right) - Desktop Hidden -->
+                <div class="order-3 md:hidden flex justify-end">
+                    <el-dropdown trigger="click" @command="(cmd) => handleMobileAction(cmd, product)">
+                        <span class="el-dropdown-link p-2">
+                            <i class="el-icon-more transform rotate-90 text-lg font-bold text-slate-600"></i>
+                        </span>
+                        <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
+                            <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
+                            <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
+                            <el-dropdown-item command="delete" icon="el-icon-delete" divided class="text-red-500">Delete</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </div>
             </div>
           </div>
         </div>
@@ -295,25 +319,43 @@ export default {
         localStorage.removeItem('selectedProducts');
     },
     async shareSelected() {
-        if (!navigator.share) {
-            this.$message.warning('Browser does not support native sharing');
+        if (!this.selectedProducts.length) {
+            this.$message.warning('Please select some products first');
             return;
         }
+
+        if (!navigator.share) {
+            alert('Browser does not support native sharing (or not HTTPS). Try Mobile Safari/Chrome.');
+            return;
+        }
+
         const loading = this.$loading({ lock: true, text: 'Preparing images...', background: 'rgba(0,0,0,0.7)' });
+        
         try {
             const files = [];
             for (const item of this.selectedProducts) {
+                // Ensure the image URL is fetched correctly
                 const response = await fetch(item.img);
+                if (!response.ok) throw new Error('Failed to load image: ' + item.img);
+
                 const blob = await response.blob();
                 files.push(new File([blob], `${item.id}.jpg`, { type: 'image/jpeg' }));
             }
-            await navigator.share({
-                files: files,
-                title: 'Vintage Always True',
-                text: 'Check out these items!',
-            });
+
+            if (navigator.canShare && navigator.canShare({ files: files })) {
+                await navigator.share({
+                    files: files,
+                    title: 'Vintage Products',
+                    text: 'Here are the selected products',
+                });
+            } else {
+                alert('Browser does not support sharing these files (check limit or format).');
+            }
         } catch (err) {
-            if (err.name !== 'AbortError') this.$message.error('Share failed: ' + err.message);
+            console.error('Share failed', err);
+            if (err.name !== 'AbortError') {
+                alert('Share failed: ' + err.message);
+            }
         } finally {
             loading.close();
         }
@@ -329,6 +371,44 @@ export default {
             this.$message.success('Copied to clipboard!');
         } catch (err) {
             this.$message.error('Failed to copy');
+        }
+    },
+    async copyDetail(product) {
+        if (!navigator.share) {
+             alert('Browser does not support native sharing (or not HTTPS).');
+             return;
+        }
+
+        if (!product.images || !product.images.length) {
+            this.$message.warning('This product has no detail images.');
+            return;
+        }
+
+        const loading = this.$loading({ lock: true, text: 'Preparing details...', background: 'rgba(255,255,255,0.7)' });
+        try {
+            const files = [];
+            for (let i = 0; i < product.images.length; i++) {
+                 const img = product.images[i];
+                 const imgUrl = img.file_path; // Already formatted by controller
+                 if (imgUrl) {
+                    const response = await fetch(imgUrl);
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        files.push(new File([blob], `Detail-${product.id}-${i+1}.jpg`, { type: 'image/jpeg' }));
+                    }
+                 }
+            }
+
+            if (files.length === 0) {
+                 this.$message.warning('Could not load images');
+                 return;
+            }
+
+            await navigator.share({ files: files }); // Only files, no text
+        } catch (err) {
+            if (err.name !== 'AbortError') alert('Share failed: ' + err.message);
+        } finally {
+            loading.close();
         }
     },
     confirmDelete(product) {
@@ -348,6 +428,12 @@ export default {
         } catch (err) {
             this.$message.error('Delete failed');
         }
+    },
+    handleMobileAction(command, product) {
+        if (command === 'edit') this.editProduct(product);
+        if (command === 'copy') this.copyProductInfo(product);
+        if (command === 'copy_detail') this.copyDetail(product);
+        if (command === 'delete') this.confirmDelete(product);
     }
   }
 }

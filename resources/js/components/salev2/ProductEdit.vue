@@ -183,7 +183,8 @@ export default {
                 if (product.sizes) {
                     product.sizes.forEach(s => {
                          const idx = this.allSizes.indexOf(s.name);
-                         if (idx !== -1) this.form.sizes[idx].value = s.value;
+                         // Use parseFloat to remove trailing .00
+                         if (idx !== -1) this.form.sizes[idx].value = parseFloat(s.value);
                     });
                 }
             } catch (err) {

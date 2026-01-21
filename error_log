@@ -6,3 +6,10 @@ Stack trace:
 #3 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Migrations/Migrator.php(90): Illuminate\Database\Migrations\Migrator->requireFiles(Array)
 #4 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php on line 98
 [06-Jan-2026 15:24:44 UTC] PHP Fatal error:  Illuminate\Filesystem\Filesystem::requireOnce(): Failed opening required '/home/wxcowyfv/public_html/database/migrations/*_create_jobs_table.php' (include_path='.:/opt/alt/php74/usr/share/pear') in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php on line 98
+[19-Jan-2026 10:21:11 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'wxcowyfv_tadimedia.failed_jobs' doesn't exist in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php:326
+Stack trace:
+#0 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(326): PDO->prepare('select count(*)...')
+#1 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(657): Illuminate\Database\Connection->Illuminate\Database\{closure}('select count(*)...', Array)
+#2 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(624): Illuminate\Database\Connection->runQueryCallback('select count(*)...', Array, Object(Closure))
+#3 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(333): Illuminate\Database\Connection->run('select count(*)...', Array, Object(Closure))
+#4 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Que in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php on line 664

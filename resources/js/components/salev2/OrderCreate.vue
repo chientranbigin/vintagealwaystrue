@@ -1,148 +1,159 @@
 <template>
-  <div class="px-4 md:px-6 py-6 h-[calc(100vh-80px)] overflow-hidden flex flex-col">
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-4 flex-none">
-        <div class="flex items-center gap-3">
-            <el-button icon="el-icon-back" circle @click="$router.push('/salev2/customers')"></el-button>
-            <h1 class="text-2xl font-bold text-slate-800">Create Order</h1>
-        </div>
-        <div class="flex gap-2">
-            <el-button type="success" icon="el-icon-check" :loading="submitting" @click="submitOrder" class="px-6 shadow-lg shadow-green-100">Complete Order</el-button>
-        </div>
-    </div>
+  <div class="px-4 md:px-6 py-8">
+     <div class="flex justify-between items-center mb-6">
+       <div>
+         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Create Order</h1>
+         <p class="text-slate-500 mt-1">Fill customer details and select products to create a new order</p>
+       </div>
+       <el-button @click="$router.push('/salev2/orders')" icon="el-icon-back" circle></el-button>
+     </div>
 
-    <div class="flex flex-col lg:flex-row gap-6 h-full overflow-hidden">
-        <!-- LEFT: Customer & Financials -->
-        <div class="w-full lg:w-96 flex-none flex flex-col gap-4 overflow-y-auto pb-20 lg:pb-0">
-            <!-- Customer Card -->
-            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2"><i class="el-icon-user"></i> Customer</h3>
-                <div v-if="customer" class="space-y-3">
-                    <el-input v-model="customer.name" placeholder="Name" size="small">
-                        <template slot="prepend">Name</template>
-                    </el-input>
-                    <el-input v-model="customer.phone" placeholder="Phone" size="small">
-                        <template slot="prepend">Phone</template>
-                    </el-input>
-                    <el-input v-model="customer.address" placeholder="Address" type="textarea" :rows="2" size="small"></el-input>
-                    
-                    <!-- Note moved here -->
-                    <div>
-                        <label class="text-xs font-bold text-slate-500 uppercase">Note</label>
-                        <el-input v-model="order.note" type="textarea" :rows="2" placeholder="Internal note..."></el-input>
-                    </div>
-                </div>
-                <div v-else class="text-center py-4">
-                    <el-spinner v-if="loadingCustomer"></el-spinner>
-                    <p v-else class="text-slate-400 text-sm">No customer selected</p>
-                </div>
-            </div>
-
-            <!-- Financials Card -->
-            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex-1">
-                <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2"><i class="el-icon-money"></i> Payment</h3>
-                
-                <div class="space-y-4">
-                    <!-- Note -->
-
-                     <div>
-                        <label class="text-xs font-bold text-slate-500 uppercase">Public Description (In Receipt)</label>
-                        <el-input v-model="order.desc" type="textarea" :rows="2" placeholder="Public note..."></el-input>
-                    </div>
-
-                    <div class="pt-4 border-t border-slate-100 space-y-2">
-                        <div class="flex justify-between items-center text-sm">
-                            <span class="text-slate-500">Subtotal ({{ selectedProducts.length }} items)</span>
-                            <span class="font-bold">{{ formatPrice(subtotal) }}</span>
-                        </div>
-                        
-                        <!-- Extra Fee -->
-                        <div class="flex items-center justify-between gap-2">
-                             <span class="text-slate-500 text-sm">Additional Fee</span>
-                             <el-input-number v-model="order.additional_amount" size="mini" :step="10000" class="w-28"></el-input-number>
-                        </div>
-
-                         <!-- Discount/Freeship (Sale Amount) -->
-                        <div class="flex items-center justify-between gap-2">
-                             <span class="text-slate-500 text-sm">Discount / Sale</span>
-                             <el-input-number v-model="order.freeship_amount" size="mini" :step="10000" class="w-28"></el-input-number>
-                        </div>
-                        
-                        <!-- Deposit -->
-                         <div class="flex items-center justify-between gap-2 pt-2 border-t border-dashed border-slate-100">
-                             <span class="text-slate-700 text-sm font-medium">Deposit</span>
-                             <el-input-number v-model="order.deposit_amount" size="mini" :step="50000" class="w-28"></el-input-number>
-                        </div>
-
-                        <!-- Paid Toggle -->
-                        <div class="flex justify-between items-center py-2">
-                            <span class="font-bold text-slate-700 text-sm">Paid in Full</span>
-                            <el-switch v-model="order.is_paid"></el-switch>
-                        </div>
-
-                        <!-- Final Amount -->
-                         <div class="flex justify-between items-center pt-3 border-t border-slate-900">
-                            <span class="font-black text-slate-900 text-lg">TOTAL</span>
-                            <span class="font-black text-blue-600 text-xl">{{ formatPrice(finalTotal) }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- RIGHT: Product Selection -->
-        <div class="flex-1 bg-white rounded-xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-            <!-- Search Bar -->
-            <div class="p-4 border-b border-slate-100 flex gap-2">
-                <el-input v-model="productSearch" placeholder="Search product to add..." prefix-icon="el-icon-search" @input="debouncedSearch" class="flex-1" clearable></el-input>
-                <el-button icon="el-icon-refresh" circle @click="searchProducts"></el-button>
-            </div>
-            
-            <!-- Products Grid / Results -->
-            <div class="flex-1 overflow-y-auto p-4 relative">
-                <div v-if="loadingProducts" class="absolute inset-0 bg-white/80 z-10 flex items-center justify-center">
-                    <el-spinner></el-spinner>
-                </div>
-                
-                <div v-if="searchResults.length" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    <div v-for="prod in searchResults" :key="prod.id" 
-                         class="border rounded-lg p-2 cursor-pointer transition-all hover:shadow-md h-full flex flex-col"
-                         :class="isSelected(prod) ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-100'"
-                         @click="toggleProduct(prod)">
-                        <div class="aspect-[3/4] bg-slate-100 rounded mb-2 overflow-hidden">
-                             <img v-if="prod.path_thumb" :src="prod.path_thumb" class="w-full h-full object-contain">
-                        </div>
-                        <div class="text-center mt-auto">
-                            <h5 class="font-bold text-xs truncate">{{ prod.name }}</h5>
-                            <p class="text-xs text-blue-600 font-bold">{{ formatPrice(prod.price) }}</p>
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">{{ prod.status }}</span>
-                        </div>
-                    </div>
-                </div>
-                 <div v-else-if="productSearch" class="text-center py-10 text-slate-400">
-                    No products found for "{{ productSearch }}"
-                </div>
-                 <div v-else class="text-center py-10 text-slate-400">
-                    <i class="el-icon-search text-4xl mb-2"></i>
-                    <p>Type to search products</p>
-                </div>
-            </div>
-
-            <!-- Selected Items Bar -->
-            <div class="p-3 bg-slate-50 border-t border-slate-200 h-24 overflow-x-auto whitespace-nowrap flex items-center gap-2">
-                <span class="text-xs font-bold text-slate-400 uppercase mr-2 flex-none">Selected ({{ selectedProducts.length }})</span>
-                <div v-if="!selectedProducts.length" class="text-slate-400 text-sm italic">No items selected</div>
-                <div v-for="item in selectedProducts" :key="item.id" class="inline-flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-1.5 shadow-sm pr-3">
-                     <img v-if="item.path_thumb" :src="item.path_thumb" class="w-8 h-8 object-cover rounded">
-                     <div class="flex flex-col">
-                         <span class="text-xs font-bold">{{ item.name }}</span>
-                         <el-input-number v-model="item.price" size="mini" :controls="false" class="w-20"></el-input-number>
+     <div v-loading="loading">
+         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+             
+             <!-- Left: Customer & Status -->
+             <div class="space-y-6">
+                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                     <h2 class="font-bold text-slate-800 text-lg mb-4">Customer Info</h2>
+                     <div class="space-y-4">
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Name</label>
+                             <el-input v-model="order.name"></el-input>
+                         </div>
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Phone</label>
+                             <el-input v-model="order.phone"></el-input>
+                         </div>
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Address</label>
+                             <el-input type="textarea" v-model="order.address" :rows="2"></el-input>
+                         </div>
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Note</label>
+                             <el-input type="textarea" v-model="order.note" :rows="2" placeholder="Internal note..."></el-input>
+                         </div>
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Public Description</label>
+                             <el-input type="textarea" v-model="order.desc" :rows="2" placeholder="Public note..."></el-input>
+                         </div>
                      </div>
-                     <i class="el-icon-close text-slate-400 hover:text-red-500 cursor-pointer p-1" @click.stop="toggleProduct(item)"></i>
+                 </div>
+
+                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                     <h2 class="font-bold text-slate-800 text-lg mb-4">Order Settings</h2>
+                     <div class="space-y-4">
+                         <div>
+                             <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Status</label>
+                             <el-select v-model="order.status" class="w-full">
+                                 <el-option value="NEW" label="NEW"></el-option>
+                                 <el-option value="ON HOLD" label="ON HOLD"></el-option>
+                                 <el-option value="A SHIP NOW" label="A SHIP NOW"></el-option>
+                                 <el-option value="COMPLETED" label="COMPLETED"></el-option>
+                                 <el-option value="CANCELED" label="CANCELED"></el-option>
+                             </el-select>
+                         </div>
+                         <div class="flex items-center gap-2">
+                             <el-switch v-model="order.is_freeship" active-color="#13ce66"></el-switch>
+                             <span class="text-sm font-medium">Free Shipping (20k)</span>
+                         </div>
+                         <div class="flex items-center gap-2">
+                             <el-switch v-model="order.is_paid" active-color="#13ce66"></el-switch>
+                             <span class="text-sm font-medium">Paid in Full</span>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- Middle: Products -->
+             <div class="lg:col-span-2 space-y-6">
+                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                     <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-bold text-slate-800 text-lg">Products</h2>
+                        <el-button type="text" icon="el-icon-plus" @click="showProductSelector = true">Add Product</el-button>
+                     </div>
+                     
+                     <!-- Selected Products List -->
+                     <div class="space-y-3">
+                         <div v-for="(p, index) in order.products" :key="p.id" class="flex gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 relative group">
+                             <img :src="p.path_thumb" class="w-16 h-20 object-contain bg-white rounded border border-slate-200">
+                             <div class="flex-1">
+                                 <div class="flex justify-between items-start">
+                                     <div>
+                                         <h4 class="font-bold text-slate-800">{{ p.name }}</h4>
+                                         <span class="text-[10px] text-slate-500 font-bold uppercase">{{ p.type }}</span>
+                                     </div>
+                                     <el-input-number v-model="p.price" :step="10000" size="mini" controls-position="right" class="w-28"></el-input-number>
+                                 </div>
+                                 <div class="mt-2 text-xs text-slate-500">
+                                     <span v-for="s in p.sizes" :key="s.name" class="mr-2">{{ s.name }}: {{ Math.floor(s.value) }}</span>
+                                 </div>
+                             </div>
+                             <button @click="removeProduct(index)" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <i class="el-icon-close font-bold text-xs"></i>
+                             </button>
+                         </div>
+                         <div v-if="!order.products.length" class="text-center py-8 text-slate-400 italic">No products selected</div>
+                     </div>
+
+                     <!-- Financials -->
+                      <div class="mt-6 pt-6 border-t border-slate-100 space-y-3">
+                         <div class="flex justify-between text-sm">
+                             <span class="text-slate-500">Subtotal</span>
+                             <span class="font-bold">{{ formatPrice(subtotal) }}</span>
+                         </div>
+                         <div class="flex justify-between text-sm items-center">
+                             <span class="text-slate-500">Additional Fee</span>
+                             <el-input-number v-model="order.additional_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                         </div>
+                         <div class="flex justify-between text-sm items-center">
+                              <span class="text-slate-500">Freeship/Discount</span>
+                              <el-input-number v-model="order.freeship_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                          </div>
+                         <div class="flex justify-between text-sm items-center">
+                             <span class="text-slate-500">Deposit</span>
+                             <el-input-number v-model="order.deposit_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                         </div>
+                         <!-- Shipping Fee hidden as requested -->
+                         <div class="flex justify-between text-lg font-black text-slate-900 pt-3 border-t border-dashed border-slate-200">
+                             <span>Total</span>
+                             <span>{{ formatPrice(totalAmount) }}</span>
+                         </div>
+                         <div class="flex justify-between text-base font-bold text-blue-600">
+                             <span>Viettel Amount</span>
+                             <span>{{ formatPrice(viettelAmount) }}</span>
+                         </div>
+                      </div>
+                 </div>
+
+                 <!-- Action -->
+                  <div class="flex justify-end gap-3 pt-4">
+                     <el-button @click="$router.push('/salev2/orders')">Cancel</el-button>
+                     <el-button type="primary" :loading="submitting" @click="submitOrder" class="px-8 shadow-lg shadow-green-200">Complete Order</el-button>
+                 </div>
+             </div>
+         </div>
+     </div>
+
+     <!-- Product Selector Dialog -->
+    <el-dialog title="Add Products" :visible.sync="showProductSelector" width="90%" custom-class="mobile-dialog">
+        <div class="mb-4">
+            <el-input v-model="productSearch" placeholder="Search by name..." prefix-icon="el-icon-search" @input="debouncedSearch"></el-input>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto">
+            <div v-for="p in availableProducts" :key="p.id" 
+                 class="border rounded-lg p-2 cursor-pointer hover:border-blue-500 transition-colors relative"
+                 @click="toggleProductSelect(p)">
+                <img :src="p.path_thumb" class="w-full aspect-[3/4] object-contain bg-slate-50 mb-2">
+                <p class="font-bold text-xs text-center">{{ p.name }}</p>
+                <div v-if="isProductSelected(p.id)" class="absolute inset-0 bg-blue-500/20 border-2 border-blue-500 rounded-lg flex items-center justify-center">
+                    <i class="el-icon-check text-white bg-blue-500 rounded-full p-1"></i>
                 </div>
             </div>
         </div>
-    </div>
+        <span slot="footer">
+            <el-button @click="showProductSelector = false">Done</el-button>
+        </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -151,25 +162,38 @@ export default {
     name: 'OrderCreate',
     data() {
         return {
-            customer: { name: '', phone: '', address: '' },
-            order: { note: '', desc: '', additional_amount: 0, freeship_amount: 0, deposit_amount: 0, is_paid: false },
-            
+            loading: false,
+            submitting: false,
+            order: {
+                name: '',
+                phone: '',
+                address: '',
+                note: '',
+                desc: '',
+                status: 'NEW',
+                is_freeship: false,
+                is_paid: false,
+                additional_amount: 0,
+                freeship_amount: 0,
+                deposit_amount: 0,
+                products: []
+            },
+            showProductSelector: false,
             productSearch: '',
-            searchResults: [],
-            selectedProducts: [],
-            
-            loadingCustomer: false,
-            loadingProducts: false,
-            submitting: false
+            availableProducts: []
         }
     },
     computed: {
         subtotal() {
-            return this.selectedProducts.reduce((sum, p) => sum + Number(p.price), 0);
+            return this.order.products.reduce((sum, p) => sum + Number(p.price), 0);
         },
-        finalTotal() {
-            let total = this.subtotal + this.order.additional_amount - this.order.freeship_amount;
+        totalAmount() {
+            let total = this.subtotal + (this.order.additional_amount || 0) - (this.order.freeship_amount || 0);
             return total > 0 ? total : 0;
+        },
+        viettelAmount() {
+            if (this.order.is_paid) return 0;
+            return this.totalAmount - (this.order.deposit_amount || 0);
         }
     },
     watch: {
@@ -180,65 +204,60 @@ export default {
             }
         }
     },
+    mounted() {
+        this.fetchAvailableProducts();
+    },
     methods: {
         formatPrice(val) {
             return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val);
         },
         async fetchConsumer(id) {
-            this.loadingCustomer = true;
+            this.loading = true;
             try {
                  const res = await axios.get(`/salev2/api/consumer/${id}`);
-                 this.customer = {
-                     name: res.data.name,
-                     phone: res.data.phone,
-                     address: res.data.address
-                 };
+                 this.order.name = res.data.name;
+                 this.order.phone = res.data.phone;
+                 this.order.address = res.data.address;
             } catch(e) {
                 this.$message.error('Failed to load customer');
             } finally {
-                this.loadingCustomer = false;
+                this.loading = false;
             }
         },
-        debouncedSearch: _.debounce(function() { this.searchProducts(); }, 500),
-        async searchProducts() {
-            if(!this.productSearch) return;
-            this.loadingProducts = true;
+        async fetchAvailableProducts() {
             try {
-                const res = await axios.get('/salev2/api/products', {
-                    params: { search: this.productSearch, status: 'AVAILABLE' }
-                });
-                this.searchResults = res.data.data;
-            } catch(e) {
-                console.error(e);
-            } finally {
-                this.loadingProducts = false;
-            }
+                const res = await axios.get('/salev2/api/products', { params: { status: 'AVAILABLE', search: this.productSearch, limit: 100 } });
+                this.availableProducts = res.data.data;
+            } catch(e) {}
         },
-        toggleProduct(prod) {
-            const idx = this.selectedProducts.findIndex(p => p.id === prod.id);
-            if(idx > -1) {
-                this.selectedProducts.splice(idx, 1);
+        debouncedSearch: _.debounce(function() { this.fetchAvailableProducts(); }, 500),
+        isProductSelected(id) {
+            return this.order.products.some(p => p.id === id);
+        },
+        toggleProductSelect(product) {
+            if(this.isProductSelected(product.id)) {
+                const idx = this.order.products.findIndex(p => p.id === product.id);
+                if(idx > -1) this.order.products.splice(idx, 1);
             } else {
-                this.selectedProducts.push(prod);
+                this.order.products.push({...product});
             }
         },
-        isSelected(prod) {
-            return this.selectedProducts.some(p => p.id === prod.id);
+        removeProduct(index) {
+            this.order.products.splice(index, 1);
         },
         async submitOrder() {
-            if(!this.customer.name || !this.customer.phone) return this.$message.error('Customer info required');
-            if(!this.selectedProducts.length) return this.$message.error('No products selected');
+            if(!this.order.name || !this.order.phone) return this.$message.error('Customer info required');
+            if(!this.order.products.length) return this.$message.error('No products selected');
             
             this.submitting = true;
             try {
                 const payload = {
-                    ...this.customer, // Flatten customer fields
-                    consumer_id: this.$route.query.consumer_id, // Optional
                     ...this.order,
-                    total_amount: this.finalTotal, // Legacy expects total_amount as Final? No, let's allow backend to calculate or send calc.
-                    // Actually storeOrder expects: products (array of IDs)
-                    products: this.selectedProducts.map(p => p.id),
-                    products_info: this.selectedProducts.map(p => ({ id: p.id, price: p.price }))
+                    consumer_id: this.$route.query.consumer_id,
+                    products: this.order.products.map(p => p.id),
+                    products_info: this.order.products.map(p => ({ id: p.id, price: p.price })),
+                    total_amount: this.totalAmount,
+                    final_amount: this.totalAmount
                 };
                 
                 await axios.post('/salev2/api/order', payload);

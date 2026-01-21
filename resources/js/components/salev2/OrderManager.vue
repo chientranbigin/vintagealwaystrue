@@ -56,6 +56,7 @@
                             <el-dropdown-item icon="el-icon-camera" @click.native="captureOrder(order)">Capture Receipt</el-dropdown-item>
                             <el-dropdown-item icon="el-icon-edit" @click.native="$router.push({name: 'order-edit', params: {id: order.id}})">Edit Order</el-dropdown-item>
                             <el-dropdown-item icon="el-icon-user" @click.native="viewCustomerHistory(order)">Customer History</el-dropdown-item>
+                            <el-dropdown-item icon="el-icon-document-copy" @click.native="createSimilarOrder(order)">Create Similar Order</el-dropdown-item>
                             <el-divider class="my-1"></el-divider>
                             <el-dropdown-item v-if="order.status !== 'A SHIP NOW'" icon="el-icon-truck" @click.native="updateStatus(order, 'A SHIP NOW')" class="text-primary font-bold">Ready to Ship</el-dropdown-item>
                             <el-dropdown-item v-if="order.status !== 'ON HOLD'" icon="el-icon-video-pause" @click.native="updateStatus(order, 'ON HOLD')" class="text-warning font-bold">Mark On Hold</el-dropdown-item>
@@ -66,8 +67,11 @@
                 </div>
             </div>
             <p class="text-[12px] text-slate-500 break-words leading-snug"><i class="el-icon-location-outline mr-1"></i>{{ order.address }}</p>
-            <div v-if="order.note" class="mt-2 text-[10px] bg-red-50 text-red-600 p-2 rounded-lg font-bold">
+            <div v-if="order.note" class="mt-2 text-[12px] bg-red-50 text-red-600 p-2 rounded-lg font-bold">
                 <i class="el-icon-warning mr-1"></i>{{ order.note }}
+            </div>
+              <div v-if="order.desc" class="mt-2 text-[12px] bg-red-50 text-red-600 p-2 rounded-lg font-bold">
+                <i class="el-icon-warning mr-1"></i>{{ order.desc }}
             </div>
           </div>
 
@@ -75,8 +79,11 @@
           <div class="p-4 flex-1 space-y-4">
             <!-- Product Preview -->
             <div class="grid grid-cols-2 gap-2 pb-2">
-                <img v-for="p in order.products" :key="p.id" :src="p.path_thumb" 
-                     class="w-full h-auto object-contain bg-slate-100 rounded shadow-sm border border-slate-100">
+                <div v-for="p in order.products" :key="p.id" class="flex flex-col">
+                    <span class="text-[10px] font-bold text-slate-700 truncate mb-1">{{ p.name }}</span>
+                    <img :src="p.path_thumb" 
+                         class="w-full h-auto object-contain bg-slate-100 rounded shadow-sm border border-slate-100" />
+                </div>
             </div>
 
             <!-- Summary Block (Matches Legacy Layout) -->
@@ -98,7 +105,7 @@
                     <span>Phí cộng thêm:</span>
                     <span>+{{ formatPrice(order.additional_amount) }}</span>
                 </div>
-                <div v-if="order.is_paid || order.deposit_amount > 0" class="text-emerald-600 font-bold flex justify-between">
+                <div v-if="parseFloat(order.is_paid) || parseFloat(order.deposit_amount) > 0" class="text-emerald-600 font-bold flex justify-between">
                     <span>{{ order.is_paid ? 'Đã thanh toán:' : 'Cọc:' }}</span>
                     <span>-{{ formatPrice(order.is_paid ? order.total_amount : order.deposit_amount) }}</span>
                 </div>
@@ -299,6 +306,13 @@ export default {
     handleTabClick() { this.fetchOrders(1); },
     debouncedFetch: _.debounce(function() { this.fetchOrders(1); }, 500),
     handlePageChange(p) { this.fetchOrders(p); },
+    createSimilarOrder(order) {
+        if (!order.consumer_id) {
+             this.$message.warning('This order has no linked customer ID');
+             return;
+        }
+        this.$router.push({ name: 'order-create', query: { consumer_id: order.consumer_id } });
+    },
     async captureOrder(order) {
         this.currentCapture = order;
         this.$nextTick(async () => {

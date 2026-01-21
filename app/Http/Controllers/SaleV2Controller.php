@@ -114,6 +114,7 @@ class SaleV2Controller extends Controller
             if ($request->status === 'NEW') {
                 // Show everything except COMPLETED as requested
                 $query->where('status', '!=', 'COMPLETED');
+                $query->where('status', '!=', 'READY FOR SHIPPING')->orderBy('status', 'asc');
             } else {
                 $query->where('status', $request->status);
             }
@@ -127,7 +128,7 @@ class SaleV2Controller extends Controller
             });
         }
 
-        $orders = $query->latest()->paginate($request->get('limit', 10));
+        $orders = $query->orderBy('id', 'desc')->paginate($request->get('limit', 12));
 
         // Legacy calculation: Viettel Amount = total_amount - deposit_amount (if not is_paid)
         $orders->getCollection()->transform(function($order) {

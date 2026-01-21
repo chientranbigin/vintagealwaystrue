@@ -46,6 +46,27 @@ class CleanUnusedProductImages extends Command
                 return basename($path);
             })->toArray();
 
+        // 1.1 Get all used detail image paths from DB
+        $usedDetailPaths = \Illuminate\Support\Facades\DB::table('product_images')
+            ->join('products', 'product_images.product_id', '=', 'products.id')
+            ->leftJoin('order_products', 'products.id', '=', 'order_products.product_id')
+            ->leftJoin('orders', 'order_products.order_id', '=', 'orders.id')
+            ->whereNotNull('product_images.file_path')
+            ->where(function($query) {
+                $query->whereIn('products.status', ['AVAILABLE', 'ON_HOLD'])
+                      ->orWhere(function($q) {
+                          $q->where('products.status', 'SOLD')
+                            ->where('orders.created_at', '>=', \Carbon\Carbon::now()->subMonths(1));
+                      });
+            })
+            ->distinct()
+            ->pluck('product_images.file_path')
+            ->map(function($path) {
+                return basename($path);
+            })->toArray();
+
+        $usedPaths = array_unique(array_merge($usedPaths, $usedDetailPaths));
+
         $this->info('Found ' . count($usedPaths) . ' images linked to products.');
 
         // 2. Scan directory

@@ -105,14 +105,12 @@
                              <span class="text-slate-500">Additional Fee</span>
                              <el-input-number v-model="order.additional_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
                          </div>
+              
                          <div class="flex justify-between text-sm items-center">
                              <span class="text-slate-500">Deposit</span>
                              <el-input-number v-model="order.deposit_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
                          </div>
-                         <div class="flex justify-between text-sm">
-                             <span class="text-slate-500">Shipping Fee</span>
-                             <span class="font-bold">{{ order.is_freeship ? '0đ' : '20.000đ' }}</span>
-                         </div>
+                         <!-- Shipping Fee hidden as requested -->
                          <div class="flex justify-between text-lg font-black text-slate-900 pt-3 border-t border-dashed border-slate-200">
                              <span>Total</span>
                              <span>{{ formatPrice(totalAmount) }}</span>
@@ -178,11 +176,6 @@ export default {
         totalAmount() {
             if (!this.order) return 0;
             let total = this.subtotal + (this.order.additional_amount || 0);
-            if (!this.order.is_freeship) total += 20000; // Assuming 20k ship fee if not free
-            // Actually legacy logic subtracts freeship_amount but here we simplify: 
-            // Legacy: total_amount = products + additional - freeship.
-            // But we use is_freeship flag. Let's stick to simple total calculation for display.
-            // Wait, legacy stores final_amount.
             return total;
         },
         viettelAmount() {
@@ -206,7 +199,10 @@ export default {
                 const res = await axios.get(`/salev2/api/order/${id}`);
                 this.order = res.data;
                 // Ensure array fields
-                if (!this.order.products) this.order.products = [];
+                if (!this.order.products) this.$set(this.order, 'products', []);
+                // Ensure number fields for EL input (reactive)
+                this.$set(this.order, 'additional_amount', parseFloat(this.order.additional_amount || 0));
+                this.$set(this.order, 'deposit_amount', parseFloat(this.order.deposit_amount || 0));
             } catch(e) {
                 this.$message.error('Failed to load order');
                 this.$router.push('/salev2/orders');
@@ -241,9 +237,12 @@ export default {
         async saveOrder() {
             this.submitting = true;
             try {
+                console.log( this.order);
                 // Prepare payload
                 const payload = {
                     ...this.order,
+                    additional_amount: this.order.additional_amount, // Ensure explicit
+                    deposit_amount: this.order.deposit_amount,       // Ensure explicit
                     products: this.order.products.map(p => p.id),
                     // Send price updates
                     products_info: this.order.products.map(p => ({ id: p.id, price: p.price })),
@@ -251,7 +250,7 @@ export default {
                     total_amount: this.totalAmount, // Backend might recalc but good to send
                     final_amount: this.totalAmount,
                 };
-                
+                console.log(payload);
                 await axios.post(`/salev2/api/order/${this.order.id}/update`, payload);
                 this.$message.success('Order Updated');
                 this.$router.push('/salev2/orders');

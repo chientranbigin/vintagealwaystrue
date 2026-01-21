@@ -115,6 +115,7 @@ Route::group([
     
     // Missing Routes
     Route::get('/api/consumers', 'SaleV2Controller@consumers')->name('salev2.api.consumers');
+    Route::get('/api/consumer/{id}', 'SaleV2Controller@consumer')->name('salev2.api.consumer-detail');
     Route::post('/api/product/store', 'SaleV2Controller@storeProduct')->name('salev2.api.product.store');
     Route::post('/api/product/{id}/update', 'SaleV2Controller@updateProduct')->name('salev2.api.product.update');
     Route::delete('/api/product/{id}', 'SaleV2Controller@destroyProduct');
