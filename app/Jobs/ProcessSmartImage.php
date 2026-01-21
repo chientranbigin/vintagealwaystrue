@@ -95,6 +95,14 @@ class ProcessSmartImage implements ShouldQueue
 
             // Update record: Price & Path Thumb
             $updateData = ['path_thumb' => $this->mainImagePath];
+            
+            // Generate scaled thumb
+            $imageService = new \App\Services\ImageService();
+            $scaledPath = $imageService->createScaledThumbnail($this->mainImagePath);
+            if ($scaledPath) {
+                $updateData['image_thumb_scale'] = $scaledPath;
+            }
+
             if ($price > 0) {
                 $updateData['price'] = $price;
             }

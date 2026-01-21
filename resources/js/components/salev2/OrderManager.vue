@@ -81,7 +81,7 @@
             <div class="grid grid-cols-2 gap-2 pb-2">
                 <div v-for="p in order.products" :key="p.id" class="flex flex-col">
                     <span class="text-[10px] font-bold text-slate-700 truncate mb-1">{{ p.name }}</span>
-                    <img :src="p.path_thumb" 
+                    <img :src="p.image_thumb_scale_url || p.path_thumb" 
                          class="w-full h-auto object-contain bg-slate-100 rounded shadow-sm border border-slate-100" />
                 </div>
             </div>
@@ -216,7 +216,7 @@
             <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4">ĐƠN HÀNG CỦA BẠN</h3>
             <div class="flex flex-wrap gap-4 mb-6">
                 <div v-for="p in currentCapture?.products" :key="p.id" class="w-[calc(50%-8px)] text-center">
-                    <img :src="p.path_thumb" class="w-full aspect-[3/4] object-cover rounded-xl bg-slate-50 mb-2 border border-slate-100">
+                    <img :src="p.image_thumb_scale_url || p.path_thumb" class="w-full aspect-[3/4] object-cover rounded-xl bg-slate-50 mb-2 border border-slate-100">
                     <span class="text-sm font-bold">{{ p.name }}</span>
                 </div>
             </div>

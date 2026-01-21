@@ -75,7 +75,7 @@
                      <!-- Selected Products List -->
                      <div class="space-y-3">
                          <div v-for="(p, index) in order.products" :key="p.id" class="flex gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100 relative group">
-                             <img :src="p.path_thumb" class="w-16 h-20 object-contain bg-white rounded border border-slate-200">
+                            <img :src="p.image_thumb_scale_url || p.path_thumb" class="w-16 h-20 object-contain bg-white rounded border border-slate-200">
                              <div class="flex-1">
                                  <div class="flex justify-between items-start">
                                      <div>
@@ -143,7 +143,7 @@
             <div v-for="p in availableProducts" :key="p.id" 
                  class="border rounded-lg p-2 cursor-pointer hover:border-blue-500 transition-colors relative"
                  @click="toggleProductSelect(p)">
-                <img :src="p.path_thumb" class="w-full aspect-[3/4] object-contain bg-slate-50 mb-2">
+                <img :src="p.image_thumb_scale_url || p.path_thumb" class="w-full aspect-[3/4] object-contain bg-slate-50 mb-2">
                 <p class="font-bold text-xs text-center">{{ p.name }}</p>
                 <div v-if="isProductSelected(p.id)" class="absolute inset-0 bg-blue-500/20 border-2 border-blue-500 rounded-lg flex items-center justify-center">
                     <i class="el-icon-check text-white bg-blue-500 rounded-full p-1"></i>

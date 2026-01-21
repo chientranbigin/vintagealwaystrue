@@ -13,3 +13,13 @@ Stack trace:
 #2 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(624): Illuminate\Database\Connection->runQueryCallback('select count(*)...', Array, Object(Closure))
 #3 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php(333): Illuminate\Database\Connection->run('select count(*)...', Array, Object(Closure))
 #4 /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Que in /home/wxcowyfv/public_html/vendor/laravel/framework/src/Illuminate/Database/Connection.php on line 664
+[21-Jan-2026 06:22:53 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/nDMbrr72lK4avbHNUee32NQXIV3rZdtQFU50DG5p.jpg
+[21-Jan-2026 06:22:53 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/CtSO1D0yvQ5jGO52Qyy1pvxcbTKe2VmX75JqhkKN.jpg
+[21-Jan-2026 06:22:53 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE25.jpeg
+[21-Jan-2026 06:22:53 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE28.jpeg
+[21-Jan-2026 06:22:53 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE32.jpeg
+[21-Jan-2026 06:23:03 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/nDMbrr72lK4avbHNUee32NQXIV3rZdtQFU50DG5p.jpg
+[21-Jan-2026 06:23:03 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/CtSO1D0yvQ5jGO52Qyy1pvxcbTKe2VmX75JqhkKN.jpg
+[21-Jan-2026 06:23:03 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE25.jpeg
+[21-Jan-2026 06:23:03 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE28.jpeg
+[21-Jan-2026 06:23:03 UTC] ImageService: File not found or is directory: /home/wxcowyfv/public_html/storage/app/public/sale/BE32.jpeg

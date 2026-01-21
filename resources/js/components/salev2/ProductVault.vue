@@ -115,7 +115,7 @@
           
           <!-- Image Area -->
           <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
-            <img v-if="product.path_thumb" :src="product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1">
+            <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1">
             <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
             
             <!-- Quick Actions Overlay (Desktop Only) -->
@@ -125,7 +125,9 @@
                            @click.stop="editProduct(product)">DETAIL</el-button>
                 <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold" 
                            icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
-                <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
+                <el-button type="info" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
+                           icon="el-icon-camera" @click.stop="copyMain(product)">COPY MAIN</el-button>
+                <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-125 font-bold" 
                            icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
                 <el-button type="danger" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-150 font-bold" 
                            icon="el-icon-delete" @click.stop="confirmDelete(product)">DELETE</el-button>
@@ -170,6 +172,7 @@
                         <el-dropdown-menu slot="dropdown">
                             <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
                             <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
+                            <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
                             <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
                             <el-dropdown-item command="delete" icon="el-icon-delete" divided class="text-red-500">Delete</el-dropdown-item>
                         </el-dropdown-menu>
@@ -373,6 +376,32 @@ export default {
             this.$message.error('Failed to copy');
         }
     },
+    async copyMain(product) {
+        if (!navigator.share) {
+             alert('Browser does not support native sharing (or not HTTPS).');
+             return;
+        }
+
+        if (!product.path_thumb) {
+            this.$message.warning('This product has no main image.');
+            return;
+        }
+
+        const loading = this.$loading({ lock: true, text: 'Preparing main image...', background: 'rgba(255,255,255,0.7)' });
+        try {
+            const response = await fetch(product.path_thumb);
+            if (!response.ok) throw new Error('Failed to load image');
+            
+            const blob = await response.blob();
+            const file = new File([blob], `Main-${product.name}.jpg`, { type: 'image/jpeg' });
+            
+            await navigator.share({ files: [file] });
+        } catch (err) {
+            if (err.name !== 'AbortError') alert('Share failed: ' + err.message);
+        } finally {
+            loading.close();
+        }
+    },
     async copyDetail(product) {
         if (!navigator.share) {
              alert('Browser does not support native sharing (or not HTTPS).');
@@ -432,6 +461,7 @@ export default {
     handleMobileAction(command, product) {
         if (command === 'edit') this.editProduct(product);
         if (command === 'copy') this.copyProductInfo(product);
+        if (command === 'copy_main') this.copyMain(product);
         if (command === 'copy_detail') this.copyDetail(product);
         if (command === 'delete') this.confirmDelete(product);
     }

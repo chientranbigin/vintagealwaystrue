@@ -38,6 +38,9 @@ class SaleV2Controller extends Controller
             $cleanPath = substr($cleanPath, 8);
         }
         
+        // Ensure we don't return just "storage/" if the path was empty after cleaning
+        if (empty($cleanPath)) return null;
+
         return asset('storage/' . $cleanPath);
     }
 
@@ -96,6 +99,7 @@ class SaleV2Controller extends Controller
         $products = $query->latest('products.id')->paginate($request->get('limit', 60));
 
         $products->getCollection()->transform(function($product) {
+            $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
             $product->path_thumb = $this->formatImagePath($product->path_thumb);
             foreach ($product->images as $image) {
                 $image->file_path = $this->formatImagePath($image->file_path);
@@ -138,6 +142,7 @@ class SaleV2Controller extends Controller
             
             // Transform product images to absolute URLs
             foreach ($order->products as $product) {
+                $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
                 $product->path_thumb = $this->formatImagePath($product->path_thumb);
             }
             
@@ -152,6 +157,7 @@ class SaleV2Controller extends Controller
     {
         $order = Order::with('products')->findOrFail($id);
         foreach ($order->products as $product) {
+            $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
             $product->path_thumb = $this->formatImagePath($product->path_thumb);
         }
         return response()->json($order);
@@ -160,6 +166,7 @@ class SaleV2Controller extends Controller
     public function productDetail($id)
     {
         $product = Product::with(['images', 'sizes'])->findOrFail($id);
+        $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
         $product->path_thumb = $this->formatImagePath($product->path_thumb);
         foreach ($product->images as $image) {
             $image->file_path = $this->formatImagePath($image->file_path);
@@ -327,6 +334,15 @@ class SaleV2Controller extends Controller
                 'status' => 'AVAILABLE'
             ]);
 
+            // Create scaled thumb
+            if ($path) {
+                $imageService = new \App\Services\ImageService();
+                $scaledPath = $imageService->createScaledThumbnail($path);
+                if ($scaledPath) {
+                    $product->update(['image_thumb_scale' => $scaledPath]);
+                }
+            }
+
             // Save Sizes
             if($request->sizes) {
                 foreach ($request->sizes as $size) {
@@ -351,8 +367,15 @@ class SaleV2Controller extends Controller
         return DB::transaction(function () use ($request, $product) {
             // Update Banner if new file
             if ($file = $request->file('banner')) {
-                $path = str_replace('public', 'storage', $file->store('public/sale'));
+                $path = $file->store('sale', 'public');
                 $product->path_thumb = $path;
+                
+                // Create scaled thumb
+                $imageService = new \App\Services\ImageService();
+                $scaledPath = $imageService->createScaledThumbnail($path);
+                if ($scaledPath) {
+                    $product->image_thumb_scale = $scaledPath;
+                }
             }
             
             // Update other fields

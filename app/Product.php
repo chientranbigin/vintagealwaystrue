@@ -13,6 +13,7 @@ class Product extends Model
         'price',
         'url_detail',
         'path_thumb',
+        'image_thumb_scale',
         'status',
         'description',
         'color',
