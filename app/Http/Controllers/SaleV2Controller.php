@@ -563,6 +563,10 @@ class SaleV2Controller extends Controller
             $query->where('products.status', $request->status);
         }
 
+        if ($request->filled('type')) {
+            $query->where('products.type', $request->type);
+        }
+
         $products = $query->paginate($request->get('limit', 60));
 
         $products->getCollection()->transform(function ($product) {

@@ -2849,6 +2849,8 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       onlyAvailable: true,
       latestSelected: [],
       settingOnHold: false,
+      latestFilterType: '',
+      productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizeMapping: {
         'VAI': 'V',
         'NGỰC': 'N',
@@ -2961,6 +2963,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
                 limit: 60
               };
               if (_this3.onlyAvailable) params.status = 'AVAILABLE';
+              if (_this3.latestFilterType) params.type = _this3.latestFilterType;
               _context3.n = 2;
               return axios.get('/salev2/api/products-by-upload', {
                 params: params
@@ -7125,7 +7128,36 @@ var render = function render() {
     }
   }, [_c("span", {
     staticClass: "font-bold text-slate-700 text-sm"
-  }, [_vm._v("Only Available")])]), _vm._v(" "), _c("div", {
+  }, [_vm._v("Only Available")])]), _vm._v(" "), _c("el-select", {
+    staticStyle: {
+      width: "150px"
+    },
+    attrs: {
+      placeholder: "All Types",
+      clearable: "",
+      size: "small"
+    },
+    on: {
+      change: function change($event) {
+        return _vm.fetchLatestProducts(1);
+      }
+    },
+    model: {
+      value: _vm.latestFilterType,
+      callback: function callback($$v) {
+        _vm.latestFilterType = $$v;
+      },
+      expression: "latestFilterType"
+    }
+  }, _vm._l(_vm.productTypes, function (t) {
+    return _c("el-option", {
+      key: t,
+      attrs: {
+        label: t,
+        value: t
+      }
+    });
+  }), 1), _vm._v(" "), _c("div", {
     staticClass: "flex-1"
   }), _vm._v(" "), _c("el-button", {
     attrs: {

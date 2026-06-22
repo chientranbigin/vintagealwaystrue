@@ -114,6 +114,9 @@
         <el-checkbox v-model="onlyAvailable" @change="fetchLatestProducts(1)">
           <span class="font-bold text-slate-700 text-sm">Only Available</span>
         </el-checkbox>
+        <el-select v-model="latestFilterType" placeholder="All Types" clearable size="small" style="width:150px" @change="fetchLatestProducts(1)">
+          <el-option v-for="t in productTypes" :key="t" :label="t" :value="t"></el-option>
+        </el-select>
         <div class="flex-1"></div>
         <el-button
           type="warning"
@@ -210,6 +213,8 @@ export default {
       onlyAvailable: true,
       latestSelected: [],
       settingOnHold: false,
+      latestFilterType: '',
+      productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
 
       sizeMapping: {
         'VAI': 'V', 'NGỰC': 'N', 'EO': 'E', 'DÀI ÁO': 'D', 'DÀI ÁO SAU': 'DS',
@@ -265,6 +270,7 @@ export default {
       try {
         const params = { page, limit: 60 };
         if (this.onlyAvailable) params.status = 'AVAILABLE';
+        if (this.latestFilterType) params.type = this.latestFilterType;
         const res = await axios.get('/salev2/api/products-by-upload', { params });
         this.latestProducts = res.data.data;
         this.latestTotal = res.data.total;
