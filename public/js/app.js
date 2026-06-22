@@ -6394,6 +6394,11 @@ var render = function render() {
       staticClass: "w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1",
       attrs: {
         src: product.image_thumb_scale_url || product.path_thumb
+      },
+      on: {
+        error: function error(e) {
+          return e.target.src = product.path_thumb;
+        }
       }
     }) : _c("div", {
       staticClass: "w-full h-full flex items-center justify-center text-slate-300"
@@ -6969,6 +6974,11 @@ var render = function render() {
         staticClass: "w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1",
         attrs: {
           src: log.product.image_thumb_scale_url || log.product.path_thumb
+        },
+        on: {
+          error: function error(e) {
+            return e.target.src = log.product.path_thumb;
+          }
         }
       }) : _c("div", {
         staticClass: "w-full h-full flex items-center justify-center text-slate-300"
@@ -7210,6 +7220,11 @@ var render = function render() {
       staticClass: "w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1",
       attrs: {
         src: product.image_thumb_scale_url || product.path_thumb
+      },
+      on: {
+        error: function error(e) {
+          return e.target.src = product.path_thumb;
+        }
       }
     }) : _c("div", {
       staticClass: "w-full h-full flex items-center justify-center text-slate-300"

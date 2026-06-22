@@ -56,7 +56,7 @@
                 >
                   <template v-if="log.product">
                     <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
-                      <img v-if="log.product.image_thumb_scale_url || log.product.path_thumb" :src="log.product.image_thumb_scale_url || log.product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1">
+                      <img v-if="log.product.image_thumb_scale_url || log.product.path_thumb" :src="log.product.image_thumb_scale_url || log.product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1" @error="e => e.target.src = log.product.path_thumb">
                       <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
                       <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10" @click.stop="editProduct(log.product)">
                         <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold" @click.stop="editProduct(log.product)">DETAIL</el-button>
@@ -145,7 +145,7 @@
             :class="{'ring-2 ring-blue-500': isLatestSelected(product.id)}"
           >
             <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
-              <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1">
+              <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1" @error="e => e.target.src = product.path_thumb">
               <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
               <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10" @click.stop="editProduct(product)">
                 <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold" @click.stop="editProduct(product)">DETAIL</el-button>
