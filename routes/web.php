@@ -112,6 +112,7 @@ Route::group([
     Route::get('/api/upload-logs', 'SaleV2Controller@uploadLogs');
     Route::get('/api/upload-sessions', 'SaleV2Controller@uploadSessions');
     Route::get('/api/upload-sessions/{sessionId}/products', 'SaleV2Controller@uploadSessionProducts');
+    Route::get('/api/products-by-upload', 'SaleV2Controller@productsByLatestUpload');
     Route::get('/api/customer-history/{phone}', 'SaleV2Controller@customerHistory')->name('salev2.api.customer-history');
     Route::get('/api/dashboard-stats', 'SaleV2Controller@dashboardStats')->name('salev2.api.dashboard-stats');
     Route::post('/api/smart-upload', 'SaleV2Controller@smartUpload')->name('salev2.api.smart-upload');

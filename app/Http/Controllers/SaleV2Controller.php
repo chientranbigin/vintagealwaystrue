@@ -549,6 +549,34 @@ class SaleV2Controller extends Controller
         ]);
     }
 
+    public function productsByLatestUpload(Request $request)
+    {
+        $query = Product::with(['images', 'sizes'])
+            ->join(
+                DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+                'upload_summary.product_id', '=', 'products.id'
+            )
+            ->select('products.*', 'upload_summary.latest_upload')
+            ->orderBy('upload_summary.latest_upload', 'desc');
+
+        if ($request->filled('status')) {
+            $query->where('products.status', $request->status);
+        }
+
+        $products = $query->paginate($request->get('limit', 60));
+
+        $products->getCollection()->transform(function ($product) {
+            $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
+            $product->path_thumb = $this->formatImagePath($product->path_thumb);
+            foreach ($product->images as $image) {
+                $image->file_path = $this->formatImagePath($image->file_path);
+            }
+            return $product;
+        });
+
+        return response()->json($products);
+    }
+
     public function uploadSessions(Request $request)
     {
         $sessions = DB::table('product_upload_logs')
@@ -605,7 +633,10 @@ class SaleV2Controller extends Controller
     {
         $logs = \App\ProductUploadLog::where('session_id', $sessionId)
             ->with(['product.sizes', 'product.images'])
-            ->orderBy('id', 'asc')
+            ->leftJoin('products', 'products.id', '=', 'product_upload_logs.product_id')
+            ->select('product_upload_logs.*')
+            ->orderByRaw("CASE WHEN products.status = 'SOLD' THEN 0 ELSE 1 END")
+            ->orderBy('product_upload_logs.id', 'asc')
             ->get();
 
         $logs->transform(function ($log) {
