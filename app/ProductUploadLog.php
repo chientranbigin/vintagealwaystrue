@@ -11,9 +11,15 @@ class ProductUploadLog extends Model
         'file_name',
         'file_path',
         'product_code',
+        'product_id',
         'amount',
         'status',
         'message',
         'detected_text',
     ];
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
 }

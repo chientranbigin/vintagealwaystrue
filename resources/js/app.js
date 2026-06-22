@@ -22,12 +22,14 @@ const ProductEdit = require('./components/salev2/ProductEdit.vue').default;
 const OrderEdit = require('./components/salev2/OrderEdit.vue').default;
 const ExpenseManager = require('./components/salev2/ExpenseManager.vue').default;
 const ProductBatchUpload = require('./components/salev2/ProductBatchUpload.vue').default;
+const UploadSessions = require('./components/salev2/UploadSessions.vue').default;
 
 const routes = [
     { path: '/salev2', component: Dashboard },
     { path: '/salev2/products', component: ProductVault, name: 'product-vault' },
     { path: '/salev2/orders', component: OrderManager, name: 'order-manager' },
     { path: '/salev2/upload', component: ProductBatchUpload, name: 'smart-upload' },
+    { path: '/salev2/upload-sessions', component: UploadSessions, name: 'upload-sessions' },
     { path: '/salev2/customers', component: CustomerManager, name: 'customer-manager' },
     { path: '/salev2/order/create', name: 'order-create', component: OrderCreate },
     { path: '/salev2/order/:id/edit', name: 'order-edit', component: OrderEdit },

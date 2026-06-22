@@ -69,6 +69,10 @@
                         <i class="el-icon-upload text-lg"></i>
                         <span>Upload</span>
                     </router-link>
+                    <router-link to="/salev2/upload-sessions" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
+                        <i class="el-icon-folder-opened text-lg"></i>
+                        <span>Sessions</span>
+                    </router-link>
                     
                     <a href="/sale" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-blue-50 text-blue-600 font-bold text-sm ml-2 border border-blue-100">
                         <i class="el-icon-refresh-left text-lg"></i>
@@ -113,6 +117,10 @@
                     <i class="el-icon-user text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Customers</span>
                 </router-link> -->
+                <router-link to="/salev2/upload-sessions" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+                    <i class="el-icon-folder-opened text-xl"></i>
+                    <span class="text-[10px] font-bold uppercase mt-1">Sessions</span>
+                </router-link>
                 <a href="/sale" class="flex flex-col items-center justify-center w-full h-full text-blue-500 ">
                     <i class="el-icon-refresh-left text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">V1</span>

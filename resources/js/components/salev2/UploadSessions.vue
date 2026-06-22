@@ -1,0 +1,282 @@
+<template>
+  <div class="px-4 md:px-6 py-8">
+    <div class="flex justify-between items-center mb-6 mobile-hide">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Upload Sessions</h1>
+        <p class="text-slate-500 mt-1">Browse products grouped by upload batch</p>
+      </div>
+    </div>
+
+    <div v-loading="loadingSessions">
+      <div v-if="!sessions.length && !loadingSessions" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+        <i class="el-icon-upload text-4xl text-slate-200 mb-4 block"></i>
+        <p class="text-slate-400 font-medium">No upload sessions found</p>
+      </div>
+
+      <div v-for="session in sessions" :key="session.session_id" class="mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <!-- Session Header -->
+        <div
+          class="flex flex-wrap items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+          @click="toggleSession(session)"
+        >
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <i :class="openSessions[session.session_id] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
+            <div class="min-w-0">
+              <p class="text-xs text-slate-400 font-mono truncate">{{ session.session_id }}</p>
+              <p class="font-bold text-slate-800 text-sm">{{ formatDate(session.created_at) }}</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <el-tag size="small" type="info">{{ session.total_products }} sp</el-tag>
+            <el-tag size="small" type="success" v-if="session.sold_products">{{ session.sold_products }} sold</el-tag>
+            <el-tag
+              v-for="(count, type) in session.type_breakdown"
+              :key="type"
+              size="small"
+              class="font-bold"
+            >{{ type }}: {{ count }}</el-tag>
+          </div>
+        </div>
+
+        <!-- Session Products (lazy loaded) -->
+        <div v-if="openSessions[session.session_id]" class="border-t border-slate-100">
+          <div v-loading="loadingProducts[session.session_id]" class="p-4">
+            <div v-if="sessionProducts[session.session_id]">
+              <div v-if="!sessionProducts[session.session_id].length" class="text-center py-8 text-slate-400">
+                <i class="el-icon-box text-3xl block mb-2"></i>
+                <p>No products in this session</p>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                <div
+                  v-for="log in sessionProducts[session.session_id]"
+                  :key="log.id"
+                  class="group relative bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300"
+                >
+                  <template v-if="log.product">
+                    <!-- Image Area -->
+                    <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
+                      <img
+                        v-if="log.product.image_thumb_scale_url || log.product.path_thumb"
+                        :src="log.product.image_thumb_scale_url || log.product.path_thumb"
+                        class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1"
+                      >
+                      <div v-else class="w-full h-full flex items-center justify-center text-slate-300">
+                        <i class="el-icon-picture text-4xl"></i>
+                      </div>
+
+                      <!-- Quick Actions Overlay (Desktop Only) -->
+                      <div
+                        class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10"
+                        @click.stop="editProduct(log.product)"
+                      >
+                        <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold"
+                          @click.stop="editProduct(log.product)">DETAIL</el-button>
+                        <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold"
+                          icon="el-icon-document-copy" @click.stop="copyProductInfo(log.product)">COPY SIZE</el-button>
+                        <el-button type="info" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold"
+                          icon="el-icon-camera" @click.stop="copyMain(log.product)">COPY MAIN</el-button>
+                        <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-125 font-bold"
+                          icon="el-icon-picture-outline" @click.stop="copyDetail(log.product)">COPY DETAIL</el-button>
+                      </div>
+                    </div>
+
+                    <!-- Product Info -->
+                    <div class="p-3">
+                      <div class="text-center mb-2">
+                        <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ log.product.name }}</h4>
+                        <p class="text-blue-600 font-bold text-sm">{{ formatPrice(log.product.price) }}</p>
+                      </div>
+                      <div class="text-center mb-3 px-1">
+                        <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block">
+                          {{ formatSizes(log.product).join(' - ') }}
+                        </span>
+                      </div>
+                      <div class="flex justify-between items-center pt-2 border-t border-slate-50 gap-2">
+                        <div class="flex-1 text-center md:text-left">
+                          <el-tag :type="getStatusTagType(log.product.status)" size="mini" class="text-[8px] font-bold tracking-tighter uppercase rounded-md px-1">
+                            {{ log.product.status }}
+                          </el-tag>
+                        </div>
+                        <!-- Mobile Actions -->
+                        <div class="md:hidden flex justify-end">
+                          <el-dropdown trigger="click" @command="(cmd) => handleMobileAction(cmd, log.product)">
+                            <span class="el-dropdown-link p-2">
+                              <i class="el-icon-more transform rotate-90 text-lg font-bold text-slate-600"></i>
+                            </span>
+                            <el-dropdown-menu slot="dropdown">
+                              <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
+                              <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
+                              <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
+                              <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
+                            </el-dropdown-menu>
+                          </el-dropdown>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Log without product -->
+                  <template v-else>
+                    <div class="aspect-[3/4] bg-slate-50 flex flex-col items-center justify-center gap-2 p-3">
+                      <i class="el-icon-picture-outline text-3xl text-slate-300"></i>
+                      <p class="text-[10px] text-slate-400 text-center truncate w-full">{{ log.file_name }}</p>
+                      <el-tag :type="getLogStatusType(log.status)" size="mini" class="text-[8px] font-bold uppercase">{{ log.status }}</el-tag>
+                      <p v-if="log.message" class="text-[9px] text-slate-400 text-center line-clamp-2">{{ log.message }}</p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'UploadSessions',
+  data() {
+    return {
+      sessions: [],
+      loadingSessions: false,
+      openSessions: {},
+      sessionProducts: {},
+      loadingProducts: {},
+      sizeMapping: {
+        'VAI': 'V', 'NGỰC': 'N', 'EO': 'E', 'DÀI ÁO': 'D', 'DÀI ÁO SAU': 'DS',
+        'DÀI TAY': 'DT', 'EO QUẦN': 'E', 'ĐÁY': 'ĐA', 'ĐÙI': 'Đ', 'DÀI QUẦN': 'D',
+        'ỐNG': 'Ô', 'DƯ LAI': 'L'
+      },
+    };
+  },
+  mounted() {
+    this.fetchSessions();
+  },
+  methods: {
+    async fetchSessions() {
+      this.loadingSessions = true;
+      try {
+        const res = await axios.get('/salev2/api/upload-sessions');
+        this.sessions = res.data.sessions;
+      } catch (err) {
+        console.error(err);
+        this.$message.error('Failed to load sessions');
+      } finally {
+        this.loadingSessions = false;
+      }
+    },
+    async toggleSession(session) {
+      const id = session.session_id;
+      this.$set(this.openSessions, id, !this.openSessions[id]);
+
+      if (this.openSessions[id] && !this.sessionProducts[id]) {
+        this.$set(this.loadingProducts, id, true);
+        try {
+          const res = await axios.get(`/salev2/api/upload-sessions/${id}/products`);
+          this.$set(this.sessionProducts, id, res.data.logs);
+        } catch (err) {
+          console.error(err);
+          this.$message.error('Failed to load session products');
+        } finally {
+          this.$set(this.loadingProducts, id, false);
+        }
+      }
+    },
+    formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    },
+    formatPrice(val) {
+      if (!val) return '0đ';
+      return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val);
+    },
+    getStatusTagType(status) {
+      const maps = { 'AVAILABLE': 'success', 'SOLD': 'info', 'ON_HOLD': 'warning' };
+      return maps[status] || 'info';
+    },
+    getLogStatusType(status) {
+      const maps = { 'SUCCESS': 'success', 'FAILED': 'danger', 'PENDING': 'info', 'PROCESSING': 'warning', 'ERROR': 'danger' };
+      return maps[status] || 'info';
+    },
+    formatSizes(product) {
+      if (!product.sizes) return [];
+      const results = [];
+      const duLai = product.sizes.find(s => s.name === 'DƯ LAI');
+      product.sizes.forEach(size => {
+        if (size.name === 'DƯ LAI') return;
+        let label = this.sizeMapping[size.name] || size.name;
+        let value = Math.floor(size.value);
+        if (size.name === 'DÀI QUẦN' && duLai) {
+          results.push(`${label}${value}(+${Math.floor(duLai.value)})`);
+        } else {
+          results.push(`${label}${value}`);
+        }
+      });
+      return results;
+    },
+    editProduct(product) {
+      this.$router.push({ name: 'product-edit', params: { id: product.id } });
+    },
+    async copyProductInfo(product) {
+      const sizes = this.formatSizes(product).join(' - ');
+      const text = `${product.name} ${sizes}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        this.$message.success('Copied to clipboard!');
+      } catch (err) {
+        this.$message.error('Failed to copy');
+      }
+    },
+    async copyMain(product) {
+      if (!navigator.share) { alert('Browser does not support native sharing.'); return; }
+      if (!product.path_thumb) { this.$message.warning('No main image.'); return; }
+      const loading = this.$loading({ lock: true, text: 'Preparing...', background: 'rgba(255,255,255,0.7)' });
+      try {
+        const response = await fetch(product.path_thumb);
+        if (!response.ok) throw new Error('Failed to load image');
+        const blob = await response.blob();
+        const file = new File([blob], `Main-${product.name}.jpg`, { type: 'image/jpeg' });
+        await navigator.share({ files: [file] });
+      } catch (err) {
+        if (err.name !== 'AbortError') alert('Share failed: ' + err.message);
+      } finally {
+        loading.close();
+      }
+    },
+    async copyDetail(product) {
+      if (!navigator.share) { alert('Browser does not support native sharing.'); return; }
+      if (!product.images || !product.images.length) { this.$message.warning('No detail images.'); return; }
+      const loading = this.$loading({ lock: true, text: 'Preparing...', background: 'rgba(255,255,255,0.7)' });
+      try {
+        const files = [];
+        for (let i = 0; i < product.images.length; i++) {
+          const imgUrl = product.images[i].file_path;
+          if (imgUrl) {
+            const response = await fetch(imgUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              files.push(new File([blob], `Detail-${product.id}-${i + 1}.jpg`, { type: 'image/jpeg' }));
+            }
+          }
+        }
+        if (!files.length) { this.$message.warning('Could not load images'); return; }
+        await navigator.share({ files });
+      } catch (err) {
+        if (err.name !== 'AbortError') alert('Share failed: ' + err.message);
+      } finally {
+        loading.close();
+      }
+    },
+    handleMobileAction(command, product) {
+      if (command === 'edit') this.editProduct(product);
+      if (command === 'copy') this.copyProductInfo(product);
+      if (command === 'copy_main') this.copyMain(product);
+      if (command === 'copy_detail') this.copyDetail(product);
+    },
+  },
+};
+</script>

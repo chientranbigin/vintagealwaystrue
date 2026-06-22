@@ -549,6 +549,79 @@ class SaleV2Controller extends Controller
         ]);
     }
 
+    public function uploadSessions(Request $request)
+    {
+        $sessions = DB::table('product_upload_logs')
+            ->select('session_id', DB::raw('MIN(product_upload_logs.created_at) as created_at'))
+            ->groupBy('session_id')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $sessionIds = $sessions->pluck('session_id');
+
+        // Get product stats per session via join
+        $productStats = DB::table('product_upload_logs')
+            ->join('products', 'products.id', '=', 'product_upload_logs.product_id')
+            ->whereIn('product_upload_logs.session_id', $sessionIds)
+            ->select(
+                'product_upload_logs.session_id',
+                'products.type',
+                'products.status',
+                DB::raw('count(*) as count')
+            )
+            ->groupBy('product_upload_logs.session_id', 'products.type', 'products.status')
+            ->get();
+
+        $sessions = $sessions->map(function ($session) use ($productStats) {
+            $sessionStats = $productStats->where('session_id', $session->session_id);
+            $typeBreakdown = [];
+            $totalProducts = 0;
+            $soldProducts = 0;
+
+            foreach ($sessionStats as $stat) {
+                $totalProducts += $stat->count;
+                if ($stat->status === 'SOLD') {
+                    $soldProducts += $stat->count;
+                }
+                if (!isset($typeBreakdown[$stat->type])) {
+                    $typeBreakdown[$stat->type] = 0;
+                }
+                $typeBreakdown[$stat->type] += $stat->count;
+            }
+
+            return [
+                'session_id' => $session->session_id,
+                'created_at' => $session->created_at,
+                'total_products' => $totalProducts,
+                'sold_products' => $soldProducts,
+                'type_breakdown' => $typeBreakdown,
+            ];
+        });
+
+        return response()->json(['sessions' => $sessions]);
+    }
+
+    public function uploadSessionProducts($sessionId)
+    {
+        $logs = \App\ProductUploadLog::where('session_id', $sessionId)
+            ->with(['product.sizes', 'product.images'])
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $logs->transform(function ($log) {
+            if ($log->product) {
+                $log->product->image_thumb_scale_url = $this->formatImagePath($log->product->image_thumb_scale);
+                $log->product->path_thumb = $this->formatImagePath($log->product->path_thumb);
+                foreach ($log->product->images as $image) {
+                    $image->file_path = $this->formatImagePath($image->file_path);
+                }
+            }
+            return $log;
+        });
+
+        return response()->json(['logs' => $logs]);
+    }
+
     public function uploadLogs(Request $request)
     {
         $sessionIds = $request->input('session_ids', []);
