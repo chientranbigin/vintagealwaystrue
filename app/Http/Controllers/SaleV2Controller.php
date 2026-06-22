@@ -552,12 +552,12 @@ class SaleV2Controller extends Controller
     public function productsByLatestUpload(Request $request)
     {
         $query = Product::with(['images', 'sizes'])
-            ->join(
+            ->leftJoin(
                 DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
                 'upload_summary.product_id', '=', 'products.id'
             )
             ->select('products.*', 'upload_summary.latest_upload')
-            ->orderBy('upload_summary.latest_upload', 'desc');
+            ->orderByRaw('COALESCE(upload_summary.latest_upload, products.created_at) DESC');
 
         if ($request->filled('status')) {
             $query->where('products.status', $request->status);
