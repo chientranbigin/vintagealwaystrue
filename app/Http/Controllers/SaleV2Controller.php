@@ -559,6 +559,8 @@ class SaleV2Controller extends Controller
             ->select('products.*', 'upload_summary.latest_upload')
             ->orderByRaw('COALESCE(upload_summary.latest_upload, products.created_at) DESC');
 
+        $query->whereNotNull('products.path_thumb')->where('products.path_thumb', '!=', '');
+
         if ($request->filled('status')) {
             $query->where('products.status', $request->status);
         }
