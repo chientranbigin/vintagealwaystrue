@@ -48,24 +48,33 @@ class CleanupImages extends Command
             ->filter()
             ->toArray();
 
-        // SOLD products in last 2 months
-        $recentlySoldThumbs = \App\Product::where('status', 'SOLD')
-            ->where('updated_at', '>=', now()->subMonths(2))
+        // SOLD products where order is NOT COMPLETED
+        $soldThumbsToKeep = \App\Product::where('status', 'SOLD')
+            ->where(function($q) {
+                $q->whereDoesntHave('orders')
+                  ->orWhereHas('orders', function($sq) {
+                      $sq->where('status', '!=', 'COMPLETED');
+                  });
+            })
             ->pluck('path_thumb')
             ->filter()
             ->toArray();
 
         // Support for Detail Images
         $activeDetailImages = \App\ProductImage::whereHas('product', function($q) {
-            $q->where('status', 'AVAILABLE')
-              ->orWhere('status', 'ON_HOLD')
+            $q->whereIn('status', ['AVAILABLE', 'ON_HOLD'])
               ->orWhere(function($sq) {
                   $sq->where('status', 'SOLD')
-                     ->where('updated_at', '>=', now()->subMonths(2));
+                     ->where(function($ssq) {
+                         $ssq->whereDoesntHave('orders')
+                             ->orWhereHas('orders', function($sssq) {
+                                 $sssq->where('status', '!=', 'COMPLETED');
+                             });
+                     });
               });
         })->pluck('file_path')->toArray();
 
-        $imagesToKeep = array_unique(array_merge($activeProductThumbs, $recentlySoldThumbs, $activeDetailImages));
+        $imagesToKeep = array_unique(array_merge($activeProductThumbs, $soldThumbsToKeep, $activeDetailImages));
         
         // Normalize paths (remove leading slash, 'storage/', 'public/' if any)
         $normalize = function($path) {

@@ -179,7 +179,7 @@
 
 
                                             @if($product->description)
-                                                <br> {{$product->description}}
+                                                 {!! nl2br($product->description) !!} 
                                             @endif
                                             <br>
                                             {{$product->name}} {!! implode(' - ',$product->sizes->map(function($size) use ($product) {

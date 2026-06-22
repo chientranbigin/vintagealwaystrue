@@ -48,14 +48,15 @@ Route::group([
     Route::post('elements', 'AdminController@storeElement')->name('admin.elements.store');
 
 });
-
+      Route::post('sale/available-product', 'SaleController@searchAvailableProducts')->name('sale.searchAvailableProducts');
 Route::group([
-    'prefix' => 'sale'
+    'prefix' => 'sale',
+    'middleware' => 'auth'
 ], function (Router $router) {
     Route::get('/', 'SaleController@home')->name('sale.home');
     Route::get('/product', 'SaleController@products')->name('sale.product');
-    Route::get('/available-product', 'SaleController@availableProducts')->name('sale.availableProducts');
-    Route::post('/available-product', 'SaleController@searchAvailableProducts')->name('sale.searchAvailableProducts');
+  Route::get('/available-product', 'SaleController@availableProducts')->name('sale.availableProducts');
+
     Route::get('/product/{id}', 'SaleController@productDetail')->name('sale.product.detail');
     Route::get('/product/delete/{id}', 'SaleController@productDelete')->name('sale.product.detail.delete');
     Route::get('/product-create', 'SaleController@productCreate')->name('sale.product.create');

@@ -61,7 +61,7 @@
                  <div class="flex items-center gap-4">
                     <h3 class="font-bold text-slate-700 text-sm">Products to Create ({{ groups.length }})</h3>
                     <el-select v-model="batchType" size="mini" placeholder="Select Type" class="w-32">
-                        <el-option label="T-SHIRT" value="T-SHIRT"></el-option>
+                        <el-option label="SHIRT" value="SHIRT"></el-option>
                         <el-option label="TROUSERS" value="TROUSERS"></el-option>
                         <el-option label="BLAZER" value="BLAZER"></el-option>
                         <el-option label="GILE" value="GILE"></el-option>
