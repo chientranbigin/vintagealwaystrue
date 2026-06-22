@@ -69,6 +69,7 @@
                       <div class="text-center mb-2">
                         <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ log.product.name }}</h4>
                         <p class="text-blue-600 font-bold text-sm">{{ formatPrice(log.product.price) }}</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">{{ formatDate(log.created_at) }}</p>
                       </div>
                       <div class="text-center mb-3 px-1">
                         <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block">{{ formatSizes(log.product).join(' - ') }}</span>
@@ -158,6 +159,7 @@
               <div class="text-center mb-2">
                 <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ product.name }}</h4>
                 <p class="text-blue-600 font-bold text-sm">{{ formatPrice(product.price) }}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">{{ product.latest_upload ? formatDate(product.latest_upload) : 'undefined' }}</p>
               </div>
               <div class="text-center mb-3 px-1">
                 <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block">{{ formatSizes(product).join(' - ') }}</span>

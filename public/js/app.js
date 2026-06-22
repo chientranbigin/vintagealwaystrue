@@ -7051,7 +7051,9 @@ var render = function render() {
         staticClass: "font-bold text-slate-800 text-sm uppercase leading-tight truncate"
       }, [_vm._v(_vm._s(log.product.name))]), _vm._v(" "), _c("p", {
         staticClass: "text-blue-600 font-bold text-sm"
-      }, [_vm._v(_vm._s(_vm.formatPrice(log.product.price)))])]), _vm._v(" "), _c("div", {
+      }, [_vm._v(_vm._s(_vm.formatPrice(log.product.price)))]), _vm._v(" "), _c("p", {
+        staticClass: "text-[10px] text-slate-400 mt-0.5"
+      }, [_vm._v(_vm._s(_vm.formatDate(log.created_at)))])]), _vm._v(" "), _c("div", {
         staticClass: "text-center mb-3 px-1"
       }, [_c("span", {
         staticClass: "text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block"
@@ -7297,7 +7299,9 @@ var render = function render() {
       staticClass: "font-bold text-slate-800 text-sm uppercase leading-tight truncate"
     }, [_vm._v(_vm._s(product.name))]), _vm._v(" "), _c("p", {
       staticClass: "text-blue-600 font-bold text-sm"
-    }, [_vm._v(_vm._s(_vm.formatPrice(product.price)))])]), _vm._v(" "), _c("div", {
+    }, [_vm._v(_vm._s(_vm.formatPrice(product.price)))]), _vm._v(" "), _c("p", {
+      staticClass: "text-[10px] text-slate-400 mt-0.5"
+    }, [_vm._v(_vm._s(product.latest_upload ? _vm.formatDate(product.latest_upload) : "undefined"))])]), _vm._v(" "), _c("div", {
       staticClass: "text-center mb-3 px-1"
     }, [_c("span", {
       staticClass: "text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block"
