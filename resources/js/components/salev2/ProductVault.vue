@@ -145,6 +145,7 @@
                     {{ product.name }}
                 </h4>
                 <p class="text-blue-600 font-bold text-sm">{{ formatPrice(product.price) }}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">{{ product.latest_upload ? formatDate(product.latest_upload) : 'undefined' }}</p>
             </div>
             
             <div class="text-center mb-3 px-1">
@@ -233,6 +234,11 @@ export default {
     if (stored) this.selectedProducts = JSON.parse(stored);
   },
   methods: {
+    formatDate(dateStr) {
+      if (!dateStr) return 'undefined';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    },
     formatPrice(val) {
       if (!val) return '0đ';
       return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val);

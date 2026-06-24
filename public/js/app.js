@@ -2146,6 +2146,15 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     if (stored) this.selectedProducts = JSON.parse(stored);
   },
   methods: {
+    formatDate: function formatDate(dateStr) {
+      if (!dateStr) return 'undefined';
+      var d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    },
     formatPrice: function formatPrice(val) {
       if (!val) return '0đ';
       return new Intl.NumberFormat('vi-VN', {
@@ -6581,7 +6590,9 @@ var render = function render() {
       staticClass: "font-bold text-slate-800 text-sm uppercase leading-tight truncate"
     }, [_vm._v("\n                  " + _vm._s(product.name) + "\n              ")]), _vm._v(" "), _c("p", {
       staticClass: "text-blue-600 font-bold text-sm"
-    }, [_vm._v(_vm._s(_vm.formatPrice(product.price)))])]), _vm._v(" "), _c("div", {
+    }, [_vm._v(_vm._s(_vm.formatPrice(product.price)))]), _vm._v(" "), _c("p", {
+      staticClass: "text-[10px] text-slate-400 mt-0.5"
+    }, [_vm._v(_vm._s(product.latest_upload ? _vm.formatDate(product.latest_upload) : "undefined"))])]), _vm._v(" "), _c("div", {
       staticClass: "text-center mb-3 px-1"
     }, [_c("span", {
       staticClass: "text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block"
