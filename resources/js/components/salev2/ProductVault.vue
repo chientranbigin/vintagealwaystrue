@@ -90,11 +90,15 @@
 
         <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100 mt-2">
             <!-- Left: Selection Actions (No Scroll, Compact) -->
-            <div class="flex flex-nowrap w-full md:w-auto gap-2">
+            <div class="flex flex-nowrap w-full md:w-auto gap-2 flex-wrap">
+                <el-checkbox v-model="sortByUpload" @change="fetchProducts(1)" class="mr-1">
+                  <span class="text-sm font-bold text-slate-700">Sort by upload</span>
+                </el-checkbox>
                 <el-button size="small" @click="selectAllPage" icon="el-icon-check" plain class="flex-1 md:flex-none px-2">Select Page</el-button>
                 <el-button size="small" type="success" :disabled="!selectedProducts.length" icon="el-icon-share" @click="shareSelected" plain class="flex-1 md:flex-none px-2">
                     Share <span v-if="selectedProducts.length">({{ selectedProducts.length }})</span>
                 </el-button>
+                <el-button size="small" type="info" icon="el-icon-download" plain @click="downloadAll" :loading="downloading" class="flex-1 md:flex-none px-2">Download</el-button>
                 <el-button size="small" type="danger" plain @click="clearSelection" icon="el-icon-delete" v-if="selectedProducts.length" class="flex-none px-3">Clear</el-button>
             </div>
             <!-- Right: Apply/Reset Actions -->
@@ -211,6 +215,8 @@ export default {
       filterType: '',
       sizeFilters: [{ key: '', from: undefined, to: undefined }],
       selectedProducts: [],
+      sortByUpload: false,
+      downloading: false,
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI'],
       sizeMapping: {
@@ -275,7 +281,8 @@ export default {
           from_search_value_2: this.sizeFilters[1]?.from,
           to_search_value_2: this.sizeFilters[1]?.to,
         };
-        const res = await axios.get('/salev2/api/products', { params });
+        const endpoint = this.sortByUpload ? '/salev2/api/products-by-upload' : '/salev2/api/products';
+        const res = await axios.get(endpoint, { params });
         this.products = res.data.data;
         this.total = res.data.total;
       } catch (err) {
@@ -362,6 +369,27 @@ export default {
         } finally {
             loading.close();
         }
+    },
+    async downloadAll() {
+      const images = this.products.filter(p => p.path_thumb).map(p => ({ url: p.path_thumb, name: p.name }));
+      if (!images.length) { this.$message.warning('No images to download'); return; }
+      this.downloading = true;
+      let i = 0;
+      const interval = setInterval(async () => {
+        if (i >= images.length) {
+          clearInterval(interval);
+          this.downloading = false;
+          return;
+        }
+        const { url, name } = images[i++];
+        try {
+          const res = await axios.get(url, { responseType: 'blob' });
+          const a = document.createElement('a');
+          a.href = window.URL.createObjectURL(res.data);
+          a.download = name + '.jpg';
+          a.click();
+        } catch (e) { console.error('Download failed', e); }
+      }, 200);
     },
     editProduct(product) {
         this.$router.push({ name: 'product-edit', params: { id: product.id } });

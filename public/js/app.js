@@ -2119,6 +2119,8 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
         to: undefined
       }],
       selectedProducts: [],
+      sortByUpload: false,
+      downloading: false,
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI'],
       sizeMapping: {
@@ -2195,7 +2197,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       var _arguments = arguments,
         _this2 = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee() {
-        var page, _this2$sizeFilters$, _this2$sizeFilters$2, _this2$sizeFilters$3, _this2$sizeFilters$4, _this2$sizeFilters$5, _this2$sizeFilters$6, params, res, _t;
+        var page, _this2$sizeFilters$, _this2$sizeFilters$2, _this2$sizeFilters$3, _this2$sizeFilters$4, _this2$sizeFilters$5, _this2$sizeFilters$6, params, endpoint, res, _t;
         return _regenerator().w(function (_context) {
           while (1) switch (_context.p = _context.n) {
             case 0:
@@ -2215,8 +2217,9 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
                 from_search_value_2: (_this2$sizeFilters$5 = _this2.sizeFilters[1]) === null || _this2$sizeFilters$5 === void 0 ? void 0 : _this2$sizeFilters$5.from,
                 to_search_value_2: (_this2$sizeFilters$6 = _this2.sizeFilters[1]) === null || _this2$sizeFilters$6 === void 0 ? void 0 : _this2$sizeFilters$6.to
               };
+              endpoint = _this2.sortByUpload ? '/salev2/api/products-by-upload' : '/salev2/api/products';
               _context.n = 2;
-              return axios.get('/salev2/api/products', {
+              return axios.get(endpoint, {
                 params: params
               });
             case 2:
@@ -2399,6 +2402,72 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
         }, _callee2, null, [[4, 11, 12, 13], [3, 17, 18, 19]]);
       }))();
     },
+    downloadAll: function downloadAll() {
+      var _this5 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee4() {
+        var images, i, interval;
+        return _regenerator().w(function (_context4) {
+          while (1) switch (_context4.n) {
+            case 0:
+              images = _this5.products.filter(function (p) {
+                return p.path_thumb;
+              }).map(function (p) {
+                return {
+                  url: p.path_thumb,
+                  name: p.name
+                };
+              });
+              if (images.length) {
+                _context4.n = 1;
+                break;
+              }
+              _this5.$message.warning('No images to download');
+              return _context4.a(2);
+            case 1:
+              _this5.downloading = true;
+              i = 0;
+              interval = setInterval(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee3() {
+                var _images$i, url, name, res, a, _t4;
+                return _regenerator().w(function (_context3) {
+                  while (1) switch (_context3.p = _context3.n) {
+                    case 0:
+                      if (!(i >= images.length)) {
+                        _context3.n = 1;
+                        break;
+                      }
+                      clearInterval(interval);
+                      _this5.downloading = false;
+                      return _context3.a(2);
+                    case 1:
+                      _images$i = images[i++], url = _images$i.url, name = _images$i.name;
+                      _context3.p = 2;
+                      _context3.n = 3;
+                      return axios.get(url, {
+                        responseType: 'blob'
+                      });
+                    case 3:
+                      res = _context3.v;
+                      a = document.createElement('a');
+                      a.href = window.URL.createObjectURL(res.data);
+                      a.download = name + '.jpg';
+                      a.click();
+                      _context3.n = 5;
+                      break;
+                    case 4:
+                      _context3.p = 4;
+                      _t4 = _context3.v;
+                      console.error('Download failed', _t4);
+                    case 5:
+                      return _context3.a(2);
+                  }
+                }, _callee3, null, [[2, 4]]);
+              })), 200);
+            case 2:
+              return _context4.a(2);
+          }
+        }, _callee4);
+      }))();
+    },
     editProduct: function editProduct(product) {
       this.$router.push({
         name: 'product-edit',
@@ -2408,217 +2477,217 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       });
     },
     copyProductInfo: function copyProductInfo(product) {
-      var _this5 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee3() {
-        var sizes, text, _t4;
-        return _regenerator().w(function (_context3) {
-          while (1) switch (_context3.p = _context3.n) {
+      var _this6 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5() {
+        var sizes, text, _t5;
+        return _regenerator().w(function (_context5) {
+          while (1) switch (_context5.p = _context5.n) {
             case 0:
-              sizes = _this5.formatSizes(product).join(' - ');
+              sizes = _this6.formatSizes(product).join(' - ');
               text = "".concat(product.name, " ").concat(sizes);
-              _context3.p = 1;
-              _context3.n = 2;
+              _context5.p = 1;
+              _context5.n = 2;
               return navigator.clipboard.writeText(text);
             case 2:
-              _this5.$message.success('Copied to clipboard!');
-              _context3.n = 4;
+              _this6.$message.success('Copied to clipboard!');
+              _context5.n = 4;
               break;
             case 3:
-              _context3.p = 3;
-              _t4 = _context3.v;
-              _this5.$message.error('Failed to copy');
+              _context5.p = 3;
+              _t5 = _context5.v;
+              _this6.$message.error('Failed to copy');
             case 4:
-              return _context3.a(2);
+              return _context5.a(2);
           }
-        }, _callee3, null, [[1, 3]]);
+        }, _callee5, null, [[1, 3]]);
       }))();
     },
     copyMain: function copyMain(product) {
-      var _this6 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee4() {
-        var loading, response, blob, file, _t5;
-        return _regenerator().w(function (_context4) {
-          while (1) switch (_context4.p = _context4.n) {
+      var _this7 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee6() {
+        var loading, response, blob, file, _t6;
+        return _regenerator().w(function (_context6) {
+          while (1) switch (_context6.p = _context6.n) {
             case 0:
               if (navigator.share) {
-                _context4.n = 1;
+                _context6.n = 1;
                 break;
               }
               alert('Browser does not support native sharing (or not HTTPS).');
-              return _context4.a(2);
+              return _context6.a(2);
             case 1:
               if (product.path_thumb) {
-                _context4.n = 2;
+                _context6.n = 2;
                 break;
               }
-              _this6.$message.warning('This product has no main image.');
-              return _context4.a(2);
+              _this7.$message.warning('This product has no main image.');
+              return _context6.a(2);
             case 2:
-              loading = _this6.$loading({
+              loading = _this7.$loading({
                 lock: true,
                 text: 'Preparing main image...',
                 background: 'rgba(255,255,255,0.7)'
               });
-              _context4.p = 3;
-              _context4.n = 4;
+              _context6.p = 3;
+              _context6.n = 4;
               return fetch(product.path_thumb);
             case 4:
-              response = _context4.v;
+              response = _context6.v;
               if (response.ok) {
-                _context4.n = 5;
+                _context6.n = 5;
                 break;
               }
               throw new Error('Failed to load image');
             case 5:
-              _context4.n = 6;
+              _context6.n = 6;
               return response.blob();
             case 6:
-              blob = _context4.v;
+              blob = _context6.v;
               file = new File([blob], "Main-".concat(product.name, ".jpg"), {
                 type: 'image/jpeg'
               });
-              _context4.n = 7;
+              _context6.n = 7;
               return navigator.share({
                 files: [file]
               });
             case 7:
-              _context4.n = 9;
+              _context6.n = 9;
               break;
             case 8:
-              _context4.p = 8;
-              _t5 = _context4.v;
-              if (_t5.name !== 'AbortError') alert('Share failed: ' + _t5.message);
+              _context6.p = 8;
+              _t6 = _context6.v;
+              if (_t6.name !== 'AbortError') alert('Share failed: ' + _t6.message);
             case 9:
-              _context4.p = 9;
+              _context6.p = 9;
               loading.close();
-              return _context4.f(9);
+              return _context6.f(9);
             case 10:
-              return _context4.a(2);
+              return _context6.a(2);
           }
-        }, _callee4, null, [[3, 8, 9, 10]]);
+        }, _callee6, null, [[3, 8, 9, 10]]);
       }))();
     },
     copyDetail: function copyDetail(product) {
-      var _this7 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5() {
-        var loading, files, i, img, imgUrl, response, blob, _t6;
-        return _regenerator().w(function (_context5) {
-          while (1) switch (_context5.p = _context5.n) {
+      var _this8 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee7() {
+        var loading, files, i, img, imgUrl, response, blob, _t7;
+        return _regenerator().w(function (_context7) {
+          while (1) switch (_context7.p = _context7.n) {
             case 0:
               if (navigator.share) {
-                _context5.n = 1;
+                _context7.n = 1;
                 break;
               }
               alert('Browser does not support native sharing (or not HTTPS).');
-              return _context5.a(2);
+              return _context7.a(2);
             case 1:
               if (!(!product.images || !product.images.length)) {
-                _context5.n = 2;
+                _context7.n = 2;
                 break;
               }
-              _this7.$message.warning('This product has no detail images.');
-              return _context5.a(2);
+              _this8.$message.warning('This product has no detail images.');
+              return _context7.a(2);
             case 2:
-              loading = _this7.$loading({
+              loading = _this8.$loading({
                 lock: true,
                 text: 'Preparing details...',
                 background: 'rgba(255,255,255,0.7)'
               });
-              _context5.p = 3;
+              _context7.p = 3;
               files = [];
               i = 0;
             case 4:
               if (!(i < product.images.length)) {
-                _context5.n = 8;
+                _context7.n = 8;
                 break;
               }
               img = product.images[i];
               imgUrl = img.file_path; // Already formatted by controller
               if (!imgUrl) {
-                _context5.n = 7;
+                _context7.n = 7;
                 break;
               }
-              _context5.n = 5;
+              _context7.n = 5;
               return fetch(imgUrl);
             case 5:
-              response = _context5.v;
+              response = _context7.v;
               if (!response.ok) {
-                _context5.n = 7;
+                _context7.n = 7;
                 break;
               }
-              _context5.n = 6;
+              _context7.n = 6;
               return response.blob();
             case 6:
-              blob = _context5.v;
+              blob = _context7.v;
               files.push(new File([blob], "Detail-".concat(product.id, "-").concat(i + 1, ".jpg"), {
                 type: 'image/jpeg'
               }));
             case 7:
               i++;
-              _context5.n = 4;
+              _context7.n = 4;
               break;
             case 8:
               if (!(files.length === 0)) {
-                _context5.n = 9;
+                _context7.n = 9;
                 break;
               }
-              _this7.$message.warning('Could not load images');
-              return _context5.a(2);
+              _this8.$message.warning('Could not load images');
+              return _context7.a(2);
             case 9:
-              _context5.n = 10;
+              _context7.n = 10;
               return navigator.share({
                 files: files
               });
             case 10:
-              _context5.n = 12;
+              _context7.n = 12;
               break;
             case 11:
-              _context5.p = 11;
-              _t6 = _context5.v;
-              if (_t6.name !== 'AbortError') alert('Share failed: ' + _t6.message);
+              _context7.p = 11;
+              _t7 = _context7.v;
+              if (_t7.name !== 'AbortError') alert('Share failed: ' + _t7.message);
             case 12:
-              _context5.p = 12;
+              _context7.p = 12;
               loading.close();
-              return _context5.f(12);
+              return _context7.f(12);
             case 13:
-              return _context5.a(2);
+              return _context7.a(2);
           }
-        }, _callee5, null, [[3, 11, 12, 13]]);
+        }, _callee7, null, [[3, 11, 12, 13]]);
       }))();
     },
     confirmDelete: function confirmDelete(product) {
-      var _this8 = this;
+      var _this9 = this;
       this.$confirm('This will permanently delete the product and its images. Continue?', 'Warning', {
         confirmButtonText: 'OK',
         cancelButtonText: 'Cancel',
         type: 'warning'
       }).then(function () {
-        _this8.performDelete(product);
+        _this9.performDelete(product);
       })["catch"](function () {});
     },
     performDelete: function performDelete(product) {
-      var _this9 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee6() {
-        var _t7;
-        return _regenerator().w(function (_context6) {
-          while (1) switch (_context6.p = _context6.n) {
+      var _this0 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee8() {
+        var _t8;
+        return _regenerator().w(function (_context8) {
+          while (1) switch (_context8.p = _context8.n) {
             case 0:
-              _context6.p = 0;
-              _context6.n = 1;
+              _context8.p = 0;
+              _context8.n = 1;
               return axios["delete"]("/salev2/api/product/".concat(product.id));
             case 1:
-              _this9.$message.success('Product deleted');
-              _this9.fetchProducts(_this9.page);
-              _context6.n = 3;
+              _this0.$message.success('Product deleted');
+              _this0.fetchProducts(_this0.page);
+              _context8.n = 3;
               break;
             case 2:
-              _context6.p = 2;
-              _t7 = _context6.v;
-              _this9.$message.error('Delete failed');
+              _context8.p = 2;
+              _t8 = _context8.v;
+              _this0.$message.error('Delete failed');
             case 3:
-              return _context6.a(2);
+              return _context8.a(2);
           }
-        }, _callee6, null, [[0, 2]]);
+        }, _callee8, null, [[0, 2]]);
       }))();
     },
     handleMobileAction: function handleMobileAction(command, product) {
@@ -6317,8 +6386,24 @@ var render = function render() {
   }) : _vm._e()], 1)], 2)])]), _vm._v(" "), _c("div", {
     staticClass: "flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100 mt-2"
   }, [_c("div", {
-    staticClass: "flex flex-nowrap w-full md:w-auto gap-2"
-  }, [_c("el-button", {
+    staticClass: "flex flex-nowrap w-full md:w-auto gap-2 flex-wrap"
+  }, [_c("el-checkbox", {
+    staticClass: "mr-1",
+    on: {
+      change: function change($event) {
+        return _vm.fetchProducts(1);
+      }
+    },
+    model: {
+      value: _vm.sortByUpload,
+      callback: function callback($$v) {
+        _vm.sortByUpload = $$v;
+      },
+      expression: "sortByUpload"
+    }
+  }, [_c("span", {
+    staticClass: "text-sm font-bold text-slate-700"
+  }, [_vm._v("Sort by upload")])]), _vm._v(" "), _c("el-button", {
     staticClass: "flex-1 md:flex-none px-2",
     attrs: {
       size: "small",
@@ -6340,7 +6425,19 @@ var render = function render() {
     on: {
       click: _vm.shareSelected
     }
-  }, [_vm._v("\n                  Share "), _vm.selectedProducts.length ? _c("span", [_vm._v("(" + _vm._s(_vm.selectedProducts.length) + ")")]) : _vm._e()]), _vm._v(" "), _vm.selectedProducts.length ? _c("el-button", {
+  }, [_vm._v("\n                  Share "), _vm.selectedProducts.length ? _c("span", [_vm._v("(" + _vm._s(_vm.selectedProducts.length) + ")")]) : _vm._e()]), _vm._v(" "), _c("el-button", {
+    staticClass: "flex-1 md:flex-none px-2",
+    attrs: {
+      size: "small",
+      type: "info",
+      icon: "el-icon-download",
+      plain: "",
+      loading: _vm.downloading
+    },
+    on: {
+      click: _vm.downloadAll
+    }
+  }, [_vm._v("Download")]), _vm._v(" "), _vm.selectedProducts.length ? _c("el-button", {
     staticClass: "flex-none px-3",
     attrs: {
       size: "small",
