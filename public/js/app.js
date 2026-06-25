@@ -7628,7 +7628,9 @@ var render = function render() {
       staticClass: "font-bold text-slate-800"
     }, [_vm._v(_vm._s(_vm.formatDateShort(row.date)))]), _vm._v(" "), _c("span", {
       staticClass: "text-sm font-black text-blue-600"
-    }, [_vm._v(_vm._s(row.total) + " sp")])]), _vm._v(" "), _c("div", {
+    }, [_vm._v(_vm._s(row.total) + " sp")]), _vm._v(" "), _c("span", {
+      staticClass: "text-sm font-black text-green-600"
+    }, [_vm._v(_vm._s(_vm.formatPrice(row.total_revenue)))])]), _vm._v(" "), _c("div", {
       staticClass: "flex flex-wrap items-center gap-2"
     }, _vm._l(row.type_breakdown, function (count, type) {
       return _c("el-tag", {

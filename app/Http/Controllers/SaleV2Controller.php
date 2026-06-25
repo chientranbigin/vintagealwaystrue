@@ -556,6 +556,7 @@ class SaleV2Controller extends Controller
             ->select(
                 DB::raw('DATE(order_products.created_at) as date'),
                 DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(products.price) as total_revenue'),
                 DB::raw('GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ",") as types')
             )
             ->groupBy(DB::raw('DATE(order_products.created_at)'))
