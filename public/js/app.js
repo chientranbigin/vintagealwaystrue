@@ -3139,7 +3139,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     fetchSoldDates: function fetchSoldDates() {
       var _this5 = this;
       return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5() {
-        var res, _t5;
+        var res, top3, _t5;
         return _regenerator().w(function (_context5) {
           while (1) switch (_context5.p = _context5.n) {
             case 0:
@@ -3150,21 +3150,28 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
             case 2:
               res = _context5.v;
               _this5.soldDates = res.data.dates;
-              _context5.n = 4;
-              break;
+              // Auto-open top 3
+              top3 = _this5.soldDates.slice(0, 3);
+              _context5.n = 3;
+              return Promise.all(top3.map(function (row) {
+                return _this5.toggleSoldDate(row);
+              }));
             case 3:
-              _context5.p = 3;
+              _context5.n = 5;
+              break;
+            case 4:
+              _context5.p = 4;
               _t5 = _context5.v;
               console.error(_t5);
               _this5.$message.error('Failed to load sold dates');
-            case 4:
-              _context5.p = 4;
-              _this5.loadingSold = false;
-              return _context5.f(4);
             case 5:
+              _context5.p = 5;
+              _this5.loadingSold = false;
+              return _context5.f(5);
+            case 6:
               return _context5.a(2);
           }
-        }, _callee5, null, [[1, 3, 4, 5]]);
+        }, _callee5, null, [[1, 4, 5, 6]]);
       }))();
     },
     toggleSoldDate: function toggleSoldDate(row) {
