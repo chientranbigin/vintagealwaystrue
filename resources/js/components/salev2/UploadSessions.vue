@@ -210,11 +210,11 @@
           <div class="flex items-center gap-2 flex-1 min-w-0">
             <i :class="openSoldDates[row.date] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
             <p class="font-bold text-slate-800">{{ formatDateShort(row.date) }}</p>
-            <span class="text-sm font-black text-blue-600">{{ row.total }} sp</span>
-            <span class="text-sm font-black text-green-600">{{ formatPrice(row.total_revenue) }}</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <el-tag v-for="(count, type) in row.type_breakdown" :key="type" size="small" class="font-bold">{{ type }}: {{ count }}</el-tag>
+            <el-tag size="small" type="primary">{{ row.total }} sp</el-tag>
+            <el-tag size="small" type="success">{{ formatPrice(row.total_revenue) }}</el-tag>
           </div>
         </div>
 

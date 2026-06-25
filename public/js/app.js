@@ -7626,13 +7626,9 @@ var render = function render() {
       "class": _vm.openSoldDates[row.date] ? "el-icon-arrow-down" : "el-icon-arrow-right"
     }), _vm._v(" "), _c("p", {
       staticClass: "font-bold text-slate-800"
-    }, [_vm._v(_vm._s(_vm.formatDateShort(row.date)))]), _vm._v(" "), _c("span", {
-      staticClass: "text-sm font-black text-blue-600"
-    }, [_vm._v(_vm._s(row.total) + " sp")]), _vm._v(" "), _c("span", {
-      staticClass: "text-sm font-black text-green-600"
-    }, [_vm._v(_vm._s(_vm.formatPrice(row.total_revenue)))])]), _vm._v(" "), _c("div", {
+    }, [_vm._v(_vm._s(_vm.formatDateShort(row.date)))])]), _vm._v(" "), _c("div", {
       staticClass: "flex flex-wrap items-center gap-2"
-    }, _vm._l(row.type_breakdown, function (count, type) {
+    }, [_vm._l(row.type_breakdown, function (count, type) {
       return _c("el-tag", {
         key: type,
         staticClass: "font-bold",
@@ -7640,7 +7636,17 @@ var render = function render() {
           size: "small"
         }
       }, [_vm._v(_vm._s(type) + ": " + _vm._s(count))]);
-    }), 1)]), _vm._v(" "), _vm.openSoldDates[row.date] ? _c("div", {
+    }), _vm._v(" "), _c("el-tag", {
+      attrs: {
+        size: "small",
+        type: "primary"
+      }
+    }, [_vm._v(_vm._s(row.total) + " sp")]), _vm._v(" "), _c("el-tag", {
+      attrs: {
+        size: "small",
+        type: "success"
+      }
+    }, [_vm._v(_vm._s(_vm.formatPrice(row.total_revenue)))])], 2)]), _vm._v(" "), _vm.openSoldDates[row.date] ? _c("div", {
       staticClass: "border-t border-slate-100"
     }, [_c("div", {
       directives: [{
