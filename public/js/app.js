@@ -2928,6 +2928,12 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       latestSelected: [],
       settingOnHold: false,
       latestFilterType: '',
+      // Sold by date tab
+      soldDates: [],
+      loadingSold: false,
+      openSoldDates: {},
+      soldDateProducts: {},
+      loadingSoldProducts: {},
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizeMapping: {
         'VAI': 'V',
@@ -2952,6 +2958,9 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
     handleTabChange: function handleTabChange() {
       if (this.activeTab === 'latest' && !this.latestProducts.length) {
         this.fetchLatestProducts(1);
+      }
+      if (this.activeTab === 'sold' && !this.soldDates.length) {
+        this.fetchSoldDates();
       }
     },
     // ---- Sessions tab ----
@@ -3126,6 +3135,85 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
         }, _callee4, null, [[2, 4, 5, 6]]);
       }))();
     },
+    // ---- Sold by date tab ----
+    fetchSoldDates: function fetchSoldDates() {
+      var _this5 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5() {
+        var res, _t5;
+        return _regenerator().w(function (_context5) {
+          while (1) switch (_context5.p = _context5.n) {
+            case 0:
+              _this5.loadingSold = true;
+              _context5.p = 1;
+              _context5.n = 2;
+              return axios.get('/salev2/api/sold-by-date');
+            case 2:
+              res = _context5.v;
+              _this5.soldDates = res.data.dates;
+              _context5.n = 4;
+              break;
+            case 3:
+              _context5.p = 3;
+              _t5 = _context5.v;
+              console.error(_t5);
+              _this5.$message.error('Failed to load sold dates');
+            case 4:
+              _context5.p = 4;
+              _this5.loadingSold = false;
+              return _context5.f(4);
+            case 5:
+              return _context5.a(2);
+          }
+        }, _callee5, null, [[1, 3, 4, 5]]);
+      }))();
+    },
+    toggleSoldDate: function toggleSoldDate(row) {
+      var _this6 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee6() {
+        var date, res, _t6;
+        return _regenerator().w(function (_context6) {
+          while (1) switch (_context6.p = _context6.n) {
+            case 0:
+              date = row.date;
+              _this6.$set(_this6.openSoldDates, date, !_this6.openSoldDates[date]);
+              if (!(_this6.openSoldDates[date] && !_this6.soldDateProducts[date])) {
+                _context6.n = 5;
+                break;
+              }
+              _this6.$set(_this6.loadingSoldProducts, date, true);
+              _context6.p = 1;
+              _context6.n = 2;
+              return axios.get("/salev2/api/sold-by-date/".concat(date, "/products"));
+            case 2:
+              res = _context6.v;
+              _this6.$set(_this6.soldDateProducts, date, res.data.products);
+              _context6.n = 4;
+              break;
+            case 3:
+              _context6.p = 3;
+              _t6 = _context6.v;
+              console.error(_t6);
+              _this6.$message.error('Failed to load products');
+            case 4:
+              _context6.p = 4;
+              _this6.$set(_this6.loadingSoldProducts, date, false);
+              return _context6.f(4);
+            case 5:
+              return _context6.a(2);
+          }
+        }, _callee6, null, [[1, 3, 4, 5]]);
+      }))();
+    },
+    formatDateShort: function formatDateShort(dateStr) {
+      if (!dateStr) return '';
+      var d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    },
     // ---- Shared helpers ----
     formatDate: function formatDate(dateStr) {
       if (!dateStr) return '';
@@ -3165,7 +3253,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       return maps[status] || 'info';
     },
     formatSizes: function formatSizes(product) {
-      var _this5 = this;
+      var _this7 = this;
       if (!product.sizes) return [];
       var results = [];
       var duLai = product.sizes.find(function (s) {
@@ -3173,7 +3261,7 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       });
       product.sizes.forEach(function (size) {
         if (size.name === 'DƯ LAI') return;
-        var label = _this5.sizeMapping[size.name] || size.name;
+        var label = _this7.sizeMapping[size.name] || size.name;
         var value = Math.floor(size.value);
         if (size.name === 'DÀI QUẦN' && duLai) {
           results.push("".concat(label).concat(value, "(+").concat(Math.floor(duLai.value), ")"));
@@ -3192,181 +3280,181 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
       });
     },
     copyProductInfo: function copyProductInfo(product) {
-      var _this6 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5() {
-        var sizes, text, _t5;
-        return _regenerator().w(function (_context5) {
-          while (1) switch (_context5.p = _context5.n) {
+      var _this8 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee7() {
+        var sizes, text, _t7;
+        return _regenerator().w(function (_context7) {
+          while (1) switch (_context7.p = _context7.n) {
             case 0:
-              sizes = _this6.formatSizes(product).join(' - ');
+              sizes = _this8.formatSizes(product).join(' - ');
               text = "".concat(product.name, " ").concat(sizes);
-              _context5.p = 1;
-              _context5.n = 2;
+              _context7.p = 1;
+              _context7.n = 2;
               return navigator.clipboard.writeText(text);
             case 2:
-              _this6.$message.success('Copied to clipboard!');
-              _context5.n = 4;
+              _this8.$message.success('Copied to clipboard!');
+              _context7.n = 4;
               break;
             case 3:
-              _context5.p = 3;
-              _t5 = _context5.v;
-              _this6.$message.error('Failed to copy');
+              _context7.p = 3;
+              _t7 = _context7.v;
+              _this8.$message.error('Failed to copy');
             case 4:
-              return _context5.a(2);
+              return _context7.a(2);
           }
-        }, _callee5, null, [[1, 3]]);
+        }, _callee7, null, [[1, 3]]);
       }))();
     },
     copyMain: function copyMain(product) {
-      var _this7 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee6() {
-        var loading, response, blob, file, _t6;
-        return _regenerator().w(function (_context6) {
-          while (1) switch (_context6.p = _context6.n) {
+      var _this9 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee8() {
+        var loading, response, blob, file, _t8;
+        return _regenerator().w(function (_context8) {
+          while (1) switch (_context8.p = _context8.n) {
             case 0:
               if (navigator.share) {
-                _context6.n = 1;
+                _context8.n = 1;
                 break;
               }
               alert('Browser does not support native sharing.');
-              return _context6.a(2);
+              return _context8.a(2);
             case 1:
               if (product.path_thumb) {
-                _context6.n = 2;
+                _context8.n = 2;
                 break;
               }
-              _this7.$message.warning('No main image.');
-              return _context6.a(2);
+              _this9.$message.warning('No main image.');
+              return _context8.a(2);
             case 2:
-              loading = _this7.$loading({
+              loading = _this9.$loading({
                 lock: true,
                 text: 'Preparing...',
                 background: 'rgba(255,255,255,0.7)'
               });
-              _context6.p = 3;
-              _context6.n = 4;
+              _context8.p = 3;
+              _context8.n = 4;
               return fetch(product.path_thumb);
             case 4:
-              response = _context6.v;
+              response = _context8.v;
               if (response.ok) {
-                _context6.n = 5;
+                _context8.n = 5;
                 break;
               }
               throw new Error('Failed to load image');
             case 5:
-              _context6.n = 6;
+              _context8.n = 6;
               return response.blob();
             case 6:
-              blob = _context6.v;
+              blob = _context8.v;
               file = new File([blob], "Main-".concat(product.name, ".jpg"), {
                 type: 'image/jpeg'
               });
-              _context6.n = 7;
+              _context8.n = 7;
               return navigator.share({
                 files: [file]
               });
             case 7:
-              _context6.n = 9;
+              _context8.n = 9;
               break;
             case 8:
-              _context6.p = 8;
-              _t6 = _context6.v;
-              if (_t6.name !== 'AbortError') alert('Share failed: ' + _t6.message);
+              _context8.p = 8;
+              _t8 = _context8.v;
+              if (_t8.name !== 'AbortError') alert('Share failed: ' + _t8.message);
             case 9:
-              _context6.p = 9;
+              _context8.p = 9;
               loading.close();
-              return _context6.f(9);
+              return _context8.f(9);
             case 10:
-              return _context6.a(2);
+              return _context8.a(2);
           }
-        }, _callee6, null, [[3, 8, 9, 10]]);
+        }, _callee8, null, [[3, 8, 9, 10]]);
       }))();
     },
     copyDetail: function copyDetail(product) {
-      var _this8 = this;
-      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee7() {
-        var loading, files, i, imgUrl, response, blob, _t7;
-        return _regenerator().w(function (_context7) {
-          while (1) switch (_context7.p = _context7.n) {
+      var _this0 = this;
+      return _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9() {
+        var loading, files, i, imgUrl, response, blob, _t9;
+        return _regenerator().w(function (_context9) {
+          while (1) switch (_context9.p = _context9.n) {
             case 0:
               if (navigator.share) {
-                _context7.n = 1;
+                _context9.n = 1;
                 break;
               }
               alert('Browser does not support native sharing.');
-              return _context7.a(2);
+              return _context9.a(2);
             case 1:
               if (!(!product.images || !product.images.length)) {
-                _context7.n = 2;
+                _context9.n = 2;
                 break;
               }
-              _this8.$message.warning('No detail images.');
-              return _context7.a(2);
+              _this0.$message.warning('No detail images.');
+              return _context9.a(2);
             case 2:
-              loading = _this8.$loading({
+              loading = _this0.$loading({
                 lock: true,
                 text: 'Preparing...',
                 background: 'rgba(255,255,255,0.7)'
               });
-              _context7.p = 3;
+              _context9.p = 3;
               files = [];
               i = 0;
             case 4:
               if (!(i < product.images.length)) {
-                _context7.n = 8;
+                _context9.n = 8;
                 break;
               }
               imgUrl = product.images[i].file_path;
               if (!imgUrl) {
-                _context7.n = 7;
+                _context9.n = 7;
                 break;
               }
-              _context7.n = 5;
+              _context9.n = 5;
               return fetch(imgUrl);
             case 5:
-              response = _context7.v;
+              response = _context9.v;
               if (!response.ok) {
-                _context7.n = 7;
+                _context9.n = 7;
                 break;
               }
-              _context7.n = 6;
+              _context9.n = 6;
               return response.blob();
             case 6:
-              blob = _context7.v;
+              blob = _context9.v;
               files.push(new File([blob], "Detail-".concat(product.id, "-").concat(i + 1, ".jpg"), {
                 type: 'image/jpeg'
               }));
             case 7:
               i++;
-              _context7.n = 4;
+              _context9.n = 4;
               break;
             case 8:
               if (files.length) {
-                _context7.n = 9;
+                _context9.n = 9;
                 break;
               }
-              _this8.$message.warning('Could not load images');
-              return _context7.a(2);
+              _this0.$message.warning('Could not load images');
+              return _context9.a(2);
             case 9:
-              _context7.n = 10;
+              _context9.n = 10;
               return navigator.share({
                 files: files
               });
             case 10:
-              _context7.n = 12;
+              _context9.n = 12;
               break;
             case 11:
-              _context7.p = 11;
-              _t7 = _context7.v;
-              if (_t7.name !== 'AbortError') alert('Share failed: ' + _t7.message);
+              _context9.p = 11;
+              _t9 = _context9.v;
+              if (_t9.name !== 'AbortError') alert('Share failed: ' + _t9.message);
             case 12:
-              _context7.p = 12;
+              _context9.p = 12;
               loading.close();
-              return _context7.f(12);
+              return _context9.f(12);
             case 13:
-              return _context7.a(2);
+              return _context9.a(2);
           }
-        }, _callee7, null, [[3, 11, 12, 13]]);
+        }, _callee9, null, [[3, 11, 12, 13]]);
       }))();
     },
     handleMobileAction: function handleMobileAction(command, product) {
@@ -7001,6 +7089,11 @@ var render = function render() {
       label: "Latest Uploads",
       name: "latest"
     }
+  }), _vm._v(" "), _c("el-tab-pane", {
+    attrs: {
+      label: "Sold by Date",
+      name: "sold"
+    }
   })], 1), _vm._v(" "), _vm.activeTab === "sessions" ? _c("div", {
     directives: [{
       name: "loading",
@@ -7495,7 +7588,210 @@ var render = function render() {
       },
       "current-change": _vm.fetchLatestProducts
     }
-  })], 1)])]) : _vm._e()], 1);
+  })], 1)])]) : _vm._e(), _vm._v(" "), _vm.activeTab === "sold" ? _c("div", {
+    directives: [{
+      name: "loading",
+      rawName: "v-loading",
+      value: _vm.loadingSold,
+      expression: "loadingSold"
+    }]
+  }, [!_vm.soldDates.length && !_vm.loadingSold ? _c("div", {
+    staticClass: "text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200"
+  }, [_c("i", {
+    staticClass: "el-icon-sold-out text-4xl text-slate-200 mb-4 block"
+  }), _vm._v(" "), _c("p", {
+    staticClass: "text-slate-400 font-medium"
+  }, [_vm._v("No sold products found")])]) : _vm._e(), _vm._v(" "), _vm._l(_vm.soldDates, function (row) {
+    return _c("div", {
+      key: row.date,
+      staticClass: "mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+    }, [_c("div", {
+      staticClass: "flex flex-wrap items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors",
+      on: {
+        click: function click($event) {
+          return _vm.toggleSoldDate(row);
+        }
+      }
+    }, [_c("div", {
+      staticClass: "flex items-center gap-2 flex-1 min-w-0"
+    }, [_c("i", {
+      staticClass: "text-slate-400 flex-shrink-0",
+      "class": _vm.openSoldDates[row.date] ? "el-icon-arrow-down" : "el-icon-arrow-right"
+    }), _vm._v(" "), _c("p", {
+      staticClass: "font-bold text-slate-800"
+    }, [_vm._v(_vm._s(_vm.formatDateShort(row.date)))])]), _vm._v(" "), _c("div", {
+      staticClass: "flex flex-wrap items-center gap-2"
+    }, [_c("el-tag", {
+      attrs: {
+        size: "small",
+        type: "info"
+      }
+    }, [_vm._v(_vm._s(row.total) + " sold")]), _vm._v(" "), _vm._l(row.type_breakdown, function (count, type) {
+      return _c("el-tag", {
+        key: type,
+        staticClass: "font-bold",
+        attrs: {
+          size: "small"
+        }
+      }, [_vm._v(_vm._s(type) + ": " + _vm._s(count))]);
+    })], 2)]), _vm._v(" "), _vm.openSoldDates[row.date] ? _c("div", {
+      staticClass: "border-t border-slate-100"
+    }, [_c("div", {
+      directives: [{
+        name: "loading",
+        rawName: "v-loading",
+        value: _vm.loadingSoldProducts[row.date],
+        expression: "loadingSoldProducts[row.date]"
+      }],
+      staticClass: "p-4"
+    }, [_vm.soldDateProducts[row.date] ? _c("div", [!_vm.soldDateProducts[row.date].length ? _c("div", {
+      staticClass: "text-center py-8 text-slate-400"
+    }, [_c("p", [_vm._v("No products")])]) : _vm._e(), _vm._v(" "), _c("div", {
+      staticClass: "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3"
+    }, _vm._l(_vm.soldDateProducts[row.date], function (product) {
+      return _c("div", {
+        key: product.id,
+        staticClass: "group relative bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300"
+      }, [_c("div", {
+        staticClass: "aspect-[3/4] overflow-hidden bg-slate-50 relative group"
+      }, [product.image_thumb_scale_url || product.path_thumb ? _c("img", {
+        staticClass: "w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1",
+        attrs: {
+          src: product.image_thumb_scale_url || product.path_thumb
+        },
+        on: {
+          error: function error(e) {
+            return e.target.src = product.path_thumb;
+          }
+        }
+      }) : _c("div", {
+        staticClass: "w-full h-full flex items-center justify-center text-slate-300"
+      }, [_c("i", {
+        staticClass: "el-icon-picture text-4xl"
+      })]), _vm._v(" "), _c("div", {
+        staticClass: "absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10",
+        on: {
+          click: function click($event) {
+            $event.stopPropagation();
+            return _vm.editProduct(product);
+          }
+        }
+      }, [_c("el-button", {
+        staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold",
+        attrs: {
+          type: "primary",
+          size: "medium"
+        },
+        on: {
+          click: function click($event) {
+            $event.stopPropagation();
+            return _vm.editProduct(product);
+          }
+        }
+      }, [_vm._v("DETAIL")]), _vm._v(" "), _c("el-button", {
+        staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold",
+        attrs: {
+          type: "success",
+          size: "medium",
+          icon: "el-icon-document-copy"
+        },
+        on: {
+          click: function click($event) {
+            $event.stopPropagation();
+            return _vm.copyProductInfo(product);
+          }
+        }
+      }, [_vm._v("COPY SIZE")]), _vm._v(" "), _c("el-button", {
+        staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold",
+        attrs: {
+          type: "info",
+          size: "medium",
+          icon: "el-icon-camera"
+        },
+        on: {
+          click: function click($event) {
+            $event.stopPropagation();
+            return _vm.copyMain(product);
+          }
+        }
+      }, [_vm._v("COPY MAIN")]), _vm._v(" "), _c("el-button", {
+        staticClass: "w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-125 font-bold",
+        attrs: {
+          type: "warning",
+          size: "medium",
+          icon: "el-icon-picture-outline"
+        },
+        on: {
+          click: function click($event) {
+            $event.stopPropagation();
+            return _vm.copyDetail(product);
+          }
+        }
+      }, [_vm._v("COPY DETAIL")])], 1)]), _vm._v(" "), _c("div", {
+        staticClass: "p-3"
+      }, [_c("div", {
+        staticClass: "text-center mb-2"
+      }, [_c("h4", {
+        staticClass: "font-bold text-slate-800 text-sm uppercase leading-tight truncate"
+      }, [_vm._v(_vm._s(product.name))]), _vm._v(" "), _c("p", {
+        staticClass: "text-blue-600 font-bold text-sm"
+      }, [_vm._v(_vm._s(_vm.formatPrice(product.price)))])]), _vm._v(" "), _c("div", {
+        staticClass: "text-center mb-3 px-1"
+      }, [_c("span", {
+        staticClass: "text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block"
+      }, [_vm._v(_vm._s(_vm.formatSizes(product).join(" - ")))])]), _vm._v(" "), _c("div", {
+        staticClass: "flex justify-between items-center pt-2 border-t border-slate-50 gap-2"
+      }, [_c("div", {
+        staticClass: "flex-1 text-center md:text-left"
+      }, [_c("el-tag", {
+        staticClass: "text-[8px] font-bold tracking-tighter uppercase rounded-md px-1",
+        attrs: {
+          type: _vm.getStatusTagType(product.status),
+          size: "mini"
+        }
+      }, [_vm._v(_vm._s(product.status))])], 1), _vm._v(" "), _c("div", {
+        staticClass: "md:hidden flex justify-end"
+      }, [_c("el-dropdown", {
+        attrs: {
+          trigger: "click"
+        },
+        on: {
+          command: function command(cmd) {
+            return _vm.handleMobileAction(cmd, product);
+          }
+        }
+      }, [_c("span", {
+        staticClass: "el-dropdown-link p-2"
+      }, [_c("i", {
+        staticClass: "el-icon-more transform rotate-90 text-lg font-bold text-slate-600"
+      })]), _vm._v(" "), _c("el-dropdown-menu", {
+        attrs: {
+          slot: "dropdown"
+        },
+        slot: "dropdown"
+      }, [_c("el-dropdown-item", {
+        attrs: {
+          command: "edit",
+          icon: "el-icon-edit"
+        }
+      }, [_vm._v("Detail")]), _vm._v(" "), _c("el-dropdown-item", {
+        attrs: {
+          command: "copy",
+          icon: "el-icon-document-copy"
+        }
+      }, [_vm._v("Copy Size")]), _vm._v(" "), _c("el-dropdown-item", {
+        attrs: {
+          command: "copy_main",
+          icon: "el-icon-camera"
+        }
+      }, [_vm._v("Copy Main")]), _vm._v(" "), _c("el-dropdown-item", {
+        attrs: {
+          command: "copy_detail",
+          icon: "el-icon-picture-outline"
+        }
+      }, [_vm._v("Copy Detail")])], 1)], 1)], 1)])])]);
+    }), 0)]) : _vm._e()])]) : _vm._e()]);
+  })], 2) : _vm._e()], 1);
 };
 var staticRenderFns = [function () {
   var _vm = this,

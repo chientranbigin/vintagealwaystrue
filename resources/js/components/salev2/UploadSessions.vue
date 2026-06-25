@@ -10,6 +10,7 @@
     <el-tabs v-model="activeTab" type="card" class="premium-tabs mb-6" @tab-click="handleTabChange">
       <el-tab-pane label="Sessions" name="sessions"></el-tab-pane>
       <el-tab-pane label="Latest Uploads" name="latest"></el-tab-pane>
+      <el-tab-pane label="Sold by Date" name="sold"></el-tab-pane>
     </el-tabs>
 
     <!-- Tab: Sessions -->
@@ -192,6 +193,85 @@
         </div>
       </div>
     </div>
+
+    <!-- Tab: Sold by Date -->
+    <div v-if="activeTab === 'sold'" v-loading="loadingSold">
+      <div v-if="!soldDates.length && !loadingSold" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+        <i class="el-icon-sold-out text-4xl text-slate-200 mb-4 block"></i>
+        <p class="text-slate-400 font-medium">No sold products found</p>
+      </div>
+
+      <div v-for="row in soldDates" :key="row.date" class="mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <!-- Date Header -->
+        <div
+          class="flex flex-wrap items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+          @click="toggleSoldDate(row)"
+        >
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <i :class="openSoldDates[row.date] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
+            <p class="font-bold text-slate-800">{{ formatDateShort(row.date) }}</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <el-tag size="small" type="info">{{ row.total }} sold</el-tag>
+            <el-tag v-for="(count, type) in row.type_breakdown" :key="type" size="small" class="font-bold">{{ type }}: {{ count }}</el-tag>
+          </div>
+        </div>
+
+        <!-- Products (lazy loaded) -->
+        <div v-if="openSoldDates[row.date]" class="border-t border-slate-100">
+          <div v-loading="loadingSoldProducts[row.date]" class="p-4">
+            <div v-if="soldDateProducts[row.date]">
+              <div v-if="!soldDateProducts[row.date].length" class="text-center py-8 text-slate-400">
+                <p>No products</p>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                <div
+                  v-for="product in soldDateProducts[row.date]"
+                  :key="product.id"
+                  class="group relative bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300"
+                >
+                  <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
+                    <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1" @error="e => e.target.src = product.path_thumb">
+                    <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10" @click.stop="editProduct(product)">
+                      <el-button type="primary" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 font-bold" @click.stop="editProduct(product)">DETAIL</el-button>
+                      <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold" icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
+                      <el-button type="info" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" icon="el-icon-camera" @click.stop="copyMain(product)">COPY MAIN</el-button>
+                      <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-125 font-bold" icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
+                    </div>
+                  </div>
+                  <div class="p-3">
+                    <div class="text-center mb-2">
+                      <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ product.name }}</h4>
+                      <p class="text-blue-600 font-bold text-sm">{{ formatPrice(product.price) }}</p>
+                    </div>
+                    <div class="text-center mb-3 px-1">
+                      <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded leading-tight uppercase inline-block">{{ formatSizes(product).join(' - ') }}</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-slate-50 gap-2">
+                      <div class="flex-1 text-center md:text-left">
+                        <el-tag :type="getStatusTagType(product.status)" size="mini" class="text-[8px] font-bold tracking-tighter uppercase rounded-md px-1">{{ product.status }}</el-tag>
+                      </div>
+                      <div class="md:hidden flex justify-end">
+                        <el-dropdown trigger="click" @command="(cmd) => handleMobileAction(cmd, product)">
+                          <span class="el-dropdown-link p-2"><i class="el-icon-more transform rotate-90 text-lg font-bold text-slate-600"></i></span>
+                          <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
+                            <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
+                            <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
+                            <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
+                          </el-dropdown-menu>
+                        </el-dropdown>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -216,6 +296,12 @@ export default {
       latestSelected: [],
       settingOnHold: false,
       latestFilterType: '',
+      // Sold by date tab
+      soldDates: [],
+      loadingSold: false,
+      openSoldDates: {},
+      soldDateProducts: {},
+      loadingSoldProducts: {},
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
 
       sizeMapping: {
@@ -232,6 +318,9 @@ export default {
     handleTabChange() {
       if (this.activeTab === 'latest' && !this.latestProducts.length) {
         this.fetchLatestProducts(1);
+      }
+      if (this.activeTab === 'sold' && !this.soldDates.length) {
+        this.fetchSoldDates();
       }
     },
 
@@ -312,6 +401,41 @@ export default {
       } finally {
         this.settingOnHold = false;
       }
+    },
+
+    // ---- Sold by date tab ----
+    async fetchSoldDates() {
+      this.loadingSold = true;
+      try {
+        const res = await axios.get('/salev2/api/sold-by-date');
+        this.soldDates = res.data.dates;
+      } catch (err) {
+        console.error(err);
+        this.$message.error('Failed to load sold dates');
+      } finally {
+        this.loadingSold = false;
+      }
+    },
+    async toggleSoldDate(row) {
+      const date = row.date;
+      this.$set(this.openSoldDates, date, !this.openSoldDates[date]);
+      if (this.openSoldDates[date] && !this.soldDateProducts[date]) {
+        this.$set(this.loadingSoldProducts, date, true);
+        try {
+          const res = await axios.get(`/salev2/api/sold-by-date/${date}/products`);
+          this.$set(this.soldDateProducts, date, res.data.products);
+        } catch (err) {
+          console.error(err);
+          this.$message.error('Failed to load products');
+        } finally {
+          this.$set(this.loadingSoldProducts, date, false);
+        }
+      }
+    },
+    formatDateShort(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
     },
 
     // ---- Shared helpers ----

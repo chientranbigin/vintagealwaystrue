@@ -549,6 +549,45 @@ class SaleV2Controller extends Controller
         ]);
     }
 
+    public function soldByDate(Request $request)
+    {
+        $dates = DB::table('products')
+            ->where('status', 'SOLD')
+            ->select(
+                DB::raw('DATE(updated_at) as date'),
+                DB::raw('COUNT(*) as total'),
+                DB::raw('GROUP_CONCAT(DISTINCT type ORDER BY type SEPARATOR ",") as types')
+            )
+            ->groupBy(DB::raw('DATE(updated_at)'))
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function ($row) {
+                $row->type_breakdown = array_count_values(explode(',', $row->types ?? ''));
+                unset($row->types);
+                return $row;
+            });
+
+        return response()->json(['dates' => $dates]);
+    }
+
+    public function soldByDateProducts($date)
+    {
+        $products = Product::with(['images', 'sizes'])
+            ->where('status', 'SOLD')
+            ->whereDate('updated_at', $date)
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->each(function ($product) {
+                $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
+                $product->path_thumb = $this->formatImagePath($product->path_thumb);
+                foreach ($product->images as $image) {
+                    $image->file_path = $this->formatImagePath($image->file_path);
+                }
+            });
+
+        return response()->json(['products' => $products]);
+    }
+
     public function productsByLatestUpload(Request $request)
     {
         $query = Product::with(['images', 'sizes'])
