@@ -556,13 +556,14 @@ class SaleV2Controller extends Controller
     {
         $actual = DB::table('order_products')
             ->join('products', 'products.id', '=', 'order_products.product_id')
+            ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->select(
-                DB::raw('DATE(order_products.created_at) as date'),
+                DB::raw('DATE(orders.created_at) as date'),
                 DB::raw('COUNT(*) as total'),
                 DB::raw('SUM(products.price) as total_revenue'),
                 DB::raw('GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ",") as types')
             )
-            ->groupBy(DB::raw('DATE(order_products.created_at)'))
+            ->groupBy(DB::raw('DATE(orders.created_at)'))
             ->get()
             ->keyBy('date');
 
@@ -604,9 +605,10 @@ class SaleV2Controller extends Controller
     {
         $products = Product::with(['images', 'sizes'])
             ->join('order_products', 'order_products.product_id', '=', 'products.id')
-            ->whereDate('order_products.created_at', $date)
+            ->join('orders', 'orders.id', '=', 'order_products.order_id')
+            ->whereDate('orders.created_at', $date)
             ->select('products.*')
-            ->orderBy('order_products.created_at', 'desc')
+            ->orderBy('orders.created_at', 'desc')
             ->get()
             ->each(function ($product) {
                 $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
