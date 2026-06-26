@@ -55,7 +55,13 @@
          <!-- Right Column: Details & Sizes -->
          <div class="md:col-span-2 space-y-6">
              <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                 <h2 class="font-bold text-slate-800 text-lg mb-4">Product Details</h2>
+                 <div class="flex justify-between items-center mb-4">
+                     <h2 class="font-bold text-slate-800 text-lg">Product Details</h2>
+                     <span v-if="latestUpload" class="text-xs text-slate-400">
+                         <i class="el-icon-upload2 mr-1"></i>{{ formatDate(latestUpload) }}
+                     </span>
+                     <span v-else class="text-xs text-slate-300 italic">No upload log</span>
+                 </div>
                  <!-- ... existing ... -->
                  <div class="space-y-4">
                      <!-- Quick Input -->
@@ -132,6 +138,7 @@ export default {
                 details: [], // For display logic
                 sizes: []
             },
+            latestUpload: null,
             imagePreview: '',
             quickInput: '',
             productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
@@ -164,6 +171,10 @@ export default {
             if (!val) return '0';
             return new Intl.NumberFormat('vi-VN').format(val);
         },
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        },
         async fetchProduct() {
             this.loading = true;
             try {
@@ -178,6 +189,7 @@ export default {
                 this.form.description = product.description;
                 this.form.details = product.images || []; // Populate details
                 this.imagePreview = product.path_thumb;
+                this.latestUpload = product.latest_upload || null;
 
                 // Populate sizes
                 if (product.sizes) {

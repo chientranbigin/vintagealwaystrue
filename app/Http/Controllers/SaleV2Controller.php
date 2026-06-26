@@ -171,6 +171,9 @@ class SaleV2Controller extends Controller
         foreach ($product->images as $image) {
             $image->file_path = $this->formatImagePath($image->file_path);
         }
+        $product->latest_upload = \DB::table('product_upload_logs')
+            ->where('product_id', $id)
+            ->max('created_at');
         return response()->json($product);
     }
 
