@@ -551,7 +551,7 @@ class SaleV2Controller extends Controller
 
     public function soldByDate(Request $request)
     {
-        $dates = DB::table('order_products')
+        $actual = DB::table('order_products')
             ->join('products', 'products.id', '=', 'order_products.product_id')
             ->select(
                 DB::raw('DATE(order_products.created_at) as date'),
@@ -560,15 +560,41 @@ class SaleV2Controller extends Controller
                 DB::raw('GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ",") as types')
             )
             ->groupBy(DB::raw('DATE(order_products.created_at)'))
-            ->orderBy('date', 'desc')
             ->get()
-            ->map(function ($row) {
-                $row->type_breakdown = array_count_values(explode(',', $row->types ?? ''));
-                unset($row->types);
-                return $row;
-            });
+            ->keyBy('date');
 
-        return response()->json(['dates' => $dates]);
+        if ($actual->isEmpty()) {
+            return response()->json(['dates' => []]);
+        }
+
+        $earliest = Carbon::parse($actual->keys()->sort()->first());
+        $today = Carbon::today();
+        $allDates = [];
+
+        for ($d = $today->copy(); $d->gte($earliest); $d->subDay()) {
+            $dateStr = $d->format('Y-m-d');
+            if ($actual->has($dateStr)) {
+                $row = $actual[$dateStr];
+                $typeBreakdown = $row->types ? array_count_values(explode(',', $row->types)) : [];
+                $allDates[] = [
+                    'date'          => $dateStr,
+                    'total'         => $row->total,
+                    'total_revenue' => $row->total_revenue,
+                    'type_breakdown'=> $typeBreakdown,
+                    'is_empty'      => false,
+                ];
+            } else {
+                $allDates[] = [
+                    'date'          => $dateStr,
+                    'total'         => 0,
+                    'total_revenue' => 0,
+                    'type_breakdown'=> [],
+                    'is_empty'      => true,
+                ];
+            }
+        }
+
+        return response()->json(['dates' => $allDates]);
     }
 
     public function soldByDateProducts($date)
