@@ -65,6 +65,7 @@
                         <el-option label="TROUSERS" value="TROUSERS"></el-option>
                         <el-option label="BLAZER" value="BLAZER"></el-option>
                         <el-option label="GILE" value="GILE"></el-option>
+                        <el-option label="SUIT" value="SUIT"></el-option>
                     </el-select>
                  </div>
                  <el-button type="text" class="text-red-500" @click="clearGroups" v-if="groups.length">Clear All</el-button>
