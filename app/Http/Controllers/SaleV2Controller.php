@@ -97,7 +97,7 @@ class SaleV2Controller extends Controller
         }
 
         $query->leftJoin(
-            DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+            DB::raw('(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
             'upload_summary.product_id', '=', 'products.id'
         )->addSelect('upload_summary.latest_upload');
 
@@ -184,7 +184,8 @@ class SaleV2Controller extends Controller
         }
         $product->latest_upload = \DB::table('product_upload_logs')
             ->where('product_id', $id)
-            ->max('created_at');
+            ->selectRaw("CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload")
+            ->value('latest_upload');
         return response()->json($product);
     }
 
@@ -636,7 +637,7 @@ class SaleV2Controller extends Controller
     {
         $query = Product::with(['images', 'sizes'])
             ->leftJoin(
-                DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+                DB::raw('(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
                 'upload_summary.product_id', '=', 'products.id'
             )
             ->select('products.*', 'upload_summary.latest_upload')
@@ -669,7 +670,7 @@ class SaleV2Controller extends Controller
     public function uploadSessions(Request $request)
     {
         $sessions = DB::table('product_upload_logs')
-            ->select('session_id', DB::raw('MIN(product_upload_logs.created_at) as created_at'))
+            ->select('session_id', DB::raw("CONVERT_TZ(MIN(product_upload_logs.created_at), '+00:00', '+07:00') as created_at"))
             ->groupBy('session_id')
             ->orderBy('created_at', 'desc')
             ->get();
