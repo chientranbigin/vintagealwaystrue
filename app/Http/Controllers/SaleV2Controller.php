@@ -97,7 +97,7 @@ class SaleV2Controller extends Controller
         }
 
         $query->leftJoin(
-            DB::raw('(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+            DB::raw("(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary"),
             'upload_summary.product_id', '=', 'products.id'
         )->addSelect('upload_summary.latest_upload');
 
@@ -637,7 +637,7 @@ class SaleV2Controller extends Controller
     {
         $query = Product::with(['images', 'sizes'])
             ->leftJoin(
-                DB::raw('(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+                DB::raw("(SELECT product_id, CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary"),
                 'upload_summary.product_id', '=', 'products.id'
             )
             ->select('products.*', 'upload_summary.latest_upload')
