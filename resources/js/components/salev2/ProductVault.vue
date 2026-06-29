@@ -287,8 +287,8 @@ export default {
           from_search_value_2: this.sizeFilters[1]?.from,
           to_search_value_2: this.sizeFilters[1]?.to,
         };
-        const endpoint = this.sortByUpload ? '/salev2/api/products-by-upload' : '/salev2/api/products';
-        const res = await axios.get(endpoint, { params });
+        if (this.sortByUpload) params.sort = 'upload';
+        const res = await axios.get('/salev2/api/products', { params });
         this.products = res.data.data;
         this.total = res.data.total;
       } catch (err) {

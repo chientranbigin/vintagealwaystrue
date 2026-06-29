@@ -96,7 +96,17 @@ class SaleV2Controller extends Controller
             });
         }
 
-        $products = $query->latest('products.id')->paginate($request->get('limit', 60));
+        if ($request->get('sort') === 'upload') {
+            $query->leftJoin(
+                DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+                'upload_summary.product_id', '=', 'products.id'
+            )->addSelect('upload_summary.latest_upload')
+             ->orderByRaw('COALESCE(upload_summary.latest_upload, products.created_at) DESC');
+        } else {
+            $query->latest('products.id');
+        }
+
+        $products = $query->paginate($request->get('limit', 60));
 
         $products->getCollection()->transform(function($product) {
             $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);
@@ -558,12 +568,12 @@ class SaleV2Controller extends Controller
             ->join('products', 'products.id', '=', 'order_products.product_id')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->select(
-                DB::raw('DATE(orders.created_at) as date'),
+                DB::raw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) as date"),
                 DB::raw('COUNT(*) as total'),
                 DB::raw('SUM(products.price) as total_revenue'),
                 DB::raw('GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ",") as types')
             )
-            ->groupBy(DB::raw('DATE(orders.created_at)'))
+            ->groupBy(DB::raw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'))"))
             ->get()
             ->keyBy('date');
 
@@ -572,7 +582,7 @@ class SaleV2Controller extends Controller
         }
 
         $earliest = Carbon::parse($actual->keys()->sort()->first());
-        $today = Carbon::today();
+        $today = Carbon::today('Asia/Ho_Chi_Minh');
         $allDates = [];
 
         for ($d = $today->copy(); $d->gte($earliest); $d->subDay()) {
@@ -606,7 +616,7 @@ class SaleV2Controller extends Controller
         $products = Product::with(['images', 'sizes'])
             ->join('order_products', 'order_products.product_id', '=', 'products.id')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
-            ->whereDate('orders.created_at', $date)
+            ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", [$date])
             ->select('products.*')
             ->orderBy('orders.created_at', 'desc')
             ->get()
