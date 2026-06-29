@@ -96,12 +96,13 @@ class SaleV2Controller extends Controller
             });
         }
 
+        $query->leftJoin(
+            DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
+            'upload_summary.product_id', '=', 'products.id'
+        )->addSelect('upload_summary.latest_upload');
+
         if ($request->get('sort') === 'upload') {
-            $query->leftJoin(
-                DB::raw('(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary'),
-                'upload_summary.product_id', '=', 'products.id'
-            )->addSelect('upload_summary.latest_upload')
-             ->orderByRaw('COALESCE(upload_summary.latest_upload, products.created_at) DESC');
+            $query->orderByRaw('COALESCE(upload_summary.latest_upload, products.created_at) DESC');
         } else {
             $query->latest('products.id');
         }
