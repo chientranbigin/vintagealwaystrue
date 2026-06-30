@@ -93,6 +93,28 @@ class ProcessSmartImage implements ShouldQueue
                 throw new \Exception("Sản phẩm mã ($candidateName) không tồn tại. Vui lòng tạo sp trước.");
             }
 
+            // If product is not AVAILABLE, reset it and detach from any orders
+            if ($existing->status !== 'AVAILABLE') {
+                // Remove from all orders
+                $orderIds = \DB::table('order_products')
+                    ->where('product_id', $existing->id)
+                    ->pluck('order_id');
+
+                if ($orderIds->isNotEmpty()) {
+                    foreach ($orderIds as $orderId) {
+                        $order = \App\Order::find($orderId);
+                        if ($order) {
+                            $order->products()->detach($existing->id);
+                            // Recalc order total
+                            $order->total_amount = $order->products()->sum('price');
+                            $order->save();
+                        }
+                    }
+                }
+
+                $existing->status = 'AVAILABLE';
+            }
+
             // Update record: Price & Path Thumb
             $updateData = ['path_thumb' => $this->mainImagePath];
             
