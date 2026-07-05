@@ -8,7 +8,7 @@ use App\Product;
 
 class ExtractTagCodes extends Command
 {
-    protected $signature = 'tags:extract {type}';
+    protected $signature = 'tags:extract {type} {--debug : Show raw Vision text for each image}';
     protected $description = 'Extract product codes from tag images and bulk hold others';
 
     protected $apiKey = 'AIzaSyBCQwssnHoUNbueD6DGggilZou-Sd0NjU0';
@@ -52,7 +52,11 @@ class ExtractTagCodes extends Command
                 file_put_contents($this->cacheFile, json_encode($cache, JSON_PRETTY_PRINT));
             }
 
-            if ($text && preg_match('/\b(\d{4})\b/', $text, $m)) {
+            if ($this->option('debug') && $text) {
+                $this->line('  <fg=gray>RAW: ' . str_replace("\n", ' | ', trim($text)) . '</fg=gray>');
+            }
+
+            if ($text && preg_match('/(?<!\d)(\d{4})(?!\d)/', $text, $m)) {
                 $code = $prefix . $m[1];
                 $codes[] = $code;
                 $this->line("  <info>→ $code</info>");
@@ -65,7 +69,7 @@ class ExtractTagCodes extends Command
         $uniqueCodes = array_values(array_unique($codes));
         sort($uniqueCodes);
 
-        $this->newLine();
+        $this->line('');
         $this->info('✓ Extracted ' . count($uniqueCodes) . ' unique codes from ' . count($files) . ' images');
 
         if ($failed) {
@@ -73,7 +77,7 @@ class ExtractTagCodes extends Command
         }
 
         $this->line('Codes: ' . json_encode($uniqueCodes));
-        $this->newLine();
+        $this->line('');
 
         // Auto run hold-except
         $this->call('products:hold-except', [
