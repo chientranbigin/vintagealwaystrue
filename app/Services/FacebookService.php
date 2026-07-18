@@ -154,7 +154,7 @@ class FacebookService
 
         // Measurement tags based on type
         if ($product->type === 'TROUSERS') {
-            $eoSize = $product->sizes->firstWhere('name', 'EO');
+            $eoSize = $product->sizes->whereIn('name', ['EO', 'EO QUẦN'])->first();
             if ($eoSize) {
                 $eoDb     = (int) $eoSize->value;
                 $eoActual = $eoDb * 2;
