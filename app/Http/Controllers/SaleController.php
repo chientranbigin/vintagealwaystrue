@@ -909,20 +909,10 @@ class SaleController extends Controller
 
     public function orderDelete($id)
     {
-        // Collect products before deleting so we can revert FB posts
-        $productIds = OrderProduct::where('order_id', $id)->pluck('product_id')->toArray();
-
         Order::find($id)->delete();
         OrderProduct::where(['order_id' => $id])->delete();
 
         $this->updateStatusProduct();
-
-        // Revert FB posts for products that are now AVAILABLE
-        if (!empty($productIds)) {
-            foreach (Product::whereIn('id', $productIds)->get() as $p) {
-                \App\Jobs\SyncFacebookPost::dispatch($p, 'revert');
-            }
-        }
 
         return redirect()->back();
     }
@@ -1079,13 +1069,26 @@ class SaleController extends Controller
 
     protected function updateStatusProduct()
     {
+        $oldSoldIds = Product::where('status', 'SOLD')->pluck('id')->toArray();
+
         Product::where('status', '<>', 'ON_HOLD')->update([
             'status' => 'AVAILABLE'
         ]);
 
-        Product::whereIn('id', OrderProduct::all()->pluck('product_id')->toArray())->update([
+        $newSoldIds = OrderProduct::all()->pluck('product_id')->unique()->toArray();
+        Product::whereIn('id', $newSoldIds)->update([
             'status' => 'SOLD'
         ]);
+
+        $becameSold = array_diff($newSoldIds, $oldSoldIds);
+        $becameAvailable = array_diff($oldSoldIds, $newSoldIds);
+
+        foreach (Product::whereIn('id', $becameSold)->get() as $p) {
+            \App\Jobs\SyncFacebookPost::dispatch($p, 'sold');
+        }
+        foreach (Product::whereIn('id', $becameAvailable)->get() as $p) {
+            \App\Jobs\SyncFacebookPost::dispatch($p, 'revert');
+        }
     }
 
     public function orderSmartCreate(Request $request)
