@@ -206,6 +206,11 @@ class SaleV2Controller extends Controller
             // Targeted status update
             Product::whereIn('id', $request->products)->update(['status' => 'SOLD']);
 
+            // Sync to Facebook
+            foreach (Product::whereIn('id', $request->products)->get() as $p) {
+                \App\Jobs\SyncFacebookPost::dispatch($p, 'sold');
+            }
+
             // Handle Price Updates
             if ($request->has('products_info')) {
                 foreach ($request->products_info as $pInfo) {
@@ -486,12 +491,18 @@ class SaleV2Controller extends Controller
                 $removedIds = array_diff($oldIds, $newIds);
                 if (!empty($removedIds)) {
                     Product::whereIn('id', $removedIds)->update(['status' => 'AVAILABLE']);
+                    foreach (Product::whereIn('id', $removedIds)->get() as $p) {
+                        \App\Jobs\SyncFacebookPost::dispatch($p, 'revert');
+                    }
                 }
 
                 // Products to become SOLD (added)
                 $addedIds = array_diff($newIds, $oldIds);
                 if (!empty($addedIds)) {
                     Product::whereIn('id', $addedIds)->update(['status' => 'SOLD']);
+                    foreach (Product::whereIn('id', $addedIds)->get() as $p) {
+                        \App\Jobs\SyncFacebookPost::dispatch($p, 'sold');
+                    }
                 }
 
                 $order->products()->sync($newIds);

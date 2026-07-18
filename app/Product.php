@@ -20,6 +20,7 @@ class Product extends Model
         'fabric',
         'detail_fabric',
         'title',
+        'fb_post_id',
     ];
 
     /**

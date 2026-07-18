@@ -30,6 +30,11 @@ return [
         'secret' => env('SPARKPOST_SECRET'),
     ],
 
+    'facebook' => [
+        'page_id'    => env('FB_PAGE_ID'),
+        'page_token' => env('FB_PAGE_TOKEN'),
+    ],
+
     'stripe' => [
         'model' => App\User::class,
         'key' => env('STRIPE_KEY'),

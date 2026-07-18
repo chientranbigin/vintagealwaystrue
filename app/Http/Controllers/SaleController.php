@@ -909,10 +909,20 @@ class SaleController extends Controller
 
     public function orderDelete($id)
     {
+        // Collect products before deleting so we can revert FB posts
+        $productIds = OrderProduct::where('order_id', $id)->pluck('product_id')->toArray();
+
         Order::find($id)->delete();
         OrderProduct::where(['order_id' => $id])->delete();
 
         $this->updateStatusProduct();
+
+        // Revert FB posts for products that are now AVAILABLE
+        if (!empty($productIds)) {
+            foreach (Product::whereIn('id', $productIds)->get() as $p) {
+                \App\Jobs\SyncFacebookPost::dispatch($p, 'revert');
+            }
+        }
 
         return redirect()->back();
     }

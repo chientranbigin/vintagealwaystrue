@@ -41,9 +41,8 @@ class CleanupImages extends Command
     {
         $this->info('Starting image cleanup...');
 
-        // 1. Get all images to keep
+        // 1. Get all images to keep (AVAILABLE only, not ON_HOLD)
         $activeProductThumbs = \App\Product::where('status', 'AVAILABLE')
-            ->orWhere('status', 'ON_HOLD')
             ->pluck('path_thumb')
             ->filter()
             ->toArray();
@@ -62,7 +61,7 @@ class CleanupImages extends Command
 
         // Support for Detail Images
         $activeDetailImages = \App\ProductImage::whereHas('product', function($q) {
-            $q->whereIn('status', ['AVAILABLE', 'ON_HOLD'])
+            $q->where('status', 'AVAILABLE')
               ->orWhere(function($sq) {
                   $sq->where('status', 'SOLD')
                      ->where(function($ssq) {
@@ -121,3 +120,4 @@ class CleanupImages extends Command
         $this->info("- Skipped (Recent): $skippedRecent files");
     }
 }
+TS3856,TS3896,TS4006,TS3256,TS3852,TS3669,TS3793,TS3988,TS3995,TS4008,TS3915,TS3898,TS3934,TS3718,TS3748,TS3749,TS3818,TS3805,TS3730,TS3720,TS3778,TS3652,TS3632,TS3665,TS3853,TS3812,TS2994,TS3888,TS3473,TS3982,TS4014,TS3599,TS4015,TS3356,TS3371,TS3897,TS2749,TS4004,TS3589,TS2702,TS3729,TS3762,TS3807,TS3782,TS3725,TS3685,TS3855,TS3633,TS3777,TS2591,TS3631,TS3827,TS3734,TS3815,TS3828,TS3472,TS3932,TS3944,TS3929,TS3891,TS3563,TS3927,TS3911,TS3955,TS3926,TS3584,TS3935,TS3874,TS3617,TS3880,TS3719,TS3732,TS3701,TS3671,TS3902,TS4016,TS3808,TS3779,TS4000,TS3990,TS3984,TS3973,TS3173,TS3435,TS1993,TS3281,TS3978,TS3903

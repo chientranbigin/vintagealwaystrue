@@ -161,6 +161,9 @@ class ProcessSmartImage implements ShouldQueue
                     'message' => 'Xử lý thành công (2 bước)'
                 ]);
 
+            // Sync to Facebook page
+            \App\Jobs\SyncFacebookPost::dispatch($existing->fresh(), 'create');
+
         } catch (\Exception $e) {
              \App\ProductUploadLog::where('session_id', $this->sessionId)
                 ->where('file_path', $this->mainImagePath)
