@@ -184,6 +184,13 @@ class FacebookService
                 return $size;
             }
         }
+        // Inclusive upper bound of the last band (e.g. size 40 = 98–100)
+        $map = self::TROUSER_SIZE_MAP;
+        $lastSize = array_key_last($map);
+        [, $lastMax] = $map[$lastSize];
+        if ($eoActual === $lastMax) {
+            return $lastSize;
+        }
         return null;
     }
 
