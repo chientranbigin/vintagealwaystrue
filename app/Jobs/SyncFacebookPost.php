@@ -18,8 +18,8 @@ class SyncFacebookPost implements ShouldQueue
     public int $tries = 3;
     public int $backoff = 60;
 
-    protected Product $product;
-    protected string $action; // create | sold | revert
+    protected $product;
+    protected $action; // create | sold | revert
 
     public function __construct(Product $product, string $action)
     {
