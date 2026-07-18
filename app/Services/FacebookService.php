@@ -8,8 +8,8 @@ use GuzzleHttp\Client;
 class FacebookService
 {
     protected Client $http;
-    protected string $pageId;
-    protected string $token;
+    protected ?string $pageId;
+    protected ?string $token;
 
     // Trousers: size → eo range [min, max) (eo thực = DB × 2)
     const TROUSER_SIZE_MAP = [
