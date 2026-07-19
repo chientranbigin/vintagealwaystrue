@@ -86,6 +86,17 @@ class FacebookService
         return $data['id'] ?? null;
     }
 
+    public function deletePost(string $fbPostId): void
+    {
+        try {
+            $this->http->delete($fbPostId, [
+                'query' => ['access_token' => $this->token],
+            ]);
+        } catch (\Exception $e) {
+            // Post may already be deleted/inaccessible — ignore and proceed to recreate.
+        }
+    }
+
     public function markSold(string $fbPostId, Product $product): void
     {
         $message = $this->buildMessage($product, 'SOLD');

@@ -36,6 +36,11 @@ class SyncFacebookPost implements ShouldQueue
 
         try {
             if ($this->action === 'create') {
+                if ($this->product->fb_post_id) {
+                    $fb->deletePost($this->product->fb_post_id);
+                    Log::channel('product_upload')->info("FB post deleted before re-create: {$this->product->fb_post_id} for {$this->product->name}");
+                }
+
                 $postId = $fb->createPost($this->product);
                 if ($postId) {
                     $this->product->update(['fb_post_id' => $postId]);
