@@ -176,7 +176,7 @@
                                 @endif
 
                                 @if($product->fb_post_id)
-                                <div class="copy-fb-link" data-fb-post-id="{{ $product->fb_post_id }}" style="font-size: 12px; color: #007bff; cursor: pointer; margin-top: 4px;">
+                                <div class="copy-fb-link" data-fb-post-id="{{ $product->fb_post_id }}" style="font-size: 10px; color: #007bff; cursor: pointer; margin-top: 2px;">
                                     Copy link
                                 </div>
                                 @endif
