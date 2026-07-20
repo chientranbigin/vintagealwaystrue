@@ -115,6 +115,9 @@ class ProcessSmartImage implements ShouldQueue
                 $existing->status = 'AVAILABLE';
             }
 
+            // Delete old main + detail images (files + records) since they're being replaced
+            $this->deleteOldImages($existing);
+
             // Update record: Price & Path Thumb
             $updateData = ['path_thumb' => $this->mainImagePath];
             
@@ -175,6 +178,30 @@ class ProcessSmartImage implements ShouldQueue
             
             \Illuminate\Support\Facades\Log::channel('product_upload')->error($e);
         }
+    }
+
+    protected function deleteOldImages($product)
+    {
+        $normalize = function ($path) {
+            $path = ltrim($path, '/');
+            if (strpos($path, 'storage/') === 0) {
+                $path = substr($path, 8);
+            }
+            if (strpos($path, 'public/') === 0) {
+                $path = substr($path, 7);
+            }
+            return ltrim($path, '/');
+        };
+
+        $oldPaths = collect([$product->path_thumb, $product->image_thumb_scale])
+            ->merge($product->images()->pluck('file_path'))
+            ->filter();
+
+        foreach ($oldPaths as $oldPath) {
+            Storage::disk('public')->delete($normalize($oldPath));
+        }
+
+        $product->images()->delete();
     }
 
     protected function processDetailImage($product, $relativePath)
