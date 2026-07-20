@@ -175,6 +175,12 @@
                                 </a>
                                 @endif
 
+                                @if($product->fb_post_id)
+                                <div class="copy-fb-link" data-fb-post-id="{{ $product->fb_post_id }}" style="font-size: 12px; color: #007bff; cursor: pointer; margin-top: 4px;">
+                                    Copy link
+                                </div>
+                                @endif
+
                             </div>
 
                             <!-- end card-body-->
@@ -205,6 +211,19 @@ $(document).ready(function() {
     };
 
     updateSelectedCount();
+
+    // Copy FB post link to clipboard
+    $(document).on('click', '.copy-fb-link', function() {
+        const postId = $(this).data('fb-post-id');
+        const url = 'https://www.facebook.com/' + postId;
+        const $el = $(this);
+
+        navigator.clipboard.writeText(url).then(function() {
+            const original = $el.text();
+            $el.text('Đã copy!');
+            setTimeout(function() { $el.text(original); }, 1500);
+        });
+    });
 
     // Event listener for checkbox changes
     $(document).on('change', '.product-checkbox', function() {
