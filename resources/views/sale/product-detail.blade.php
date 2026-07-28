@@ -38,6 +38,9 @@
 
                                         <label for="exampleFormControlTextarea1">Thumb</label>
 
+                                        <h4 class="text-primary font-weight-bold mb-2">
+                                            Latest Upload: {{ $product->latest_upload ? \Carbon\Carbon::parse($product->latest_upload)->format('d/m/Y H:i') : 'N/A' }}
+                                        </h4>
 
                                         <div class="custom-file">
                                             <input type="file" class="custom-file-input" id="customFile" name="banner">
@@ -113,11 +116,6 @@
                                             <span class="right badge badge-danger">{{$product->status}}</span>
                                         @endif
 
-                                    </div>
-
-                                    <div class="form-group w-100">
-                                        <label>Latest Upload</label><br>
-                                        {{ $product->latest_upload ? \Carbon\Carbon::parse($product->latest_upload)->format('d/m/Y H:i') : 'N/A' }}
                                     </div>
 
                                 </div>
