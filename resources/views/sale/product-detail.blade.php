@@ -115,6 +115,10 @@
 
                                     </div>
 
+                                    <div class="form-group w-100">
+                                        <label>Latest Upload</label><br>
+                                        {{ $product->latest_upload ? \Carbon\Carbon::parse($product->latest_upload)->format('d/m/Y H:i') : 'N/A' }}
+                                    </div>
 
                                 </div>
                                 <div class="col">

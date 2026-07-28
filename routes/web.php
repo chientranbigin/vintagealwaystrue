@@ -84,6 +84,9 @@ Route::group([
     Route::get('/smart-order-create', 'SaleController@orderSmartCreate')->name('sale.order.smart-create.get');
 
 
+    Route::get('/upload-sessions', 'SaleController@uploadSessions')->name('sale.upload.sessions');
+    Route::get('/upload-sessions/{sessionId}/products', 'SaleController@uploadSessionProducts')->name('sale.upload.sessions.products');
+
     Route::get('/complete/{id}', 'SaleController@orderComplete')->name('sale.order.complete');
     Route::get('/ship/{id}', 'SaleController@orderShip')->name('sale.order.ship');
     Route::get('/hold/{id}', 'SaleController@orderHold')->name('sale.order.hold');

@@ -315,6 +315,10 @@ class SaleController extends Controller
 
         $product = Product::with('sizes')->where('id', $id)->first();
 
+        $product->latest_upload = \DB::table('product_upload_logs')
+            ->where('product_id', $id)
+            ->selectRaw("CONVERT_TZ(MAX(created_at), '+00:00', '+07:00') as latest_upload")
+            ->value('latest_upload');
 
         return view('sale.product-detail', compact('product'));
     }
@@ -1159,5 +1163,17 @@ PROMPT;
         }
 
         return view('sale.smart-order-create');
+    }
+
+    public function uploadSessions()
+    {
+        $sessions = app(SaleV2Controller::class)->uploadSessions(request())->getData(true)['sessions'];
+
+        return view('sale.upload-sessions', compact('sessions'));
+    }
+
+    public function uploadSessionProducts($sessionId)
+    {
+        return app(SaleV2Controller::class)->uploadSessionProducts($sessionId);
     }
 }
