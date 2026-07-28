@@ -8,6 +8,7 @@
     <meta content="Premium Multipurpose Admin & Dashboard Template" name="description"/>
     <meta content="MyraStudio" name="author"/>
     <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <!-- App favicon -->
     <link rel="shortcut icon" href="{{ asset('admin-theme/assets/images/favicon.ico') }}">
@@ -395,6 +396,9 @@
 <script src="{{ asset('admin-theme/assets/js/waves.js') }}"></script>
 <script src="{{ asset('admin-theme/assets/js/simplebar.min.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js" integrity="sha512-PJa3oQSLWRB7wHZ7GQ/g+qyv6r4mbuhmiDb8BjSFZ8NZ2a42oTtAq5n0ucWAwcQDlikAtkub+tPVCw4np27WCg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+</script>
 <!-- Morris Js-->
 <script src="{{ asset('admin-theme/plugins/morris-js/morris.min.js') }}"></script>
 <!-- Raphael Js-->
