@@ -132,7 +132,7 @@ $(document).ready(function() {
             let html = '';
             logs.forEach(function(log) {
                 if (!log.product) {
-                    html += '<div class="col-lg-2 col-md-4 col-sm-6 mt-2"><div class="text-muted small">' + (log.file_name || '') + ' — ' + log.status + '</div></div>';
+                    html += '<div class="col-6 col-sm-6 col-md-4 col-lg-2 mt-2"><div class="text-muted small">' + (log.file_name || '') + ' — ' + log.status + '</div></div>';
                     return;
                 }
                 html += renderProductCard(log.product);
@@ -293,7 +293,7 @@ $(document).ready(function() {
             ? '<input type="checkbox" class="latest-select-checkbox" data-id="' + p.id + '" style="position:absolute; top:6px; right:6px; transform: scale(1.3);">'
             : '';
 
-        return '<div class="col-lg-2 col-md-4 col-sm-6 mt-2">' +
+        return '<div class="col-6 col-sm-6 col-md-4 col-lg-2 mt-2">' +
             '<div class="card upload-product-card">' +
             checkbox +
             '<a href="/sale/product/' + p.id + '">' +
