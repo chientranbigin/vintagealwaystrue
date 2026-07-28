@@ -13,7 +13,7 @@
             @forelse($sessions as $session)
                 @php
                     $carbon = \Carbon\Carbon::parse($session['created_at']);
-                    $week = $carbon->isoWeek() . '/' . $carbon->isoWeekYear();
+                    $week = $carbon->format('W') . '/' . $carbon->format('o');
                 @endphp
 
                 @if($week !== $lastWeek)
