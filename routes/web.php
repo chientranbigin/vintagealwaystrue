@@ -13,6 +13,10 @@
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
 
+Route::get('/privacy-policy', function () {
+    return view('privacy-policy');
+});
+
 
 Auth::routes();
 
