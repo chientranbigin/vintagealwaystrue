@@ -70,7 +70,13 @@
                  </div>
                  <el-button type="text" class="text-red-500" @click="clearGroups" v-if="groups.length">Clear All</el-button>
              </div>
-             
+
+             <div v-if="batchComplete" class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-3 text-sm font-bold">
+                 <span class="text-slate-600">Kết quả:</span>
+                 <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} success</span>
+                 <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} error</span>
+             </div>
+
              <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                  <div v-for="(group, idx) in groups" :key="idx" class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 relative group-card">
                      <!-- Main Image Header -->
@@ -144,6 +150,16 @@ export default {
         },
         hasMoreFiles() {
             return this.renderLimit < this.stagingFiles.length;
+        },
+        batchComplete() {
+            return this.groups.length > 0 && !this.pollInterval &&
+                this.groups.every(g => !g.sessionId || g.status === 'SUCCESS' || g.status === 'ERROR');
+        },
+        successGroupCount() {
+            return this.groups.filter(g => g.status === 'SUCCESS').length;
+        },
+        errorGroupCount() {
+            return this.groups.filter(g => g.status === 'ERROR').length;
         }
     },
     beforeDestroy() {
