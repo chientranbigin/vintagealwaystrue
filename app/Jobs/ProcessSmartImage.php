@@ -79,7 +79,8 @@ class ProcessSmartImage implements ShouldQueue
                 $categoryMap = [
                     'TROUSERS' => 180000,
                     'BLAZER'   => 280000,
-                    'GILE'     => 120000
+                    'GILE'     => 120000,
+                    'SHIRT'    => 150000
                 ];
                 $price = $categoryMap[$this->type] ?? 0;
             }
