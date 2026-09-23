@@ -15,6 +15,17 @@
             border-radius: 12px;
         }
 
+        @media (min-width: 768px) {
+            .col-stats {
+                flex: 0 0 60%;
+                max-width: 60%;
+            }
+            .col-toolbar {
+                flex: 0 0 40%;
+                max-width: 40%;
+            }
+        }
+
         .order-stats h1, .order-stats h6, .order-stats h3 {
             color: #fff !important;
         }
@@ -279,7 +290,7 @@
         <div class="page-content">
             <div class="container-fluid pr-0 pl-0">
                 <div class="row" style="    flex-direction: row-reverse;">
-                    <div class="col-md-6 col-sm-12">
+                    <div class="col-stats col-sm-12">
                         {{-- ===== STATISTICS ===== --}}
 
                         <div class="row order-stats mb-4">
@@ -322,7 +333,7 @@
                         </div>
 
                     </div>
-                    <div class="col-md-6 col-sm-12">
+                    <div class="col-toolbar col-sm-12">
                         {{-- ===== SEARCH & ACTION ===== --}}
                         <form method="POST" action="{{ route('sale.searchOrder') }}">
                             @csrf
