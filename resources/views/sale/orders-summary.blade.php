@@ -17,12 +17,12 @@
 
         @media (min-width: 768px) {
             .col-stats {
-                flex: 0 0 60%;
-                max-width: 60%;
+                flex: 0 0 70%;
+                max-width: 70%;
             }
             .col-toolbar {
-                flex: 0 0 40%;
-                max-width: 40%;
+                flex: 0 0 30%;
+                max-width: 30%;
             }
         }
 
