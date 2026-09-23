@@ -283,7 +283,7 @@
                                 <div class="card bg-primary text-white mb-0" style="color: white">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6 class="mb-1">Sold Today</h6>
+                                            <h6 class="mb-1">Today</h6>
                                             <h3 class="mb-0">{{ number_format($totalSoldTodayPrice) }}đ</h3>
                                         </div>
                                         <h1 class="mb-0">{{ $totalSoldToday }}</h1>
@@ -295,7 +295,7 @@
                                 <div class="card bg-info text-white mb-0" style="color: white">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6 class="mb-1">Sold Yesterday</h6>
+                                            <h6 class="mb-1">Yesterday</h6>
                                             <h3 class="mb-0">{{ number_format($totalSoldYesterdayPrice) }}đ</h3>
                                         </div>
                                         <h1 class="mb-0">{{ $totalSoldYesterday }}</h1>
@@ -307,7 +307,7 @@
                                 <div class="card bg-success text-white  mb-0">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6 class="mb-1">Current Month Orders</h6>
+                                            <h6 class="mb-1">Current Month</h6>
                                             <h3 class="mb-0">{{ number_format($currentTotalFinalPrice) }}đ</h3>
                                         </div>
                                         <h1 class="mb-0">{{ $currentTotalOrder }}</h1>
