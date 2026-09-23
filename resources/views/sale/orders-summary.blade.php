@@ -224,9 +224,14 @@
             }
 
             /* 1 row = 2 buttons */
-            .toolbar-left .btn,
-            .toolbar-right .btn {
+            .toolbar-left .btn {
                 width: calc(50% - 5px);
+            }
+
+            .toolbar-right,
+            .toolbar-right .dropdown,
+            .toolbar-right .btn {
+                width: 100%;
             }
         }
 
@@ -341,11 +346,16 @@
 
                                 <!-- RIGHT -->
                                 <div class="toolbar-right">
-                                    <a href="{{ route('sale.order.create') }}"
-                                       class="btn btn-warning text-white">Create</a>
-
-                                    <a href="{{ route('sale.order.smart-create.get') }}"
-                                       class="btn btn-outline-primary">Create Smart</a>
+                                    <div class="dropdown">
+                                        <button class="btn btn-warning text-white dropdown-toggle" type="button"
+                                                id="createOrderDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                            Create
+                                        </button>
+                                        <div class="dropdown-menu dropdown-menu-right" aria-labelledby="createOrderDropdown">
+                                            <a class="dropdown-item" href="{{ route('sale.order.create') }}">Manual</a>
+                                            <a class="dropdown-item" href="{{ route('sale.order.smart-create.get') }}">Smart (AI)</a>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
