@@ -360,7 +360,7 @@
                                     <div class="dropdown">
                                         <button class="btn btn-warning text-white dropdown-toggle" type="button"
                                                 id="createOrderDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                            Create
+                                            <i class="mdi mdi-plus mr-1"></i>Create
                                         </button>
                                         <div class="dropdown-menu dropdown-menu-right" aria-labelledby="createOrderDropdown">
                                             <a class="dropdown-item" href="{{ route('sale.order.create') }}">Manual</a>
