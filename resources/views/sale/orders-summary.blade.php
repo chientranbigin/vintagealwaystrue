@@ -23,6 +23,28 @@
             font-weight: 700;
         }
 
+        @media (max-width: 767px) {
+            .order-stats .card-body {
+                padding: 0.6rem 0.75rem;
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            .order-stats h6 {
+                font-size: 11px;
+                margin-bottom: 2px !important;
+                white-space: nowrap;
+            }
+            .order-stats h3 {
+                font-size: 13px;
+                margin-bottom: 0 !important;
+            }
+            .order-stats h1 {
+                font-size: 20px;
+                align-self: flex-end;
+                margin-top: -22px;
+            }
+        }
+
 
         .order-toolbar input,
         .order-toolbar .btn {
@@ -249,7 +271,7 @@
 
                         <div class="row order-stats mb-4">
 
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <div class="card bg-primary text-white mb-0" style="color: white">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
@@ -261,7 +283,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <div class="card bg-info text-white mb-0" style="color: white">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
@@ -273,7 +295,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <div class="card bg-success text-white  mb-0">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
