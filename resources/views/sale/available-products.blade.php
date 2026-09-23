@@ -19,14 +19,14 @@
                     <div class="row mb-3">
 
 
-                        <div class="col-sm-12 col-md-6">
+                        <div class="col-6">
                             <input id="input-search" class="form-control" name="search" value="{{request()->search}}" placeholder="Name Products">
 
                         </div>
 
 
-                        <div class=" col-sm-12 col-md-6 d-flex ">
-                            <select class="custom-select rounded-0" id="exampleSelectRounded0" name="type" style="width: 300px">
+                        <div class="col-6 d-flex ">
+                            <select class="custom-select rounded-0" id="exampleSelectRounded0" name="type" style="width: 100%">
                                 <option {{!request()->type ? 'selected' : ''}}></option>
 
                                 @foreach(\App\Contracts\SaleConfig::PRODUCT_TYPES as $type)
