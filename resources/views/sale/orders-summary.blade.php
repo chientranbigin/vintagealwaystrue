@@ -364,7 +364,7 @@
                                         </button>
                                         <div class="dropdown-menu dropdown-menu-right" aria-labelledby="createOrderDropdown">
                                             <a class="dropdown-item" href="{{ route('sale.order.create') }}">Manual</a>
-                                            <a class="dropdown-item" href="{{ route('sale.order.smart-create.get') }}"><i class="mdi mdi-creation mr-1"></i>Smart (AI)</a>
+                                            <a class="dropdown-item" href="{{ route('sale.order.smart-create.get') }}">Smart (AI)<i class="mdi mdi-creation ml-1"></i></a>
                                         </div>
                                     </div>
                                 </div>
