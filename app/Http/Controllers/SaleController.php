@@ -879,15 +879,22 @@ class SaleController extends Controller
         $today = Carbon::today('Asia/Ho_Chi_Minh')->format('Y-m-d');
         $yesterday = Carbon::yesterday('Asia/Ho_Chi_Minh')->format('Y-m-d');
 
-        $soldTodayYesterday = DB::table('order_products')
-            ->join('orders', 'orders.id', '=', 'order_products.order_id')
-            ->join('products', 'products.id', '=', 'order_products.product_id')
-            ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) IN (?, ?)", [$today, $yesterday])
-            ->select('products.price')
-            ->get();
+        $soldByDay = function ($date) {
+            return DB::table('order_products')
+                ->join('orders', 'orders.id', '=', 'order_products.order_id')
+                ->join('products', 'products.id', '=', 'order_products.product_id')
+                ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", [$date])
+                ->select('products.price')
+                ->get();
+        };
 
-        $totalSoldTodayYesterday = $soldTodayYesterday->count();
-        $totalSoldTodayYesterdayPrice = $soldTodayYesterday->sum('price');
+        $soldToday = $soldByDay($today);
+        $soldYesterday = $soldByDay($yesterday);
+
+        $totalSoldToday = $soldToday->count();
+        $totalSoldTodayPrice = $soldToday->sum('price');
+        $totalSoldYesterday = $soldYesterday->count();
+        $totalSoldYesterdayPrice = $soldYesterday->sum('price');
 
         $currentOrders = Order::with('products')->whereBetween('created_at', [
             Carbon::now()->startOfMonth(),
@@ -899,8 +906,10 @@ class SaleController extends Controller
 
         return view('sale.orders-summary', compact(
             'orders',
-            'totalSoldTodayYesterday',
-            'totalSoldTodayYesterdayPrice',
+            'totalSoldToday',
+            'totalSoldTodayPrice',
+            'totalSoldYesterday',
+            'totalSoldYesterdayPrice',
             'currentTotalFinalPrice',
             'currentTotalOrder'
 
