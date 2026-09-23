@@ -14,7 +14,6 @@ use App\Package;
 use App\Product;
 use App\OrderProduct;
 use App\Order;
-use App\Services\GoogleVisionService;
 use App\Size;
 use Carbon\Carbon;
 use Illuminate\Foundation\Bus\DispatchesJobs;
@@ -920,47 +919,13 @@ class SaleController extends Controller
 
         return redirect()->back();
     }
-    function parsePrice($priceStr) {
-        if (!$priceStr) return 0;
-
-        // Bỏ hết ký tự không phải số hoặc dấu chấm
-        $number = preg_replace('/[^0-9.]/', '', $priceStr);
-
-        if ($number === '') return 0;
-
-        return (int) $number * 1000; // vì "k" = 1000
-    }
-
     public function orderCreate(Request $request)
     {
 
         if ($request->isMethod('POST') || $request->showDetail) {
 
             $products = Product::whereIn('id', $request->products)->get();
-            $vision = new GoogleVisionService();
-            $total_amount = 0;
-
-            $defaultPrice = [
-                'TROUSERS' => 180,
-            ];
-            foreach ($products as $product) {
-                $ocrText = null;
-                $ocrPrice = null;
-
-                if ($product->path_thumb) {
-                    $ocrText = $vision->extractTextFromImage($product->path_thumb);
-                    $ocrPrice = $ocrText ? $vision->extractPrice($ocrText) : null;
-                    info("{$product->name} - {$ocrText} - {$ocrPrice}");
-                }
-
-                // Nếu OCR không ra giá thì fallback về DB price
-                $price = $ocrPrice ?: array_get($defaultPrice, $product->type) ?: 0;
-                $price = $this->parsePrice($price);
-
-                // $total_amount += $price;
-            }
-
-            info("total: ", [$total_amount]);
+            $total_amount = $products->sum(fn ($product) => (int) $product->price);
 
             $total_amount += intval($request->additional_amount);
             $total_amount -= intval($request->freeship_amount);
