@@ -875,13 +875,20 @@ class SaleController extends Controller
         }
 
         $orders = $orders->select(['orders.*'])->distinct('orders.id')->get();
-            $orderNew = Order::whereIn('status', [
-            'NEW',
-            'ON HOLD',
-            'A SHIP NOW',
-        ])->get();
-        $totalOrderNew = $orderNew->count();
-        $totalOrderNewPrice = $orderNew->sum('final_amount');
+
+        $today = Carbon::today('Asia/Ho_Chi_Minh')->format('Y-m-d');
+        $yesterday = Carbon::yesterday('Asia/Ho_Chi_Minh')->format('Y-m-d');
+
+        $soldTodayYesterday = DB::table('order_products')
+            ->join('orders', 'orders.id', '=', 'order_products.order_id')
+            ->join('products', 'products.id', '=', 'order_products.product_id')
+            ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) IN (?, ?)", [$today, $yesterday])
+            ->select('products.price')
+            ->get();
+
+        $totalSoldTodayYesterday = $soldTodayYesterday->count();
+        $totalSoldTodayYesterdayPrice = $soldTodayYesterday->sum('price');
+
         $currentOrders = Order::with('products')->whereBetween('created_at', [
             Carbon::now()->startOfMonth(),
             Carbon::now()->endOfMonth()
@@ -892,9 +899,8 @@ class SaleController extends Controller
 
         return view('sale.orders-summary', compact(
             'orders',
-            'orderNew',
-            'totalOrderNew',
-            'totalOrderNewPrice',
+            'totalSoldTodayYesterday',
+            'totalSoldTodayYesterdayPrice',
             'currentTotalFinalPrice',
             'currentTotalOrder'
 

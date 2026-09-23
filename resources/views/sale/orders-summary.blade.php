@@ -253,10 +253,10 @@
                                 <div class="card bg-primary text-white mb-0" style="color: white">
                                     <div class="card-body d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6 class="mb-1">New Orders</h6>
-                                            <h3 class="mb-0">{{ number_format($totalOrderNewPrice) }}đ</h3>
+                                            <h6 class="mb-1">Sản phẩm bán hôm nay &amp; hôm qua</h6>
+                                            <h3 class="mb-0">{{ number_format($totalSoldTodayYesterdayPrice) }}đ</h3>
                                         </div>
-                                        <h1 class="mb-0">{{ $totalOrderNew }}</h1>
+                                        <h1 class="mb-0">{{ $totalSoldTodayYesterday }}</h1>
                                     </div>
                                 </div>
                             </div>
