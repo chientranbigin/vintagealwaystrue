@@ -24,8 +24,16 @@
         }
 
         @media (max-width: 767px) {
+            .order-stats {
+                margin-left: -3px;
+                margin-right: -3px;
+            }
+            .order-stats > [class*="col-"] {
+                padding-left: 3px;
+                padding-right: 3px;
+            }
             .order-stats .card-body {
-                padding: 0.6rem 0.75rem;
+                padding: 0.5rem 0.5rem;
                 flex-direction: column;
                 align-items: flex-start !important;
             }
