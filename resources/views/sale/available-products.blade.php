@@ -98,7 +98,7 @@
 
                 </form>
                 <div class="py-3">
-                    <div class="d-flex mb-3 align-items-center flex-wrap" style="gap: 10px">
+                    <div class="d-flex mb-3 align-items-center flex-wrap" style="gap: 10px; display: none !important;">
                         <span id="select-all-page" class="btn btn-outline-primary waves-effect waves-light">
                             <i class="mdi mdi-check-all mr-1"></i> Select All Page
                         </span>
