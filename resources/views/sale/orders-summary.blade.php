@@ -349,10 +349,10 @@
                                 <!-- LEFT -->
                                 <div class="toolbar-left">
 
-                                    <button class="btn btn-secondary">Search</button>
+                                    <button class="btn btn-secondary"><i class="mdi mdi-magnify mr-1"></i>Search</button>
 
                                     <a href="{{ route(\Illuminate\Support\Facades\Route::currentRouteName(), ['status' => 'NEW']) }}"
-                                       class="btn btn-light">Clear</a>
+                                       class="btn btn-light"><i class="mdi mdi-close mr-1"></i>Clear</a>
                                 </div>
 
                                 <!-- RIGHT -->
