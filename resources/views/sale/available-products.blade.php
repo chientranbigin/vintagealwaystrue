@@ -140,7 +140,7 @@
                                            class="product-checkbox"
                                            data-id="{{ $product->id }}"
                                            data-img="{{ asset($product->path_thumb) }}"
-                                           style="position: absolute; right: 0px; top: 0px;"
+                                           style="display: none;"
                                     >
                                     {{$product->name}} - {{number_format($product->price)}}đ <br>
 
