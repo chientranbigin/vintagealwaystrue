@@ -38,246 +38,153 @@
             margin: 8px;
             accent-color: #0d6efd;
         }
-        /* ===== Base ===== */
-        .mobile-nav,
-        .mobile-nav-more {
-            display: flex;
-            gap: 10px;
-        }
-
-        .navbar-nav .nav-link {
-            padding: 10px 14px;
-            font-weight: 500;
-        }
-
-        .navbar-nav {
-            flex-direction: row;
-        }
-
-        /* ===== Mobile ===== */
-        @media (max-width: 768px) {
-            .mobile-nav {
-                display: flex;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                gap: 8px;
-                flex-direction: row;
-            }
-
-            .mobile-nav::-webkit-scrollbar {
-                display: none;
-            }
-
-            .mobile-nav-more {
-                display: none;
-                flex-direction: row;
-                flex-wrap: nowrap;
-                gap: 8px;
-                margin-top: 8px;
-                padding: 8px;
-                background: #fff;
-                border-radius: 10px;
-                box-shadow: 0 6px 16px rgba(0,0,0,.12);
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .mobile-nav-more.show {
-                display: flex;
-            }
-
-            .mobile-nav-more::-webkit-scrollbar {
-                display: none;
-            }
-
-            .mobile-nav-more .nav-item {
-                flex: 0 0 auto;
-                white-space: nowrap;
-            }
-
-            .nav-more {
-                margin-left: auto;
-            }
-            .desktop-nav {
-                display: none;
-            }
-        }
-
-        /* ===== Desktop ===== */
-        @media (min-width: 769px) {
-            .nav-more,
-            .mobile-nav-more {
-                display: none;
-            }
-
-            .mobile-nav {
-                justify-content: center;
-            }
-            .desktop-nav {
-                display: flex;
-            }
-        }
-        /* ===== Navbar base polish ===== */
+        /* ===== Base Navbar ===== */
         .main-header {
-            border-bottom: 1px solid #eee;
-            background: #ffffff;
+            background: linear-gradient(135deg, #0d6efd, #084298);
+            border-bottom: none;
+            padding: 0;
             top: 0;
             z-index: 1000;
         }
 
-        .navbar-nav .nav-item {
-            position: relative;
-        }
-
-        .navbar-nav .nav-link {
-            color: #444;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-
-        /* Hover effect */
-        .navbar-nav .nav-link:hover {
-            background: rgba(13, 110, 253, 0.08);
-            color: #0d6efd;
-        }
-
-        /* Active menu */
-        .navbar-nav .nav-item.active .nav-link {
-            background: rgba(13, 110, 253, 0.12);
-            color: #0d6efd;
-            font-weight: 600;
-        }
-
-        /* ===== Mobile top menu ===== */
-        @media (max-width: 768px) {
-            .mobile-nav {
-                padding: 6px 0;
-            }
-
-            .mobile-nav .nav-link {
-                font-size: 14px;
-                padding: 8px 12px;
-            }
-
-            /* More button */
-            .nav-more .nav-link {
-                background: #0d6efd;
-                color: #fff;
-                font-weight: 600;
-            }
-
-            .nav-more .nav-link:hover {
-                background: #0b5ed7;
-                color: #fff;
-            }
-
-            /* Slide-down horizontal menu */
-            .mobile-nav-more {
-                background: transparent;
-                animation: slideDown 0.25s ease;
-            }
-
-            @keyframes slideDown {
-                from {
-                    opacity: 0;
-                    transform: translateY(-6px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-
-            .nav-item {
-                display: flex;
-                align-items: center;
-            }
-        }
-
-        /* ===== Desktop menu ===== */
+        /* ===== Desktop Navbar (>=769px) ===== */
         @media (min-width: 769px) {
-            .navbar-nav .nav-link {
-                padding: 10px 16px;
+            .mobile-nav,
+            .mobile-nav-more {
+                display: none !important;
             }
-
-            /* Underline hover (desktop only) */
-            .navbar-nav .nav-item::after {
-                content: "";
-                position: absolute;
-                left: 50%;
-                bottom: 2px;
-                width: 0;
-                height: 2px;
-                background: #0d6efd;
-                transition: all 0.25s ease;
-                transform: translateX(-50%);
-                border-radius: 2px;
+            .desktop-nav {
+                display: flex !important;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                align-items: center;
+                width: 100%;
+                margin: 0;
+                padding: 4px 0;
+                list-style: none;
             }
-
-            .navbar-nav .nav-item:hover::after {
-                width: 60%;
+            .desktop-nav .nav-item {
+                position: relative;
+                flex: 0 0 auto;
             }
-
-            .navbar-nav .nav-item.active::after {
-                width: 70%;
+            .desktop-nav .nav-link {
+                color: #fff !important;
+                opacity: 0.9;
+                padding: 10px 14px;
+                border-radius: 8px;
+                font-weight: 500;
+                font-size: 14px;
+                white-space: nowrap;
+                transition: all 0.2s ease;
+                display: block;
+            }
+            .desktop-nav .nav-link:hover {
+                background: rgba(255,255,255,0.15);
+                opacity: 1;
+            }
+            .desktop-nav .nav-item.active .nav-link {
+                background: rgba(255,255,255,0.25);
+                font-weight: 600;
+                opacity: 1;
+            }
+            .btn-switch-v2 {
+                background: rgba(255, 255, 255, 0.2) !important;
+                font-weight: 600 !important;
+                border: 1px solid rgba(255, 255, 255, 0.4) !important;
+                border-radius: 8px;
+                padding: 7px 14px !important;
+            }
+            .btn-switch-v2:hover {
+                background: rgba(255, 255, 255, 0.3) !important;
+                color: #fff !important;
+            }
+            .btn-logout {
+                opacity: 0.8;
+                padding: 7px 12px !important;
             }
         }
-        /* ===== Header highlight ===== */
-        .main-header {
-            background: linear-gradient(135deg, #0d6efd, #084298);
-            border-bottom: none;
-        }
 
-        /* Menu text */
-        .main-header .nav-link {
-            color: #fff !important;
-            opacity: 0.9;
-        }
-
-        /* Hover */
-        .main-header .nav-link:hover {
-            background: rgba(255,255,255,0.15);
-            color: #fff !important;
-        }
-
-        /* Active */
-        .main-header .nav-item.active .nav-link {
-            background: rgba(255,255,255,0.25);
-            font-weight: 600;
-        }
-
-        /* Mobile More button */
-        .nav-more .nav-link {
-            background: #ffc107 !important;
-            color: #212529 !important;
-        }
-        /* ===== FORCE 4 BUTTONS FULL WIDTH ON MOBILE ===== */
+        /* ===== Mobile Navbar (<=768px) ===== */
         @media (max-width: 768px) {
+            .desktop-nav {
+                display: none !important;
+            }
             .mobile-nav {
                 display: grid !important;
-                grid-template-columns: repeat(4, 1fr);
-                gap: 6px;
-                overflow: hidden;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 5px;
                 width: 100%;
+                padding: 6px 0;
+                margin: 0;
+                list-style: none;
             }
-
             .mobile-nav .nav-item {
                 width: 100%;
             }
-
             .mobile-nav .nav-link {
-                width: 100%;
-                text-align: center;
+                display: flex;
+                align-items: center;
                 justify-content: center;
-                padding: 10px 6px;
+                text-align: center;
+                width: 100%;
+                height: 48px;
+                padding: 4px 2px;
+                font-size: 11px;
+                line-height: 1.25;
+                font-weight: 600;
+                color: #fff !important;
+                background: rgba(255,255,255,0.12);
+                border-radius: 8px;
+                white-space: normal;
+                word-break: keep-all;
+                transition: all 0.2s;
+            }
+            .mobile-nav .nav-item.active .nav-link {
+                background: rgba(255,255,255,0.3);
+            }
+            .mobile-nav .nav-link.nav-switch-v2 {
+                background: rgba(255, 255, 255, 0.22);
+                border: 1px solid rgba(255, 255, 255, 0.45);
+            }
+            .mobile-nav .nav-more .nav-link {
+                background: #ffc107 !important;
+                color: #212529 !important;
+            }
+            .mobile-nav-more {
+                display: none;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                gap: 6px;
+                margin: 0 0 8px 0;
+                padding: 8px 6px;
+                background: #ffffff;
+                border-radius: 10px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                list-style: none;
+            }
+            .mobile-nav-more.show {
+                display: flex !important;
+            }
+            .mobile-nav-more::-webkit-scrollbar {
+                display: none;
+            }
+            .mobile-nav-more .nav-item {
+                flex: 0 0 auto;
+            }
+            .mobile-nav-more .nav-link {
+                color: #334155 !important;
+                background: #f1f5f9;
+                border-radius: 6px;
+                padding: 6px 12px;
                 font-size: 13px;
+                font-weight: 500;
                 white-space: nowrap;
             }
-
-            .nav-more .nav-link {
-                font-weight: 600;
+            .mobile-nav-more .nav-item.active .nav-link {
+                background: #0d6efd;
+                color: #fff !important;
             }
         }
     </style>
@@ -285,58 +192,43 @@
 
 <body>
 <div id="layout-wrapper">
-    <nav class="main-header navbar navbar-light navbar-white">
-        <div class="container">
+    <nav class="main-header navbar navbar-light">
+        <div class="container-fluid px-2 px-md-4">
+            <!-- Mobile Navigation (4 buttons: Summary Order, Available Product, Switch V2, More) -->
             <ul class="navbar-nav mobile-nav">
                 <li class="nav-item {% if current_route == 'summary' %}active{% endif %}">
                     <a href="/sale/order-summary?status=NEW" class="nav-link">
-                        Summary <br> Orders
+                        Summary<br>Order
                     </a>
                 </li>
                 <li class="nav-item {% if current_route == 'available_products' %}active{% endif %}">
                     <a href="/sale/available-product" class="nav-link">
-                        Available <br> Products
+                        Available<br>Product
                     </a>
                 </li>
-                <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
-                    <a href="/sale/consumer" class="nav-link">
-                        Consumers
+                <li class="nav-item">
+                    <a href="/salev2" class="nav-link nav-switch-v2">
+                        Switch<br>V2
                     </a>
                 </li>
-
                 <li class="nav-item nav-more">
                     <a href="#" class="nav-link" onclick="toggleMoreMenu(event)">
-                        ☰ More
+                        ☰<br>More
                     </a>
                 </li>
-
-                <div class="desktop-nav">
-                    <li class="nav-item {% if current_route == 'home' %}active{% endif %}">
-                        <a href="/sale" class="nav-link">Reports</a>
-                    </li>
-                    <li class="nav-item {% if current_route == 'orders' %}active{% endif %}">
-                        <a href="/sale/order?status=NEW" class="nav-link">Orders</a>
-                    </li>
-                    <li class="nav-item {% if current_route == 'products' %}active{% endif %}">
-                        <a href="/sale/product" class="nav-link">Products</a>
-                    </li>
-                    <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
-                        <a href="/sale/product-upload" class="nav-link">Upload</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/salev2" class="nav-link" style="background: rgba(255,255,255,0.2); font-weight: bold; border: 1px solid rgba(255,255,255,0.4);">
-                            ⚡ Switch to V2
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/logout" class="nav-link" style="opacity: 0.8;" title="Đăng xuất">
-                            🚪 Logout
-                        </a>
-                    </li>
-                </div>
             </ul>
 
-            <ul class="navbar-nav mobile-nav-more" id="mobileMoreMenu">
+            <!-- Desktop Navigation (Full-width 1 Single Clean Row) -->
+            <ul class="navbar-nav desktop-nav">
+                <li class="nav-item {% if current_route == 'summary' %}active{% endif %}">
+                    <a href="/sale/order-summary?status=NEW" class="nav-link">Summary Order</a>
+                </li>
+                <li class="nav-item {% if current_route == 'available_products' %}active{% endif %}">
+                    <a href="/sale/available-product" class="nav-link">Available Product</a>
+                </li>
+                <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
+                    <a href="/sale/consumer" class="nav-link">Consumers</a>
+                </li>
                 <li class="nav-item {% if current_route == 'home' %}active{% endif %}">
                     <a href="/sale" class="nav-link">Reports</a>
                 </li>
@@ -349,11 +241,35 @@
                 <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
                     <a href="/sale/product-upload" class="nav-link">Upload</a>
                 </li>
-                <li class="nav-item">
-                    <a href="/salev2" class="nav-link" style="color: #ffc107 !important; font-weight: bold;">⚡ Switch to V2</a>
+                <li class="nav-item ml-auto d-flex align-items-center">
+                    <a href="/salev2" class="nav-link btn-switch-v2 mr-2">
+                        ⚡ Switch to V2
+                    </a>
+                    <a href="/logout" class="nav-link btn-logout" title="Đăng xuất">
+                        🚪 Logout
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Mobile More Dropdown Slide-down Menu -->
+            <ul class="navbar-nav mobile-nav-more" id="mobileMoreMenu">
+                <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
+                    <a href="/sale/consumer" class="nav-link">👥 Consumers</a>
+                </li>
+                <li class="nav-item {% if current_route == 'home' %}active{% endif %}">
+                    <a href="/sale" class="nav-link">📊 Reports</a>
+                </li>
+                <li class="nav-item {% if current_route == 'orders' %}active{% endif %}">
+                    <a href="/sale/order?status=NEW" class="nav-link">📦 Orders</a>
+                </li>
+                <li class="nav-item {% if current_route == 'products' %}active{% endif %}">
+                    <a href="/sale/product" class="nav-link">🏷️ Products</a>
+                </li>
+                <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
+                    <a href="/sale/product-upload" class="nav-link">📤 Upload</a>
                 </li>
                 <li class="nav-item">
-                    <a href="/logout" class="nav-link">🚪 Logout</a>
+                    <a href="/logout" class="nav-link text-danger">🚪 Logout</a>
                 </li>
             </ul>
         </div>
