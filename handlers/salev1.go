@@ -628,7 +628,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 			ID:            p.ID,
 			Name:          strVal(p.Name),
 			Price:         int64Val(p.Price),
-			DisplayThumb:  getDisplayThumb(&p),
+			DisplayThumb:  strVal(p.PathThumb),
 			PathThumb:     strVal(p.PathThumb),
 			FBPostID:      strVal(p.FBPostID),
 			SizeFormatted: sizeStr,
