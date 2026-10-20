@@ -8,6 +8,7 @@ import (
 
 	"sale-app/config"
 	"sale-app/handlers"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -49,14 +50,26 @@ func main() {
 		c.Next()
 	})
 
+	// Auth Handler & Middleware
+	auth := handlers.NewAuthHandler(db, cfg)
+	r.Use(auth.AuthMiddleware())
+
 	// Health check for Render
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "engine": "golang"})
 	})
 
+	// Login & Logout routes
+	r.GET("/login", func(c *gin.Context) {
+		c.File("./static/login.html")
+	})
+	r.POST("/api/login", auth.Login)
+	r.GET("/logout", auth.Logout)
+
 	// Serve Static assets
 	r.Static("/js", "./static/js")
 	r.Static("/css", "./static/css")
+	r.Static("/admin-theme", "./static/admin-theme")
 
 	// SaleV2 API Handler
 	v2 := handlers.NewSaleV2Handler(db, cfg)
@@ -92,7 +105,7 @@ func main() {
 
 	// SPA fallback for all frontend routes
 	r.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/salev2/api") {
+		if strings.HasPrefix(c.Request.URL.Path, "/salev2/api") || strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
 			return
 		}
