@@ -1,0 +1,32 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-body">
+                    <h4 class="card-title mb-3">Tạo Đơn Hàng Thông Minh (AI Smart Parse)</h4>
+                    <p class="text-muted text-sm">Dán thông tin tin nhắn chốt đơn (tên, số điện thoại, địa chỉ, mã sản phẩm) - hệ thống sẽ tự động bóc tách và tạo đơn hàng.</p>
+
+                    <form method="POST" action="/sale/smart-order-create">
+                        <div class="form-group w-100">
+                            <label>Nội dung đơn hàng / Tin nhắn khách hàng</label>
+                            <textarea class="form-control" name="description" rows="8" placeholder="Ví dụ:
+Anh Tuấn 0912345678
+Số 123 đường Cầu Giấy, Hà Nội
+Lấy quần ts1234, áo st567
+note: giao giờ hành chính"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary waves-effect waves-light btn-submit mb-3">
+                            ⚡ Phân Tích & Tạo Đơn
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

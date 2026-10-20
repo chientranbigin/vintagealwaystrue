@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"sale-app/config"
@@ -67,13 +68,72 @@ func main() {
 	r.GET("/logout", auth.Logout)
 
 	// Serve Static assets
-	r.Static("/js", "./static/js")
-	r.Static("/css", "./static/css")
-	r.Static("/admin-theme", "./static/admin-theme")
+	r.Static("/js", "./public/js")
+	r.Static("/css", "./public/css")
+	r.Static("/admin-theme", "./public/admin-theme")
+	r.Static("/customer-theme", "./public/customer-theme")
 
-	// SaleV2 API Handler
+	// Storage proxy / file server
+	r.GET("/storage/*filepath", func(c *gin.Context) {
+		subPath := c.Param("filepath")
+		localPath := "./storage" + subPath
+		if _, err := os.Stat(localPath); err == nil {
+			c.File(localPath)
+			return
+		}
+		// If not found locally, redirect to public CDN
+		mediaBase := cfg.MediaBaseURL
+		if !strings.HasSuffix(mediaBase, "/") {
+			mediaBase += "/"
+		}
+		c.Redirect(http.StatusMovedPermanently, mediaBase+strings.TrimPrefix(subPath, "/"))
+	})
+
+	// ==========================================
+	// Sale V1 Handlers (Server-rendered Blade UI)
+	// ==========================================
+	v1 := handlers.NewSaleV1Handler(db, cfg)
+	sale := r.Group("/sale")
+	{
+		sale.GET("", v1.Home)
+		sale.GET("/", v1.Home)
+
+		sale.GET("/product", v1.Products)
+		sale.GET("/available-product", v1.AvailableProducts)
+		sale.POST("/available-product", func(c *gin.Context) {
+			c.Redirect(http.StatusFound, "/sale/available-product")
+		})
+		sale.GET("/product/:id", v1.ProductDetail)
+		sale.POST("/product/:id", v1.ProductDetail)
+		sale.GET("/product/delete/:id", v1.ProductDelete)
+		sale.GET("/product-create", v1.ProductCreate)
+		sale.POST("/product-create", v1.ProductCreate)
+		sale.GET("/product-upload", v1.ProductUpload)
+		sale.POST("/product-upload", v1.ProductUpload)
+		sale.GET("/product-batch-upload", v1.ProductBatchUpload)
+		sale.POST("/product-batch-upload/single", v1.ProductBatchUploadSingle)
+
+		sale.GET("/order", v1.Orders)
+		sale.POST("/order", func(c *gin.Context) {
+			c.Redirect(http.StatusFound, "/sale/order")
+		})
+		sale.GET("/order-summary", v1.SummaryOrders)
+		sale.GET("/order/:id", v1.OrderDetail)
+		sale.POST("/order/:id", v1.OrderDetail)
+		sale.GET("/order/delete/:id", v1.OrderDelete)
+		sale.GET("/order-create", v1.OrderCreate)
+		sale.POST("/order-create", v1.OrderCreate)
+		sale.GET("/smart-order-create", v1.SmartOrderCreate)
+		sale.POST("/smart-order-create", v1.SmartOrderCreate)
+		sale.GET("/complete/:id", v1.OrderComplete)
+		sale.GET("/ship/:id", v1.OrderShip)
+		sale.GET("/consumer", v1.Consumers)
+	}
+
+	// ==========================================
+	// Sale V2 API Handler (REST API for Vue SPA)
+	// ==========================================
 	v2 := handlers.NewSaleV2Handler(db, cfg)
-
 	api := r.Group("/salev2/api")
 	{
 		api.GET("/products", v2.Products)
@@ -105,8 +165,13 @@ func main() {
 
 	// SPA fallback for all frontend routes
 	r.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/salev2/api") || strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/salev2/api") || strings.HasPrefix(path, "/api/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+			return
+		}
+		if strings.HasPrefix(path, "/sale") {
+			c.Redirect(http.StatusFound, "/sale")
 			return
 		}
 		c.File("./static/salev2/index.html")

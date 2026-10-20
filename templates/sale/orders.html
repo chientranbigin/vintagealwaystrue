@@ -1,0 +1,191 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="card col bg-primary border-primary mx-2">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center" style="justify-content: space-between">
+                                    <div><h5 class="card-title mb-0 text-white">New Orders</h5></div>
+                                    <div><h2 class="mb-0 text-white">{{ total_order_new_price|number_format }}đ</h2></div>
+                                    <div><h2 class="mb-0 text-white">{{ total_order_new }}</h2></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card col bg-success border-success mx-2">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center" style="justify-content: space-between">
+                                    <div><h5 class="card-title mb-0 text-white">Current Month Orders</h5></div>
+                                    <div><h2 class="mb-0 text-white">{{ current_total_final_price|number_format }}đ</h2></div>
+                                    <div><h2 class="mb-0 text-white">{{ current_total_order }}</h2></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="GET" action="/sale/order">
+                        <div class="row mb-3">
+                            <div class="col-sm-12 col-md-6">
+                                <input id="input-search" class="form-control mt-3" name="search" value="{{ search }}" placeholder="Phone, Name, Product">
+                            </div>
+                            <div class="col-6">
+                                <button type="submit" class="btn btn-secondary waves-effect waves-light btn-submit mt-3 mr-3">
+                                    Search
+                                </button>
+                                <a href="/sale/order" class="btn btn-light waves-effect waves-light btn-submit mt-3">
+                                    Clear
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+
+                    <a href="/sale/order-create" class="btn btn-secondary waves-effect waves-light btn-submit mb-3" style="color: #fff !important;">Create</a>
+                    <a href="/sale/smart-order-create" class="btn btn-info waves-effect waves-light btn-submit mb-3" style="color: #fff !important;">Create Smart</a>
+                    <a href="/sale/order" class="btn btn-secondary waves-effect waves-light btn-submit mb-3" style="color: #fff !important;">All Orders</a>
+
+                    <div class="table-responsive">
+                        <div class="py-3">
+                            <b>Showing {{ pagination.From }} to {{ pagination.To }} of {{ pagination.Total }} entries</b>
+                        </div>
+
+                        <!-- Top Pagination -->
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination">
+                                {% if pagination.CurrentPage > 1 %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ pagination.PrevPage }}&search={{ search }}&status={{ selected_status }}">Previous</a></li>
+                                {% endif %}
+                                <li class="page-item active"><span class="page-link">{{ pagination.CurrentPage }} / {{ pagination.LastPage }}</span></li>
+                                {% if pagination.CurrentPage < pagination.LastPage %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ pagination.NextPage }}&search={{ search }}&status={{ selected_status }}">Next</a></li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+
+                        <table class="table mb-0">
+                            <thead>
+                            <tr>
+                                <th>Consumer</th>
+                                <th>Summary</th>
+                                <th>Products</th>
+                                <th>Additional Amount</th>
+                                <th>Deposit Amount</th>
+                                <th>Viettel Order Amount</th>
+                                <th>Final Amount</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for order in orders %}
+                                <tr>
+                                    <td>
+                                        <a href="/sale/order/{{ order.ID }}">
+                                            {{ order.Name }}<br>
+                                            {{ order.Phone }}<br>
+                                            {{ order.Address }}
+                                        </a>
+                                        {% if order.Note %}
+                                            <br><br>
+                                            <span class="right badge badge-danger">{{ order.Note }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <p>
+                                            Họ Tên: {{ order.Name }}<br>
+                                            SDT: {{ order.Phone }}<br>
+                                            Địa chỉ: {{ order.Address }}
+                                            {% if order.Note %}
+                                                <br><span class="right badge badge-danger">Note: {{ order.Note }}</span>
+                                            {% endif %}
+                                            {% if order.Desc %}
+                                                <br><span class="right badge badge-danger">Note sửa đồ: {{ order.Desc }}</span>
+                                            {% endif %}
+                                        </p>
+                                        {% for prod in order.Products %}
+                                            <p>{{ prod.Type }} {{ prod.Name }}: {{ prod.Price|number_format }}đ</p>
+                                        {% endfor %}
+                                        {% if order.AdditionalAmount > 0 %}
+                                            <p>Phí sửa đồ: {{ order.AdditionalAmount|number_format }}đ</p>
+                                        {% endif %}
+                                        {% if order.FreeshipAmount > 0 %}
+                                            <p>Giảm giá: {{ order.FreeshipAmount|number_format }}đ</p>
+                                        {% endif %}
+                                        {% if order.IsPaid or order.DepositAmount > 0 %}
+                                            <p>Đã thanh toán trước: {% if order.IsPaid %}{{ order.TotalAmount|number_format }}{% else %}{{ order.DepositAmount|number_format }}{% endif %}đ</p>
+                                        {% endif %}
+                                        <div class="d-flex">
+                                            <p>Tổng đơn: {{ order.RemainingAmount|number_format }}đ {% if order.IsPaid %}Freeship{% else %}+ Phí ship{% endif %}</p>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex" style="max-width: 500px; flex-wrap: wrap">
+                                            {% for prod in order.Products %}
+                                                <div class="mt-1 mr-2 text-center">
+                                                    <a href="/sale/product/{{ prod.ID }}">
+                                                        <b>{{ prod.Name }}</b><br/>
+                                                        {% if prod.PathThumb %}
+                                                            <img src="{{ prod.PathThumb|img_url }}" alt="" height="100" class="ml-1" style="border-radius: 4px;">
+                                                        {% endif %}
+                                                    </a>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                    <td>{{ order.AdditionalAmount|number_format }}đ</td>
+                                    <td>
+                                        <span>{% if order.IsPaid %}{{ order.RemainingAmount|number_format }}{% else %}{{ order.DepositAmount|number_format }}{% endif %}đ</span>
+                                    </td>
+                                    <td>
+                                        <span style="background-color:grey; color:white; padding: 5px; border-radius: 4px;">
+                                            {{ order.ViettelOrderAmount|number_format }}đ
+                                        </span>
+                                    </td>
+                                    <td>{{ order.FinalAmount|number_format }}đ</td>
+                                    <td>
+                                        {% if order.Status == 'NEW' %}
+                                            <span class="right badge badge-light">{{ order.Status }}</span>
+                                        {% elif order.Status == 'ON HOLD' %}
+                                            <span class="right badge badge-warning">{{ order.Status }}</span>
+                                        {% elif order.Status == 'READY FOR SHIPPING' or order.Status == 'A SHIP NOW' %}
+                                            <span class="right badge badge-info">{{ order.Status }}</span>
+                                        {% else %}
+                                            <span class="right badge badge-success">{{ order.Status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="/sale/order/delete/{{ order.ID }}" onclick="return confirm('Bạn có chắc muốn xoá đơn hàng này?');"
+                                           class="btn btn-secondary waves-effect waves-light btn-submit mb-2" style="color: #fff !important;">Delete</a>
+                                        <br>
+                                        <a href="/sale/complete/{{ order.ID }}" class="btn btn-light waves-effect waves-light btn-submit">Complete</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <!-- Bottom Pagination -->
+                        <div class="mt-4">
+                            <ul class="pagination">
+                                {% if pagination.CurrentPage > 1 %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ pagination.PrevPage }}&search={{ search }}&status={{ selected_status }}">Previous</a></li>
+                                {% endif %}
+                                <li class="page-item active"><span class="page-link">{{ pagination.CurrentPage }} / {{ pagination.LastPage }}</span></li>
+                                {% if pagination.CurrentPage < pagination.LastPage %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ pagination.NextPage }}&search={{ search }}&status={{ selected_status }}">Next</a></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,268 @@
+{% extends "master.html" %}
+
+{% block content %}
+<style>
+    .order-toolbar .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        min-height: 44px;
+    }
+
+    .order-stats .card {
+        border-radius: 12px;
+    }
+
+    .order-stats h1, .order-stats h6, .order-stats h3 {
+        color: #fff !important;
+        font-weight: 700;
+    }
+
+    .order-card {
+        border-radius: 12px;
+        transition: all 0.2s ease;
+        height: 100%;
+    }
+
+    .order-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+    }
+
+    .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .order-info p {
+        font-size: 14px;
+        margin-bottom: 4px;
+    }
+
+    .order-products {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 15px;
+    }
+
+    .order-product-item {
+        display: block;
+    }
+
+    .order-product-item img {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #eee;
+        transition: all 0.2s ease;
+    }
+
+    .order-product-item img:hover {
+        transform: scale(1.03);
+    }
+
+    .order-summary {
+        font-size: 14px;
+        border-top: 1px dashed #ddd;
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+
+    .order-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .order-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+        flex: 0 0 calc(50% - 3px);
+        min-height: 40px;
+    }
+
+    .order-toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .toolbar-left, .toolbar-right {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 768px) {
+        .order-toolbar {
+            flex-direction: column;
+        }
+        .toolbar-left, .toolbar-right {
+            width: 100%;
+        }
+        .toolbar-left input {
+            width: 100%;
+        }
+        .toolbar-left .btn, .toolbar-right .btn {
+            width: calc(50% - 5px);
+        }
+    }
+</style>
+
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid pr-0 pl-0">
+            <div class="row" style="flex-direction: row-reverse;">
+                <div class="col-md-6 col-sm-12">
+                    <div class="row order-stats mb-4">
+                        <div class="col-md-6">
+                            <div class="card bg-primary text-white mb-0" style="color: white">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">New Orders</h6>
+                                        <h3 class="mb-0">{{ total_order_new_price|number_format }}đ</h3>
+                                    </div>
+                                    <h1 class="mb-0">{{ total_order_new }}</h1>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card bg-success text-white mb-0">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">Current Month Orders</h6>
+                                        <h3 class="mb-0">{{ current_total_final_price|number_format }}đ</h3>
+                                    </div>
+                                    <h1 class="mb-0">{{ current_total_order }}</h1>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-sm-12">
+                    <form method="GET" action="/sale/order-summary">
+                        <input class="form-control" name="search" value="{{ search }}" placeholder="Phone, Name, Product"/>
+                        <div class="order-toolbar mt-2">
+                            <div class="toolbar-left">
+                                <button type="submit" class="btn btn-secondary">Search</button>
+                                <a href="/sale/order-summary?status=NEW" class="btn btn-light">Clear</a>
+                            </div>
+                            <div class="toolbar-right">
+                                <a href="/sale/order-create" class="btn btn-warning text-white">Create</a>
+                                <a href="/sale/smart-order-create" class="btn btn-outline-primary">Create Smart</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <b>Total {{ orders|length }} entries</b>
+            </div>
+
+            <!-- ORDER CARDS -->
+            <div class="row">
+                {% for order in orders %}
+                    <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-4">
+                        <div class="card order-card h-100">
+                            <div class="card-body d-flex flex-column">
+                                <div class="order-content">
+                                    <div class="order-header">
+                                        {% if order.Status == 'NEW' %}
+                                            <span class="badge badge-light">{{ order.Status }}</span>
+                                        {% elif order.Status == 'ON HOLD' %}
+                                            <span class="badge badge-warning">{{ order.Status }}</span>
+                                        {% elif order.Status == 'READY FOR SHIPPING' or order.Status == 'A SHIP NOW' %}
+                                            <span class="badge badge-info">{{ order.Status }}</span>
+                                        {% else %}
+                                            <span class="badge badge-success">{{ order.Status }}</span>
+                                        {% endif %}
+
+                                        <small class="text-muted">{{ order.CreatedAtFormatted }}</small>
+                                    </div>
+
+                                    <div class="order-info">
+                                        <p><b>Họ tên:</b> {{ order.Name }}</p>
+                                        <p><b>SDT:</b> {{ order.Phone }}</p>
+                                        <p><b>Địa chỉ:</b> {{ order.Address }}</p>
+
+                                        {% if order.Note %}
+                                            <p class="text-success"><b>Note:</b> {{ order.Note }}</p>
+                                        {% endif %}
+
+                                        {% if order.Desc %}
+                                            <p class="text-danger"><b>Note sửa đồ:</b><br>{{ order.Desc }}</p>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="order-products">
+                                        {% for prod in order.Products %}
+                                            <a href="/sale/product/{{ prod.ID }}" class="order-product-item text-center">
+                                                <small><b>{{ prod.Name }}</b></small>
+                                                {% if prod.PathThumb %}
+                                                    <img src="{{ prod.PathThumb|img_url }}" alt="">
+                                                {% endif %}
+                                            </a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+
+                                <div class="order-footer mt-auto">
+                                    <div class="order-summary">
+                                        {% if order.TotalAmount > 0 %}
+                                            <div class="d-flex justify-content-between">
+                                                <span>Tổng đơn</span>
+                                                <span>{{ order.TotalAmount|number_format }}đ</span>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if order.FreeshipAmount > 0 %}
+                                            <div class="d-flex justify-content-between">
+                                                <span>Giảm giá</span>
+                                                <span>{{ order.FreeshipAmount|number_format }}đ</span>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if order.IsPaid or order.DepositAmount > 0 %}
+                                            <div class="d-flex justify-content-between">
+                                                <span>Đã thanh toán</span>
+                                                <span>{% if order.IsPaid %}{{ order.TotalAmount|number_format }}{% else %}{{ order.DepositAmount|number_format }}{% endif %}đ</span>
+                                            </div>
+                                        {% endif %}
+
+                                        <div class="d-flex justify-content-between">
+                                            <span>Đơn Viettel</span>
+                                            <span>
+                                                {{ order.ViettelOrderAmount|number_format }}đ<br>
+                                                <small>{% if order.IsPaid %}Freeship{% else %}+ Phí ship{% endif %}</small>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-actions mt-3">
+                                        <a href="/sale/order/{{ order.ID }}" class="btn btn-sm btn-secondary text-white">Detail</a>
+                                        <a href="/sale/order-create?consumer_id={{ order.ConsumerID }}" class="btn btn-sm btn-warning text-white">Create Order</a>
+                                        <a href="/sale/ship/{{ order.ID }}" class="btn btn-sm btn-light">Ready</a>
+                                        <a href="/sale/complete/{{ order.ID }}" class="btn btn-sm btn-success" onclick="return confirm('Hoàn tất đơn hàng này?');">Complete</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

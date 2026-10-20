@@ -1,0 +1,142 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <form method="GET" action="/sale/available-product">
+                <div class="row mb-3">
+                    <div class="col-sm-12 col-md-6">
+                        <input id="input-search" class="form-control" name="search" value="{{ search }}" placeholder="Name Products (comma separated)">
+                    </div>
+
+                    <div class="col-sm-12 col-md-6 d-flex">
+                        <select class="custom-select rounded-0" name="type" style="width: 300px">
+                            <option value="">-- All Types --</option>
+                            {% for t in product_types %}
+                                <option value="{{ t }}" {% if selected_type == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-sm-12 col-md-6">
+                        <div class="row mt-3">
+                            <div class="col d-flex">
+                                <select class="custom-select rounded-0" name="from_search_key">
+                                    <option value="">-- Size --</option>
+                                    {% for s in size_list %}
+                                        <option value="{{ s }}" {% if from_search_key == s %}selected{% endif %}>{{ s }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input class="form-control" name="from_search_value" placeholder="From Value" value="{{ from_search_value }}">
+                                <input class="form-control" name="to_search_value" placeholder="To Value" value="{{ to_search_value }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-sm-12 col-md-6">
+                        <div class="row mt-3">
+                            <div class="col d-flex">
+                                <select class="custom-select rounded-0" name="from_search_key_2">
+                                    <option value="">-- Size 2 --</option>
+                                    {% for s in size_list %}
+                                        <option value="{{ s }}" {% if from_search_key_2 == s %}selected{% endif %}>{{ s }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input class="form-control" name="from_search_value_2" placeholder="From Value" value="{{ from_search_value_2 }}">
+                                <input class="form-control" name="to_search_value_2" placeholder="To Value" value="{{ to_search_value_2 }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-secondary waves-effect waves-light btn-submit mt-3 mr-3">
+                            Search
+                        </button>
+                        <a href="/sale/available-product" class="btn btn-light waves-effect waves-light btn-submit mt-3">
+                            Clear
+                        </a>
+                        <span id="download-all-images" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right">
+                            Download
+                        </span>
+                        <a href="/sale/available-product?showAll=true" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right mr-3">
+                            Show All
+                        </a>
+                    </div>
+                </div>
+            </form>
+
+            <div class="py-3">
+                <div class="d-flex mb-3">
+                    <span id="copy-images" class="btn btn-light waves-effect waves-light btn-submit mr-3 float-right">
+                        📋 Copy image
+                    </span>
+                    <button onclick="localStorage.removeItem('selectedProductImages'); alert('Đã xoá danh sách đã chọn!')" class="btn btn-light waves-effect waves-light btn-submit">
+                        🗑 Clear Selected
+                    </button>
+                </div>
+                <b>Showing {{ pagination.From }} to {{ pagination.To }} of {{ pagination.Total }} entries</b>
+            </div>
+
+            <!-- Pagination -->
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    {% if pagination.CurrentPage > 1 %}
+                        <li class="page-item"><a class="page-link" href="?page={{ pagination.PrevPage }}&search={{ search }}&type={{ selected_type }}">Previous</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">{{ pagination.CurrentPage }} / {{ pagination.LastPage }}</span></li>
+                    {% if pagination.CurrentPage < pagination.LastPage %}
+                        <li class="page-item"><a class="page-link" href="?page={{ pagination.NextPage }}&search={{ search }}&type={{ selected_type }}">Next</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+
+            <div class="row">
+                {% for p in products %}
+                    <div class="col-lg-2 col-md-4 col-sm-6 card">
+                        <div class="card-body text-center pl-0 pr-0">
+                            <h4 class="card-title">
+                                <input type="checkbox"
+                                       class="product-checkbox"
+                                       data-id="{{ p.ID }}"
+                                       data-img="{{ p.PathThumb|img_url }}"
+                                       onchange="toggleSelection(this)"
+                                       style="position: absolute; right: 0px; top: 0px;">
+                                {{ p.Name }} - {{ p.Price|number_format }}đ <br>
+                                <span class="right badge badge-info" style="font-size: 100%">
+                                    {{ p.SizeFormatted }}
+                                </span><br>
+                            </h4>
+
+                            {% if p.PathThumb %}
+                                <a href="/sale/product/{{ p.ID }}">
+                                    <img src="{{ p.PathThumb|img_url }}" data-name="{{ p.Name }}" alt="" style="width:100%; border-radius: 4px;">
+                                </a>
+                            {% else %}
+                                <a href="/sale/product/{{ p.ID }}" class="btn btn-sm btn-outline-primary mt-2">
+                                    View
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Bottom Pagination -->
+            <div class="mt-4">
+                <ul class="pagination">
+                    {% if pagination.CurrentPage > 1 %}
+                        <li class="page-item"><a class="page-link" href="?page={{ pagination.PrevPage }}&search={{ search }}&type={{ selected_type }}">Previous</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">{{ pagination.CurrentPage }} / {{ pagination.LastPage }}</span></li>
+                    {% if pagination.CurrentPage < pagination.LastPage %}
+                        <li class="page-item"><a class="page-link" href="?page={{ pagination.NextPage }}&search={{ search }}&type={{ selected_type }}">Next</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

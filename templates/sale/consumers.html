@@ -1,0 +1,47 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title mb-4">Consumers</h4>
+                    <div class="table-responsive">
+                        <table class="table mb-0">
+                            <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Address</th>
+                                <th>Total Orders</th>
+                                <th>Action</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for c in consumers %}
+                                <tr>
+                                    <td>{{ c.Name }}</td>
+                                    <td>{{ c.Phone }}</td>
+                                    <td>{{ c.Address }}</td>
+                                    <td>
+                                        <span class="right badge badge-light">{{ c.OrdersCount }}</span>
+                                    </td>
+                                    <td>
+                                        <a href="/sale/order-create?consumer_id={{ c.ID }}"
+                                           class="btn btn-secondary waves-effect waves-light"
+                                           style="color: #fff !important;">Create Order</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="/sale/product-create" enctype="multipart/form-data">
+                        <div class="row">
+                            <div class="col-md-6 col-sm-12">
+                                <div class="form-group">
+                                    <label>Type</label>
+                                    <select class="form-control" name="type">
+                                        {% for t in product_types %}
+                                            <option value="{{ t }}">{{ t }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="form-group w-100">
+                                    <label>Thumb</label>
+                                    <div class="custom-file">
+                                        <input type="file" class="custom-file-input" id="customFile" name="banner">
+                                        <label class="custom-file-label" for="customFile">Choose file</label>
+                                    </div>
+                                </div>
+
+                                <div class="form-group w-100">
+                                    <label>Price</label>
+                                    <input type="number" class="form-control" name="price">
+                                </div>
+
+                                <div class="form-group w-100">
+                                    <label>Description</label>
+                                    <textarea class="form-control" rows="5" name="description"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 col-sm-12">
+                                <h3>Sizes</h3>
+                                <div class="row">
+                                    <div class="col-6">
+                                        {% for s in size_inputs_col1 %}
+                                            <div class="form-group w-100">
+                                                <label>{{ s }}</label>
+                                                <input type="hidden" name="size_names[]" value="{{ s }}">
+                                                <input type="number" class="form-control" name="size_values[]">
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="col-6">
+                                        {% for s in size_inputs_col2 %}
+                                            <div class="form-group w-100">
+                                                <label>{{ s }}</label>
+                                                <input type="hidden" name="size_names[]" value="{{ s }}">
+                                                <input type="number" class="form-control" name="size_values[]">
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary waves-effect waves-light btn-submit mt-3">Create</button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -22,3 +22,6 @@ yarn-error.log
 auth.json
 .vscode
 .idea
+bin/
+/server
+cookies.txt

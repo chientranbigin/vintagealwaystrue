@@ -1,0 +1,190 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title mb-4">Batch Upload Product Images (Asynchronous)</h4>
+                    
+                    <div class="alert alert-info">
+                        <strong>Hướng dẫn:</strong>
+                        <ul class="mb-0">
+                            <li>Upload được nhiều ảnh cùng lúc (không giới hạn số lượng)</li>
+                            <li>Hệ thống lưu trữ ảnh an toàn và tự động nhận diện mã sản phẩm</li>
+                            <li>Bạn có thể theo dõi tiến trình upload và xử lý realtime ngay bên dưới</li>
+                        </ul>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="productType">Product Type</label>
+                                <select class="form-control" id="productType">
+                                    {% for t in product_types %}
+                                        <option value="{{ t }}">{{ t }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="fileInput">Select Images</label>
+                                <div class="custom-file">
+                                    <input multiple type="file" class="custom-file-input" id="fileInput" accept="image/*">
+                                    <label class="custom-file-label" for="fileInput">Choose files...</label>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-primary btn-lg" id="startUpload">
+                                🚀 Start Upload
+                            </button>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h5 class="card-title">Upload Progress</h5>
+                                    <div class="mb-3">
+                                        <strong>Session ID:</strong> <span id="sessionId">-</span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="progress" style="height: 30px;">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                                                 role="progressbar" 
+                                                 id="uploadProgress" 
+                                                 style="width: 0%">0%</div>
+                                        </div>
+                                    </div>
+                                    <div class="row text-center">
+                                        <div class="col-4">
+                                            <h3 class="text-primary" id="totalCount">0</h3>
+                                            <p class="text-muted mb-0">Total</p>
+                                        </div>
+                                        <div class="col-4">
+                                            <h3 class="text-success" id="successCount">0</h3>
+                                            <p class="text-muted mb-0">Success</p>
+                                        </div>
+                                        <div class="col-4">
+                                            <h3 class="text-danger" id="failedCount">0</h3>
+                                            <p class="text-muted mb-0">Failed</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Upload Log</h5>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th width="5%">#</th>
+                                        <th width="30%">File</th>
+                                        <th width="15%">Status</th>
+                                        <th width="50%">Message / URL</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="uploadLog">
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted">No uploads yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const startUploadBtn = document.getElementById('startUpload');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const totalCount = document.getElementById('totalCount');
+    const successCount = document.getElementById('successCount');
+    const failedCount = document.getElementById('failedCount');
+    const uploadLog = document.getElementById('uploadLog');
+    const sessionIdSpan = document.getElementById('sessionId');
+
+    fileInput.addEventListener('change', function(e) {
+        const files = e.target.files;
+        const label = document.querySelector('.custom-file-label');
+        label.textContent = files.length > 0 ? files.length + ' file(s) selected' : 'Choose files...';
+    });
+
+    startUploadBtn.addEventListener('click', async function() {
+        const files = fileInput.files;
+        if (files.length === 0) {
+            alert('Vui lòng chọn ít nhất 1 ảnh!');
+            return;
+        }
+
+        const sessionId = 'session_' + Date.now();
+        sessionIdSpan.textContent = sessionId;
+        const productType = document.getElementById('productType').value;
+
+        startUploadBtn.disabled = true;
+        uploadLog.innerHTML = '';
+        let total = files.length;
+        let success = 0;
+        let failed = 0;
+
+        totalCount.textContent = total;
+
+        for (let i = 0; i < total; i++) {
+            const file = files[i];
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('type', productType);
+            formData.append('session_id', sessionId);
+
+            try {
+                const response = await fetch('/sale/product-batch-upload/single', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    success++;
+                    addLogRow(i + 1, file.name, 'SUCCESS', result.url || result.path || 'Uploaded successfully');
+                } else {
+                    failed++;
+                    addLogRow(i + 1, file.name, 'FAILED', result.message || 'Upload failed');
+                }
+            } catch (err) {
+                failed++;
+                addLogRow(i + 1, file.name, 'ERROR', err.message);
+            }
+
+            const pct = Math.round(((i + 1) / total) * 100);
+            uploadProgress.style.width = pct + '%';
+            uploadProgress.textContent = pct + '%';
+            successCount.textContent = success;
+            failedCount.textContent = failed;
+        }
+
+        startUploadBtn.disabled = false;
+        alert(`Hoàn tất upload: ${success} thành công, ${failed} thất bại.`);
+    });
+
+    function addLogRow(idx, fileName, status, msg) {
+        const tr = document.createElement('tr');
+        const badgeClass = status === 'SUCCESS' ? 'badge-success' : 'badge-danger';
+        tr.innerHTML = `
+            <td>${idx}</td>
+            <td>${fileName}</td>
+            <td><span class="badge ${badgeClass}">${status}</span></td>
+            <td><small>${msg}</small></td>
+        `;
+        uploadLog.prepend(tr);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8"/>
+    <title>Admin Vintage Always True - V1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta content="Premium Multipurpose Admin & Dashboard Template" name="description"/>
+    <meta content="MyraStudio" name="author"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="/admin-theme/assets/images/favicon.ico">
+
+    <!-- App css -->
+    <link href="/admin-theme/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css"/>
+    <link href="/admin-theme/assets/css/icons.min.css" rel="stylesheet" type="text/css"/>
+    <link href="/admin-theme/assets/css/theme.min.css" rel="stylesheet" type="text/css"/>
+
+    <style>
+        .btn-submit {
+            height: 40px;
+            min-width: 90px;
+            align-content: center;
+        }
+
+        .page-content {
+            padding-top: 20px
+        }
+
+        .main-content {
+            margin-left: 0px
+        }
+        .product-checkbox {
+            width: 15px;
+            height: 15px;
+            transform: scale(1.5);
+            margin: 8px;
+            accent-color: #0d6efd;
+        }
+        /* ===== Base ===== */
+        .mobile-nav,
+        .mobile-nav-more {
+            display: flex;
+            gap: 10px;
+        }
+
+        .navbar-nav .nav-link {
+            padding: 10px 14px;
+            font-weight: 500;
+        }
+
+        .navbar-nav {
+            flex-direction: row;
+        }
+
+        /* ===== Mobile ===== */
+        @media (max-width: 768px) {
+            .mobile-nav {
+                display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                gap: 8px;
+                flex-direction: row;
+            }
+
+            .mobile-nav::-webkit-scrollbar {
+                display: none;
+            }
+
+            .mobile-nav-more {
+                display: none;
+                flex-direction: row;
+                flex-wrap: nowrap;
+                gap: 8px;
+                margin-top: 8px;
+                padding: 8px;
+                background: #fff;
+                border-radius: 10px;
+                box-shadow: 0 6px 16px rgba(0,0,0,.12);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .mobile-nav-more.show {
+                display: flex;
+            }
+
+            .mobile-nav-more::-webkit-scrollbar {
+                display: none;
+            }
+
+            .mobile-nav-more .nav-item {
+                flex: 0 0 auto;
+                white-space: nowrap;
+            }
+
+            .nav-more {
+                margin-left: auto;
+            }
+            .desktop-nav {
+                display: none;
+            }
+        }
+
+        /* ===== Desktop ===== */
+        @media (min-width: 769px) {
+            .nav-more,
+            .mobile-nav-more {
+                display: none;
+            }
+
+            .mobile-nav {
+                justify-content: center;
+            }
+            .desktop-nav {
+                display: flex;
+            }
+        }
+        /* ===== Navbar base polish ===== */
+        .main-header {
+            border-bottom: 1px solid #eee;
+            background: #ffffff;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar-nav .nav-item {
+            position: relative;
+        }
+
+        .navbar-nav .nav-link {
+            color: #444;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        /* Hover effect */
+        .navbar-nav .nav-link:hover {
+            background: rgba(13, 110, 253, 0.08);
+            color: #0d6efd;
+        }
+
+        /* Active menu */
+        .navbar-nav .nav-item.active .nav-link {
+            background: rgba(13, 110, 253, 0.12);
+            color: #0d6efd;
+            font-weight: 600;
+        }
+
+        /* ===== Mobile top menu ===== */
+        @media (max-width: 768px) {
+            .mobile-nav {
+                padding: 6px 0;
+            }
+
+            .mobile-nav .nav-link {
+                font-size: 14px;
+                padding: 8px 12px;
+            }
+
+            /* More button */
+            .nav-more .nav-link {
+                background: #0d6efd;
+                color: #fff;
+                font-weight: 600;
+            }
+
+            .nav-more .nav-link:hover {
+                background: #0b5ed7;
+                color: #fff;
+            }
+
+            /* Slide-down horizontal menu */
+            .mobile-nav-more {
+                background: transparent;
+                animation: slideDown 0.25s ease;
+            }
+
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-6px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .nav-item {
+                display: flex;
+                align-items: center;
+            }
+        }
+
+        /* ===== Desktop menu ===== */
+        @media (min-width: 769px) {
+            .navbar-nav .nav-link {
+                padding: 10px 16px;
+            }
+
+            /* Underline hover (desktop only) */
+            .navbar-nav .nav-item::after {
+                content: "";
+                position: absolute;
+                left: 50%;
+                bottom: 2px;
+                width: 0;
+                height: 2px;
+                background: #0d6efd;
+                transition: all 0.25s ease;
+                transform: translateX(-50%);
+                border-radius: 2px;
+            }
+
+            .navbar-nav .nav-item:hover::after {
+                width: 60%;
+            }
+
+            .navbar-nav .nav-item.active::after {
+                width: 70%;
+            }
+        }
+        /* ===== Header highlight ===== */
+        .main-header {
+            background: linear-gradient(135deg, #0d6efd, #084298);
+            border-bottom: none;
+        }
+
+        /* Menu text */
+        .main-header .nav-link {
+            color: #fff !important;
+            opacity: 0.9;
+        }
+
+        /* Hover */
+        .main-header .nav-link:hover {
+            background: rgba(255,255,255,0.15);
+            color: #fff !important;
+        }
+
+        /* Active */
+        .main-header .nav-item.active .nav-link {
+            background: rgba(255,255,255,0.25);
+            font-weight: 600;
+        }
+
+        /* Mobile More button */
+        .nav-more .nav-link {
+            background: #ffc107 !important;
+            color: #212529 !important;
+        }
+        /* ===== FORCE 4 BUTTONS FULL WIDTH ON MOBILE ===== */
+        @media (max-width: 768px) {
+            .mobile-nav {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+                overflow: hidden;
+                width: 100%;
+            }
+
+            .mobile-nav .nav-item {
+                width: 100%;
+            }
+
+            .mobile-nav .nav-link {
+                width: 100%;
+                text-align: center;
+                justify-content: center;
+                padding: 10px 6px;
+                font-size: 13px;
+                white-space: nowrap;
+            }
+
+            .nav-more .nav-link {
+                font-weight: 600;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div id="layout-wrapper">
+    <nav class="main-header navbar navbar-light navbar-white">
+        <div class="container">
+            <ul class="navbar-nav mobile-nav">
+                <li class="nav-item {% if current_route == 'summary' %}active{% endif %}">
+                    <a href="/sale/order-summary?status=NEW" class="nav-link">
+                        Summary <br> Orders
+                    </a>
+                </li>
+                <li class="nav-item {% if current_route == 'available_products' %}active{% endif %}">
+                    <a href="/sale/available-product" class="nav-link">
+                        Available <br> Products
+                    </a>
+                </li>
+                <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
+                    <a href="/sale/consumer" class="nav-link">
+                        Consumers
+                    </a>
+                </li>
+
+                <li class="nav-item nav-more">
+                    <a href="#" class="nav-link" onclick="toggleMoreMenu(event)">
+                        ☰ More
+                    </a>
+                </li>
+
+                <div class="desktop-nav">
+                    <li class="nav-item {% if current_route == 'home' %}active{% endif %}">
+                        <a href="/sale" class="nav-link">Reports</a>
+                    </li>
+                    <li class="nav-item {% if current_route == 'orders' %}active{% endif %}">
+                        <a href="/sale/order?status=NEW" class="nav-link">Orders</a>
+                    </li>
+                    <li class="nav-item {% if current_route == 'products' %}active{% endif %}">
+                        <a href="/sale/product" class="nav-link">Products</a>
+                    </li>
+                    <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
+                        <a href="/sale/product-upload" class="nav-link">Upload</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/salev2" class="nav-link" style="background: rgba(255,255,255,0.2); font-weight: bold; border: 1px solid rgba(255,255,255,0.4);">
+                            ⚡ Switch to V2
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/logout" class="nav-link" style="opacity: 0.8;" title="Đăng xuất">
+                            🚪 Logout
+                        </a>
+                    </li>
+                </div>
+            </ul>
+
+            <ul class="navbar-nav mobile-nav-more" id="mobileMoreMenu">
+                <li class="nav-item {% if current_route == 'home' %}active{% endif %}">
+                    <a href="/sale" class="nav-link">Reports</a>
+                </li>
+                <li class="nav-item {% if current_route == 'orders' %}active{% endif %}">
+                    <a href="/sale/order?status=NEW" class="nav-link">Orders</a>
+                </li>
+                <li class="nav-item {% if current_route == 'products' %}active{% endif %}">
+                    <a href="/sale/product" class="nav-link">Products</a>
+                </li>
+                <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
+                    <a href="/sale/product-upload" class="nav-link">Upload</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/salev2" class="nav-link" style="color: #ffc107 !important; font-weight: bold;">⚡ Switch to V2</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/logout" class="nav-link">🚪 Logout</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+</div>
+
+<div class="menu-overlay"></div>
+
+<!-- jQuery  -->
+<script src="/admin-theme/assets/js/jquery.min.js"></script>
+<script src="/admin-theme/assets/js/bootstrap.bundle.min.js"></script>
+<script src="/admin-theme/assets/js/metismenu.min.js"></script>
+<script src="/admin-theme/assets/js/waves.js"></script>
+<script src="/admin-theme/assets/js/simplebar.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js"></script>
+
+<!-- App js -->
+<script src="/admin-theme/assets/js/theme.js"></script>
+<script>
+    function toggleMoreMenu(e) {
+        e.preventDefault();
+        document.getElementById('mobileMoreMenu').classList.toggle('show');
+    }
+</script>
+
+<script>
+    const route = "/sale/available-product";
+
+    const downloadAs = (url, name) => {
+        axios.get(url, {
+            headers: {
+                "Content-Type": "application/octet-stream"
+            },
+            responseType: "blob"
+        })
+            .then(response => {
+                const a = document.createElement("a");
+                const url = window.URL.createObjectURL(response.data);
+                a.href = url;
+                a.download = name;
+                a.click();
+            })
+            .catch(err => {
+                console.log("error", err);
+            });
+    };
+
+    $(document).ready(function () {
+        $('#download-all-images').on('click', () => {
+            var images = document.getElementsByTagName('img');
+            var i = 0;
+            setInterval(function(){
+                if(images.length > i){
+                    if ($(images[i]).data('name')) {
+                        downloadAs(images[i].src, $(images[i]).data('name') + '.jpg');
+                    }
+                    i++;
+                }
+            }, 200);
+        });
+    });
+
+    const STORAGE_KEY = 'selectedProductImages';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        document.querySelectorAll('.product-checkbox').forEach(cb => {
+            const id = cb.dataset.id;
+            if (stored.find(p => p.id == id)) {
+                cb.checked = true;
+            }
+        });
+    });
+
+    function toggleSelection(checkbox) {
+        let stored = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const id = checkbox.dataset.id;
+        const img = checkbox.dataset.img;
+
+        if (checkbox.checked) {
+            if (!stored.find(p => p.id == id)) {
+                stored.push({ id, img });
+            }
+        } else {
+            stored = stored.filter(p => p.id != id);
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    }
+
+    const copyBtn = document.getElementById('copy-images');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            if (stored.length === 0) {
+                alert("Bạn chưa chọn ảnh nào!");
+                return;
+            }
+
+            const urls = stored.map(p => p.img).join('\n');
+            navigator.clipboard.writeText(urls).then(() => {
+                alert(`Đã copy ${stored.length} ảnh vào clipboard!`);
+            }).catch(err => {
+                alert("Lỗi khi copy vào clipboard: " + err);
+            });
+        });
+    }
+</script>
+
+{% block script %}{% endblock %}
+</body>
+</html>

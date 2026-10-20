@@ -1,0 +1,94 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="/sale/order-create">
+                        <input type="hidden" name="backRoute" value="{{ back_route }}">
+                        <input type="hidden" name="consumer_id" value="{{ consumer.ID }}">
+
+                        <div class="row">
+                            <div class="col-md-6 col-sm-12">
+                                <button type="submit" class="btn btn-secondary waves-effect waves-light btn-submit mb-4">
+                                    Save
+                                </button>
+                                <div class="form-group w-100">
+                                    <label>Name</label>
+                                    <input class="form-control" name="name" value="{{ consumer.Name }}">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Phone</label>
+                                    <input class="form-control" name="phone" value="{{ consumer.Phone }}">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Address</label>
+                                    <input class="form-control" name="address" value="{{ consumer.Address }}">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Note</label>
+                                    <input class="form-control" name="note">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Description / Note sửa đồ</label>
+                                    <textarea class="form-control" rows="4" name="desc"></textarea>
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Additional Amount</label>
+                                    <input type="number" class="form-control" name="additional_amount" value="0">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Sale Amount (Giảm giá)</label>
+                                    <input type="number" class="form-control" name="freeship_amount" value="0">
+                                </div>
+                                <div class="form-group w-100">
+                                    <label>Deposit Amount (Đã cọc)</label>
+                                    <input type="number" class="form-control" name="deposit_amount" value="0">
+                                </div>
+                                <div class="form-group w-100 ml-4">
+                                    <input class="form-check-input" type="checkbox" name="is_paid" id="is_paid">
+                                    <label class="form-check-label" for="is_paid">Is Paid Full</label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 col-sm-12">
+                                <h5>Select Available Products</h5>
+                                <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
+                                    <table class="table mb-0">
+                                        <thead>
+                                        <tr>
+                                            <th>Checked</th>
+                                            <th>Type</th>
+                                            <th>Name</th>
+                                            <th>Price</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        {% for prod in products %}
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input ml-4" type="checkbox" name="products[]" value="{{ prod.ID }}">
+                                                </td>
+                                                <td>{{ prod.Type }}</td>
+                                                <td>
+                                                    <a href="/sale/product/{{ prod.ID }}" target="_blank">{{ prod.Name }}</a>
+                                                </td>
+                                                <td>{{ prod.Price|number_format }}đ</td>
+                                            </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

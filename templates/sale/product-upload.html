@@ -1,0 +1,41 @@
+{% extends "master.html" %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-body">
+                    <h4 class="card-title mb-3">Upload Product Banners</h4>
+                    <form method="POST" action="/sale/product-upload" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Product Type</label>
+                            <select class="form-control" name="type">
+                                {% for t in product_types %}
+                                    <option value="{{ t }}">{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group w-100">
+                            <label>Choose Images (Multiple)</label>
+                            <div class="custom-file">
+                                <input multiple type="file" class="custom-file-input" id="customFile" name="banner">
+                                <label class="custom-file-label" for="customFile">Choose files...</label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary waves-effect waves-light btn-submit mt-3">
+                            Upload
+                        </button>
+                        <a href="/sale/product-batch-upload" class="btn btn-info waves-effect waves-light btn-submit mt-3 ml-2">
+                            🚀 Batch Upload Tool
+                        </a>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

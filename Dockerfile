@@ -17,9 +17,11 @@ ENV TZ=Asia/Ho_Chi_Minh
 
 WORKDIR /app
 
-# Copy binary and static assets
+# Copy binary, static assets, templates and public files
 COPY --from=builder /app/server /app/server
 COPY --from=builder /app/static /app/static
+COPY --from=builder /app/public /app/public
+COPY --from=builder /app/templates /app/templates
 
 ENV PORT=8080
 EXPOSE 8080
