@@ -837,10 +837,15 @@ func (h *SaleV1Handler) ProductBatchUploadSingle(c *gin.Context) {
 		matched = true
 	}
 
+	fullURL := uploadedPath
+	if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
+		fullURL = h.Storage.BaseURL + strings.TrimPrefix(uploadedPath, "storage/")
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"path":    uploadedPath,
-		"url":     h.Storage.BaseURL + strings.TrimPrefix(uploadedPath, "storage/"),
+		"url":     fullURL,
 		"matched": matched,
 		"product": baseName,
 	})

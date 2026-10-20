@@ -26,6 +26,9 @@ type StorageService struct {
 
 func NewStorageService() *StorageService {
 	cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
+	if cloudName == "" {
+		cloudName = "leq5n17r"
+	}
 	apiKey := os.Getenv("CLOUDINARY_API_KEY")
 	if apiKey == "" {
 		apiKey = "859827999643589"
