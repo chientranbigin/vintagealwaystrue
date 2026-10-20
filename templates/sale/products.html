@@ -113,7 +113,7 @@
                                     </td>
                                     <td>
                                         {% if p.PathThumb %}
-                                            <img src="{{ p.PathThumb|img_url }}" alt="" data-name="{{ p.Name }}" style="width:200px">
+                                            <img src="{{ p.DisplayThumb|img_url }}" onerror="if (this.src != '{{ p.PathThumb|img_url }}') this.src = '{{ p.PathThumb|img_url }}';" alt="" data-name="{{ p.Name }}" style="width:200px">
                                         {% endif %}
                                     </td>
                                     <td>{{ p.Price|number_format }}đ</td>

@@ -28,6 +28,17 @@ type Product struct {
 	ImageThumbScaleURL *string        `gorm:"-" json:"image_thumb_scale_url"`
 }
 
+// DisplayThumb returns ImageThumbScale if present, otherwise PathThumb
+func (p Product) DisplayThumb() string {
+	if p.ImageThumbScale != nil && *p.ImageThumbScale != "" {
+		return *p.ImageThumbScale
+	}
+	if p.PathThumb != nil {
+		return *p.PathThumb
+	}
+	return ""
+}
+
 type ProductImage struct {
 	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
 	ProductID uint       `json:"product_id"`
@@ -108,6 +119,7 @@ type ProductUploadLog struct {
 	Status       string     `json:"status"`
 	Message      *string    `json:"message"`
 	DetectedText *string    `json:"detected_text"`
+	Product      *Product   `gorm:"foreignKey:ProductID" json:"product,omitempty"`
 	CreatedAt    *time.Time `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at"`
 }

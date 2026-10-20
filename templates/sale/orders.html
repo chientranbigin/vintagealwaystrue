@@ -129,7 +129,7 @@
                                                     <a href="/sale/product/{{ prod.ID }}">
                                                         <b>{{ prod.Name }}</b><br/>
                                                         {% if prod.PathThumb %}
-                                                            <img src="{{ prod.PathThumb|img_url }}" alt="" height="100" class="ml-1" style="border-radius: 4px;">
+                                                            <img src="{{ prod.DisplayThumb|img_url }}" onerror="if (this.src != '{{ prod.PathThumb|img_url }}') this.src = '{{ prod.PathThumb|img_url }}';" alt="" height="100" class="ml-1" style="border-radius: 4px;">
                                                         {% endif %}
                                                     </a>
                                                 </div>

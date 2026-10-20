@@ -100,7 +100,7 @@
                                 <input type="checkbox"
                                        class="product-checkbox"
                                        data-id="{{ p.ID }}"
-                                       data-img="{{ p.PathThumb|img_url }}"
+                                       data-img="{{ p.DisplayThumb|img_url }}"
                                        onchange="toggleSelection(this)"
                                        style="position: absolute; right: 0px; top: 0px;">
                                 {{ p.Name }} - {{ p.Price|number_format }}đ <br>
@@ -111,7 +111,7 @@
 
                             {% if p.PathThumb %}
                                 <a href="/sale/product/{{ p.ID }}">
-                                    <img src="{{ p.PathThumb|img_url }}" data-name="{{ p.Name }}" alt="" style="width:100%; border-radius: 4px;">
+                                    <img src="{{ p.DisplayThumb|img_url }}" onerror="if (this.src != '{{ p.PathThumb|img_url }}') this.src = '{{ p.PathThumb|img_url }}';" data-name="{{ p.Name }}" alt="" style="width:100%; border-radius: 4px;">
                                 </a>
                             {% else %}
                                 <a href="/sale/product/{{ p.ID }}" class="btn btn-sm btn-outline-primary mt-2">

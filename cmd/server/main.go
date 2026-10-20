@@ -155,6 +155,7 @@ func main() {
 
 		api.GET("/dashboard-stats", v2.DashboardStats)
 		api.GET("/upload-sessions", v2.UploadSessions)
+		api.GET("/upload-sessions/:id/products", v2.UploadSessionProducts)
 		api.GET("/upload-logs", v2.UploadLogs)
 	}
 

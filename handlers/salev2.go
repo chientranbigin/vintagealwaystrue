@@ -649,6 +649,24 @@ func (h *SaleV2Handler) UploadSessions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 }
 
+func (h *SaleV2Handler) UploadSessionProducts(c *gin.Context) {
+	sessionID := c.Param("id")
+	var logs []models.ProductUploadLog
+	h.DB.Where("session_id = ?", sessionID).
+		Preload("Product.Images").
+		Preload("Product.Sizes").
+		Order("id ASC").
+		Find(&logs)
+
+	for i := range logs {
+		if logs[i].Product != nil {
+			h.formatProduct(logs[i].Product)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logs": logs})
+}
+
 func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
@@ -658,7 +676,13 @@ func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
 	h.DB.Model(&models.ProductUploadLog{}).Count(&total)
 
 	var logs []models.ProductUploadLog
-	h.DB.Order("id DESC").Limit(limit).Offset(offset).Find(&logs)
+	h.DB.Preload("Product.Images").Preload("Product.Sizes").Order("id DESC").Limit(limit).Offset(offset).Find(&logs)
+
+	for i := range logs {
+		if logs[i].Product != nil {
+			h.formatProduct(logs[i].Product)
+		}
+	}
 
 	c.JSON(http.StatusOK, LaravelPagination{
 		CurrentPage: page,
@@ -670,3 +694,4 @@ func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
 		Total:       total,
 	})
 }
+

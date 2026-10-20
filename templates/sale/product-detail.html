@@ -35,7 +35,7 @@
                                     </div>
                                     {% if product.PathThumb %}
                                         <div class="mt-3">
-                                            <img src="{{ product.PathThumb|img_url }}" alt="" height="300" style="border-radius: 8px; border: 1px solid #ddd;">
+                                            <img src="{{ product.DisplayThumb|img_url }}" onerror="if (this.src != '{{ product.PathThumb|img_url }}') this.src = '{{ product.PathThumb|img_url }}';" alt="" height="300" style="border-radius: 8px; border: 1px solid #ddd;">
                                         </div>
                                     {% endif %}
                                 </div>
