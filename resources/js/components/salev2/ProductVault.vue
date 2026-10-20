@@ -88,23 +88,36 @@
             </div>
         </div>
 
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100 mt-2">
-            <!-- Left: Selection Actions (No Scroll, Compact) -->
-            <div class="flex flex-nowrap w-full md:w-auto gap-2 flex-wrap">
-                <el-checkbox v-model="sortByUpload" @change="fetchProducts(1)" class="mr-1">
-                  <span class="text-sm font-bold text-slate-700">Sort by upload</span>
-                </el-checkbox>
-                <el-button size="small" @click="selectAllPage" icon="el-icon-check" plain class="flex-1 md:flex-none px-2">Select Page</el-button>
-                <el-button size="small" type="success" :disabled="!selectedProducts.length" icon="el-icon-share" @click="shareSelected" plain class="flex-1 md:flex-none px-2">
-                    Share <span v-if="selectedProducts.length">({{ selectedProducts.length }})</span>
-                </el-button>
-                <el-button size="small" type="info" icon="el-icon-download" plain @click="downloadAll" :loading="downloading" class="flex-1 md:flex-none px-2">Download</el-button>
-                <el-button size="small" type="danger" plain @click="clearSelection" icon="el-icon-delete" v-if="selectedProducts.length" class="flex-none px-3">Clear</el-button>
+        <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 pt-4 border-t border-slate-100 mt-2">
+            <!-- Left: Selection Actions -->
+            <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2.5 w-full md:w-auto">
+                <!-- Sort by upload & Mobile Clear -->
+                <div class="flex items-center justify-between gap-2 px-0.5 w-full md:w-auto">
+                    <el-checkbox v-model="sortByUpload" @change="fetchProducts(1)" class="mr-0">
+                        <span class="text-xs md:text-sm font-bold text-slate-700">Sort by upload</span>
+                    </el-checkbox>
+                    <!-- Clear button visible on mobile if items selected -->
+                    <el-button size="mini" type="danger" plain @click="clearSelection" icon="el-icon-delete" v-if="selectedProducts.length" class="md:hidden text-xs py-1.5 px-2.5">
+                        Clear ({{ selectedProducts.length }})
+                    </el-button>
+                </div>
+
+                <!-- Action buttons: Grid on mobile, inline on desktop -->
+                <div class="grid grid-cols-3 md:flex md:items-center gap-2 w-full md:w-auto">
+                    <el-button size="small" @click="selectAllPage" icon="el-icon-check" plain class="w-full md:w-auto text-xs md:text-sm px-1.5 md:px-3 justify-center">Select Page</el-button>
+                    <el-button size="small" type="success" :disabled="!selectedProducts.length" icon="el-icon-share" @click="shareSelected" plain class="w-full md:w-auto text-xs md:text-sm px-1.5 md:px-3 justify-center">
+                        Share <span v-if="selectedProducts.length">({{ selectedProducts.length }})</span>
+                    </el-button>
+                    <el-button size="small" type="info" icon="el-icon-download" plain @click="downloadAll" :loading="downloading" class="w-full md:w-auto text-xs md:text-sm px-1.5 md:px-3 justify-center">Download</el-button>
+                    <!-- Desktop Clear button -->
+                    <el-button size="small" type="danger" plain @click="clearSelection" icon="el-icon-delete" v-if="selectedProducts.length" class="hidden md:inline-flex px-3">Clear</el-button>
+                </div>
             </div>
+
             <!-- Right: Apply/Reset Actions -->
-            <div class="flex gap-3 w-full md:w-auto">
-                <el-button size="medium" @click="resetFilters" class="flex-1 md:flex-none">Reset</el-button>
-                <el-button type="primary" size="medium" @click="fetchProducts(1)" class="flex-1 md:flex-none px-6 shadow-md shadow-blue-200">Apply Filters</el-button>
+            <div class="grid grid-cols-2 md:flex gap-2 w-full md:w-auto mt-1 md:mt-0">
+                <el-button size="medium" @click="resetFilters" class="w-full md:w-auto">Reset</el-button>
+                <el-button type="primary" size="medium" @click="fetchProducts(1)" class="w-full md:w-auto px-4 md:px-6 shadow-md shadow-blue-200">Apply Filters</el-button>
             </div>
         </div>
       </div>
