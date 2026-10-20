@@ -32,7 +32,8 @@ func main() {
 		sqlDB.SetMaxIdleConns(10)
 		sqlDB.SetMaxOpenConns(50)
 	}
-	fmt.Println("Connected to TiDB Cloud successfully!")
+	db.Exec("SET time_zone = '+07:00'")
+	fmt.Println("Connected to TiDB Cloud successfully (time_zone = +07:00)!")
 
 	r := gin.Default()
 

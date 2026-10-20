@@ -598,7 +598,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
     $(document).ready(function() {
-        $(document).on('click', '.btn-capture', function() {
+        $(document).on('click', '.btn-capture', async function() {
             const $btn = $(this);
             const orderData = $btn.data('order');
             const $receipt = $('#order-receipt-template');
@@ -615,14 +615,25 @@
             $receipt.find('.c-note-box').toggle(!!orderData.note);
 
             const $prodContainer = $receipt.find('.c-products').empty();
+            const imgPromises = [];
             if (orderData.products && orderData.products.length > 0) {
                 orderData.products.forEach(p => {
-                    $prodContainer.append(`
+                    const $item = $(`
                         <div class="c-prod-item">
                             <img src="${p.path}" crossorigin="anonymous">
                             <div class="c-prod-code">${p.name}</div>
                         </div>
                     `);
+                    $prodContainer.append($item);
+                    const img = $item.find('img')[0];
+                    imgPromises.push(new Promise(resolve => {
+                        if (img.complete && img.naturalHeight !== 0) {
+                            resolve();
+                        } else {
+                            img.onload = () => resolve();
+                            img.onerror = () => resolve();
+                        }
+                    }));
                 });
             }
 
@@ -635,6 +646,12 @@
                 'opacity': '1', 'pointer-events': 'none', 'z-index': '9999', 'background': 'white',
                 'width': '450px'
             });
+
+            // Wait for all product images to load before capturing canvas
+            await Promise.race([
+                Promise.all(imgPromises),
+                new Promise(resolve => setTimeout(resolve, 4000))
+            ]);
 
             let currentCanvas = null;
             let currentBlob = null;

@@ -195,6 +195,24 @@ func formatNumberWithCommas(n int64) string {
 	return string(out)
 }
 
+type CaptureProductItem struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+type CaptureOrderPayload struct {
+	ID       uint                 `json:"id"`
+	Name     string               `json:"name"`
+	Phone    string               `json:"phone"`
+	Address  string               `json:"address"`
+	Note     string               `json:"note"`
+	Total    int64                `json:"total"`
+	Deposit  int64                `json:"deposit"`
+	Final    int64                `json:"final"`
+	IsPaid   bool                 `json:"is_paid"`
+	Products []CaptureProductItem `json:"products"`
+}
+
 type SaleV1Handler struct {
 	DB          *gorm.DB
 	Cfg         *config.Config
@@ -286,9 +304,13 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 		})
 	}
 
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		loc = time.FixedZone("UTC+7", 7*3600)
+	}
+	now := time.Now().In(loc)
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
 
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
@@ -296,13 +318,54 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
 
 	prevMonth := now.AddDate(0, -1, 0)
-	startOfPrevMonth := time.Date(prevMonth.Year(), prevMonth.Month(), 1, 0, 0, 0, 0, now.Location())
-	endOfPrevMonth := startOfPrevMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	startOfPrevMonth := time.Date(prevMonth.Year(), prevMonth.Month(), 1, 0, 0, 0, 0, loc)
+	endOfPrevMonth := startOfPrevMonth.AddDate(0, 1, 0).Add(-time.Second)
 
 	var prevTotalOrder int64
 	var prevTotalFinalPrice float64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Count(&prevTotalOrder)
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&prevTotalFinalPrice)
+
+	type MonthProductStat struct {
+		Type   string
+		Status string
+		Number int64
+	}
+
+	getMonthSold := func(start, end time.Time) map[string]int64 {
+		var stats []MonthProductStat
+		h.DB.Table("products").
+			Select("products.type, products.status, count(products.id) as number").
+			Joins("JOIN order_products ON products.id = order_products.product_id").
+			Joins("JOIN orders ON orders.id = order_products.order_id").
+			Where("orders.created_at BETWEEN ? AND ?", start, end).
+			Group("products.type, products.status").
+			Scan(&stats)
+
+		sold := make(map[string]int64)
+		for _, s := range stats {
+			if s.Status == "SOLD" {
+				sold[s.Type] = s.Number
+			}
+		}
+		return sold
+	}
+
+	curSold := getMonthSold(startOfMonth, endOfMonth)
+	prevSold := getMonthSold(startOfPrevMonth, endOfPrevMonth)
+
+	var curProductRows []ProductRow
+	var prevProductRows []ProductRow
+	for _, t := range ProductTypes {
+		curProductRows = append(curProductRows, ProductRow{
+			Type: t,
+			Sold: curSold[t],
+		})
+		prevProductRows = append(prevProductRows, ProductRow{
+			Type: t,
+			Sold: prevSold[t],
+		})
+	}
 
 	type MonthlyOrder struct {
 		Month       string
@@ -313,24 +376,23 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	h.DB.Table("orders").
 		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(id) as number, COALESCE(SUM(final_amount), 0) as final_amount").
 		Group("month").
-		Order("month DESC").
-		Limit(12).
+		Order("month ASC").
 		Scan(&orderByMonth)
 
 	h.render(c, "index.html", pongo2.Context{
-		"current_route":             "home",
-		"total_order":               totalOrder,
-		"total_final_price":         int64(totalFinalPrice),
-		"type_product_rows":         typeProductRows,
-		"total_sold":                totalSold,
-		"total_available":           totalAvail,
-		"previous_total_order":      prevTotalOrder,
+		"current_route":              "home",
+		"total_order":                totalOrder,
+		"total_final_price":          int64(totalFinalPrice),
+		"type_product_rows":          typeProductRows,
+		"total_sold":                 totalSold,
+		"total_available":            totalAvail,
+		"previous_total_order":       prevTotalOrder,
 		"previous_total_final_price": int64(prevTotalFinalPrice),
-		"prev_product_rows":         typeProductRows,
-		"current_total_order":       currentTotalOrder,
-		"current_total_final_price": int64(currentTotalFinalPrice),
-		"current_product_rows":      typeProductRows,
-		"order_by_month":            orderByMonth,
+		"prev_product_rows":          prevProductRows,
+		"current_total_order":        currentTotalOrder,
+		"current_total_final_price":  int64(currentTotalFinalPrice),
+		"current_product_rows":       curProductRows,
+		"order_by_month":             orderByMonth,
 	})
 }
 
@@ -903,11 +965,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	query := h.DB.Model(&models.Order{}).Preload("Products")
 
 	if status != "" {
-		if status == "NEW" || status == "open" {
-			query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
-		} else {
-			query = query.Where("status = ?", status).Order("id DESC")
-		}
+		query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
 	} else {
 		query = query.Order("id DESC")
 	}
@@ -929,12 +987,13 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 
 	var totalOrderNew int64
 	var totalOrderNewPrice float64
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Count(&totalOrderNew)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&totalOrderNew)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
 
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	loc, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
+	now := time.Now().In(loc)
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
 
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
@@ -967,6 +1026,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 		ViettelOrderAmount int64
 		IsPaid             bool
 		Products           []ProductItemView
+		CaptureJSON        string
 	}
 
 	var orderViews []OrderItemView
@@ -982,16 +1042,35 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 		}
 
 		var prodList []ProductItemView
+		var captureProds []CaptureProductItem
 		for _, p := range o.Products {
 			prodList = append(prodList, ProductItemView{
-				ID:        p.ID,
-				Name:      strVal(p.Name),
-				Type:      strVal(p.Type),
+				ID:           p.ID,
+				Name:         strVal(p.Name),
+				Type:         strVal(p.Type),
 				Price:        int64Val(p.Price),
 				DisplayThumb: getDisplayThumb(&p),
 				PathThumb:    strVal(p.PathThumb),
 			})
+			captureProds = append(captureProds, CaptureProductItem{
+				Name: strVal(p.Name),
+				Path: resolveImgURL(getDisplayThumb(&p)),
+			})
 		}
+
+		payload := CaptureOrderPayload{
+			ID:       o.ID,
+			Name:     strVal(o.Name),
+			Phone:    strVal(o.Phone),
+			Address:  strVal(o.Address),
+			Note:     strVal(o.Note),
+			Total:    tot,
+			Deposit:  dep,
+			Final:    rem,
+			IsPaid:   o.IsPaid,
+			Products: captureProds,
+		}
+		captureBytes, _ := json.Marshal(payload)
 
 		orderViews = append(orderViews, OrderItemView{
 			ID:                 o.ID,
@@ -1010,6 +1089,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 			ViettelOrderAmount: rem,
 			IsPaid:             o.IsPaid,
 			Products:           prodList,
+			CaptureJSON:        string(captureBytes),
 		})
 	}
 
@@ -1053,11 +1133,7 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	query := h.DB.Model(&models.Order{}).Preload("Products")
 
 	if status != "" {
-		if status == "NEW" || status == "open" {
-			query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
-		} else {
-			query = query.Where("status = ?", status).Order("id DESC")
-		}
+		query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
 	} else {
 		query = query.Order("id DESC")
 	}
@@ -1092,7 +1168,7 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 			Select("COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total").
 			Joins("JOIN orders ON orders.id = order_products.order_id").
 			Joins("JOIN products ON products.id = order_products.product_id").
-			Where("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", dateStr).
+			Where("DATE(orders.created_at) = ?", dateStr).
 			Scan(&res)
 		return res
 	}
@@ -1101,15 +1177,15 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	yesterdayStat := soldByDay(yesterdayStr)
 
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
-	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
 
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
 	h.DB.Table("orders").
-		Where("created_at BETWEEN ? AND ?", startOfMonth.UTC(), endOfMonth.UTC()).
+		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
 		Count(&currentTotalOrder)
 	h.DB.Table("orders").
-		Where("created_at BETWEEN ? AND ?", startOfMonth.UTC(), endOfMonth.UTC()).
+		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
 		Select("COALESCE(SUM(final_amount), 0)").
 		Scan(&currentTotalFinalPrice)
 
@@ -1118,24 +1194,6 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		Name         string
 		DisplayThumb string
 		PathThumb    string
-	}
-
-	type CaptureProductItem struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
-	}
-
-	type CaptureOrderPayload struct {
-		ID       uint                 `json:"id"`
-		Name     string               `json:"name"`
-		Phone    string               `json:"phone"`
-		Address  string               `json:"address"`
-		Note     string               `json:"note"`
-		Total    int64                `json:"total"`
-		Deposit  int64                `json:"deposit"`
-		Final    int64                `json:"final"`
-		IsPaid   bool                 `json:"is_paid"`
-		Products []CaptureProductItem `json:"products"`
 	}
 
 	type SummaryOrderView struct {

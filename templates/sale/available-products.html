@@ -57,10 +57,10 @@
                         <a href="/sale/available-product" class="btn btn-light waves-effect waves-light btn-submit mt-3">
                             Clear
                         </a>
-                        <span id="download-all-images" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right">
+                        <span id="download-all-images" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right d-none d-md-inline-block">
                             Download
                         </span>
-                        <a href="/sale/available-product?showAll=true" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right mr-3">
+                        <a href="/sale/available-product?showAll=true" class="btn btn-light waves-effect waves-light btn-submit mt-3 float-right mr-3 d-none d-md-inline-block">
                             Show All
                         </a>
                     </div>
@@ -68,14 +68,6 @@
             </form>
 
             <div class="py-3">
-                <div class="d-flex mb-3">
-                    <span id="copy-images" class="btn btn-light waves-effect waves-light btn-submit mr-3 float-right">
-                        📋 Copy image
-                    </span>
-                    <button onclick="localStorage.removeItem('selectedProductImages'); alert('Đã xoá danh sách đã chọn!')" class="btn btn-light waves-effect waves-light btn-submit">
-                        🗑 Clear Selected
-                    </button>
-                </div>
                 <b>Showing {{ pagination.From }} to {{ pagination.To }} of {{ pagination.Total }} entries</b>
             </div>
 
@@ -97,12 +89,6 @@
                     <div class="col-lg-2 col-md-4 col-sm-6 card">
                         <div class="card-body text-center pl-0 pr-0">
                             <h4 class="card-title">
-                                <input type="checkbox"
-                                       class="product-checkbox"
-                                       data-id="{{ p.ID }}"
-                                       data-img="{{ p.DisplayThumb|img_url }}"
-                                       onchange="toggleSelection(this)"
-                                       style="position: absolute; right: 0px; top: 0px;">
                                 {{ p.Name }} - {{ p.Price|number_format }}đ <br>
                                 <span class="right badge badge-info" style="font-size: 100%">
                                     {{ p.SizeFormatted }}
@@ -120,7 +106,7 @@
                             {% endif %}
 
                             {% if p.FBPostID %}
-                                <div class="copy-fb-link" data-fb-post-id="{{ p.FBPostID }}" style="font-size: 16px; color: #007bff; cursor: pointer; margin-top: 6px; font-weight: 500;">
+                                <div class="copy-fb-link" data-fb-post-id="{{ p.FBPostID }}" style="font-size: 13px; color: #0d6efd; cursor: pointer; margin-top: 5px; font-weight: 500;">
                                     Copy link
                                 </div>
                             {% endif %}

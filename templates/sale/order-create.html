@@ -69,8 +69,8 @@
                                         <tbody>
                                         {% for prod in products %}
                                             <tr>
-                                                <td>
-                                                    <input class="form-check-input ml-4" type="checkbox" name="products[]" value="{{ prod.ID }}">
+                                                <td style="text-align: center; vertical-align: middle;">
+                                                    <input type="checkbox" name="products[]" value="{{ prod.ID }}" style="position: static !important; margin: 0 !important; cursor: pointer; width: 18px; height: 18px;">
                                                 </td>
                                                 <td>{{ prod.Type }}</td>
                                                 <td>
