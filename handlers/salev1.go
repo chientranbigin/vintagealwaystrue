@@ -807,6 +807,9 @@ func (h *SaleV1Handler) ProductCreate(c *gin.Context) {
 		var latest models.Product
 		h.DB.Where("type = ?", pType).Order("id DESC").First(&latest)
 		prefix := ProductKeyTypes[pType]
+		if prefix == "" {
+			prefix = pType
+		}
 		re := regexp.MustCompile(`\d+`)
 		num := 1
 		if latest.Name != nil {
@@ -834,32 +837,241 @@ func (h *SaleV1Handler) ProductCreate(c *gin.Context) {
 
 		h.DB.Create(&p)
 
-		sizeNames := c.PostFormArray("size_names[]")
-		sizeValues := c.PostFormArray("size_values[]")
-		for i, name := range sizeNames {
-			if i < len(sizeValues) && sizeValues[i] != "" {
-				val, err := strconv.ParseFloat(sizeValues[i], 64)
-				if err == nil && val > 0 {
+		var measurementParts []string
+
+		// Parse sizes[i][name] and sizes[i][value]
+		for i := 0; i < 30; i++ {
+			sName := c.PostForm(fmt.Sprintf("sizes[%d][name]", i))
+			sValStr := c.PostForm(fmt.Sprintf("sizes[%d][value]", i))
+			if sName != "" && sValStr != "" {
+				val, err := strconv.ParseFloat(sValStr, 64)
+				if err == nil {
 					pID := p.ID
 					h.DB.Create(&models.Size{
 						ProductID: &pID,
-						Name:      strPtr(name),
+						Name:      strPtr(sName),
 						Value:     float64Ptr(val),
 					})
+					measurementParts = append(measurementParts, fmt.Sprintf("%s: %s", sName, sValStr))
 				}
 			}
+		}
+
+		// Also check legacy size_names[] and size_values[] if no sizes were found
+		if len(measurementParts) == 0 {
+			sizeNames := c.PostFormArray("size_names[]")
+			sizeValues := c.PostFormArray("size_values[]")
+			for i, name := range sizeNames {
+				if i < len(sizeValues) && sizeValues[i] != "" {
+					val, err := strconv.ParseFloat(sizeValues[i], 64)
+					if err == nil && val > 0 {
+						pID := p.ID
+						h.DB.Create(&models.Size{
+							ProductID: &pID,
+							Name:      strPtr(name),
+							Value:     float64Ptr(val),
+						})
+						measurementParts = append(measurementParts, fmt.Sprintf("%s: %s", name, sizeValues[i]))
+					}
+				}
+			}
+		}
+
+		isAjax := c.GetHeader("X-Requested-With") == "XMLHttpRequest" || strings.Contains(c.GetHeader("Accept"), "application/json")
+		if isAjax {
+			c.JSON(http.StatusOK, gin.H{
+				"success":      true,
+				"product_code": *p.Name,
+				"measurements": strings.Join(measurementParts, ", "),
+			})
+			return
 		}
 
 		c.Redirect(http.StatusFound, "/sale/product")
 		return
 	}
 
+	type SizeItem struct {
+		Index int
+		Name  string
+	}
+	var sizesAo []SizeItem
+	var sizesQuan []SizeItem
+	for i, s := range SizeList {
+		if i < 6 {
+			sizesAo = append(sizesAo, SizeItem{Index: i, Name: s})
+		} else {
+			sizesQuan = append(sizesQuan, SizeItem{Index: i, Name: s})
+		}
+	}
+
 	h.render(c, "product-create.html", pongo2.Context{
 		"current_route":    "products",
 		"product_types":    ProductTypes,
+		"sizes_ao":         sizesAo,
+		"sizes_quan":       sizesQuan,
 		"size_inputs_col1": SizeList[:6],
 		"size_inputs_col2": SizeList[6:],
 	})
+}
+
+// UploadSessions renders the upload sessions view for V1
+func (h *SaleV1Handler) UploadSessions(c *gin.Context) {
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil || loc == nil {
+		loc = time.FixedZone("Asia/Ho_Chi_Minh", 7*3600)
+	}
+
+	type RawSession struct {
+		SessionID string    `json:"session_id"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+
+	var rawSessions []RawSession
+	h.DB.Model(&models.ProductUploadLog{}).
+		Select("session_id, MIN(created_at) as created_at").
+		Group("session_id").
+		Order("created_at DESC").
+		Scan(&rawSessions)
+
+	var sessionIDs []string
+	for _, s := range rawSessions {
+		sessionIDs = append(sessionIDs, s.SessionID)
+	}
+
+	type ProductStat struct {
+		SessionID string `json:"session_id"`
+		Type      string `json:"type"`
+		Status    string `json:"status"`
+		Count     int    `json:"count"`
+	}
+
+	var stats []ProductStat
+	if len(sessionIDs) > 0 {
+		h.DB.Table("product_upload_logs").
+			Joins("JOIN products ON products.id = product_upload_logs.product_id").
+			Where("product_upload_logs.session_id IN ?", sessionIDs).
+			Select("product_upload_logs.session_id, products.type, products.status, count(*) as count").
+			Group("product_upload_logs.session_id, products.type, products.status").
+			Scan(&stats)
+	}
+
+	statsMap := make(map[string][]ProductStat)
+	for _, st := range stats {
+		statsMap[st.SessionID] = append(statsMap[st.SessionID], st)
+	}
+
+	type TypeCount struct {
+		Type  string
+		Count int
+	}
+
+	type V1SessionView struct {
+		SessionID          string
+		CreatedAtFormatted string
+		WeekStr            string
+		ShowWeekSeparator  bool
+		TotalProducts      int
+		SoldProducts       int
+		TypeBreakdown      []TypeCount
+	}
+
+	var sessions []V1SessionView
+	var lastWeek string
+
+	for _, s := range rawSessions {
+		tInLoc := s.CreatedAt.In(loc)
+		year, week := tInLoc.ISOWeek()
+		weekStr := fmt.Sprintf("%02d/%d", week, year)
+		showSep := (weekStr != lastWeek)
+		if showSep {
+			lastWeek = weekStr
+		}
+
+		total := 0
+		sold := 0
+		typeCountMap := make(map[string]int)
+
+		for _, st := range statsMap[s.SessionID] {
+			total += st.Count
+			if st.Status == "SOLD" {
+				sold += st.Count
+			}
+			if st.Type != "" {
+				typeCountMap[st.Type] += st.Count
+			}
+		}
+
+		var typeBreakdown []TypeCount
+		for _, pt := range ProductTypes {
+			if cnt, ok := typeCountMap[pt]; ok && cnt > 0 {
+				typeBreakdown = append(typeBreakdown, TypeCount{Type: pt, Count: cnt})
+			}
+		}
+		for t, cnt := range typeCountMap {
+			found := false
+			for _, pt := range ProductTypes {
+				if pt == t {
+					found = true
+					break
+				}
+			}
+			if !found {
+				typeBreakdown = append(typeBreakdown, TypeCount{Type: t, Count: cnt})
+			}
+		}
+
+		sessions = append(sessions, V1SessionView{
+			SessionID:          s.SessionID,
+			CreatedAtFormatted: tInLoc.Format("02/01/2006 15:04"),
+			WeekStr:            weekStr,
+			ShowWeekSeparator:  showSep,
+			TotalProducts:      total,
+			SoldProducts:       sold,
+			TypeBreakdown:      typeBreakdown,
+		})
+	}
+
+	h.render(c, "upload-sessions.html", pongo2.Context{
+		"current_route": "upload_sessions",
+		"sessions":      sessions,
+		"product_types": ProductTypes,
+	})
+}
+
+// UploadSessionProducts returns products in a session as JSON
+func (h *SaleV1Handler) UploadSessionProducts(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	if sessionID == "" {
+		sessionID = c.Param("id")
+	}
+
+	var logs []models.ProductUploadLog
+	h.DB.Table("product_upload_logs").
+		Where("product_upload_logs.session_id = ?", sessionID).
+		Joins("LEFT JOIN products ON products.id = product_upload_logs.product_id").
+		Preload("Product.Images").
+		Preload("Product.Sizes").
+		Order("CASE WHEN products.status = 'SOLD' THEN 0 ELSE 1 END, product_upload_logs.id ASC").
+		Find(&logs)
+
+	for i := range logs {
+		if logs[i].Product != nil {
+			if logs[i].Product.PathThumb != nil && *logs[i].Product.PathThumb != "" {
+				formatted := resolveImgURL(*logs[i].Product.PathThumb)
+				logs[i].Product.PathThumb = &formatted
+			}
+			if logs[i].Product.ImageThumbScale != nil && *logs[i].Product.ImageThumbScale != "" {
+				formatted := resolveImgURL(*logs[i].Product.ImageThumbScale)
+				logs[i].Product.ImageThumbScaleURL = &formatted
+			}
+			for j := range logs[i].Product.Images {
+				logs[i].Product.Images[j].FilePath = resolveImgURL(logs[i].Product.Images[j].FilePath)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logs": logs})
 }
 
 // 6. Product Delete

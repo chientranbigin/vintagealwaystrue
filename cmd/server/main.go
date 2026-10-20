@@ -130,6 +130,8 @@ func main() {
 		sale.GET("/ship/:id", v1.OrderShip)
 		sale.GET("/hold/:id", v1.OrderHold)
 		sale.GET("/consumer", v1.Consumers)
+		sale.GET("/upload-sessions", v1.UploadSessions)
+		sale.GET("/upload-sessions/:sessionId/products", v1.UploadSessionProducts)
 	}
 
 	// ==========================================
@@ -158,6 +160,9 @@ func main() {
 		api.GET("/dashboard-stats", v2.DashboardStats)
 		api.GET("/upload-sessions", v2.UploadSessions)
 		api.GET("/upload-sessions/:id/products", v2.UploadSessionProducts)
+		api.GET("/products-by-upload", v2.ProductsByLatestUpload)
+		api.GET("/sold-by-date", v2.SoldByDate)
+		api.GET("/sold-by-date/:date/products", v2.SoldByDateProducts)
 		api.GET("/upload-logs", v2.UploadLogs)
 	}
 

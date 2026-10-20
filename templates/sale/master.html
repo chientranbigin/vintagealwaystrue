@@ -278,6 +278,9 @@
                     <li class="nav-item {% if current_route == 'upload' %}active{% endif %}">
                         <a href="/sale/product-batch-upload" class="nav-link">Upload</a>
                     </li>
+                    <li class="nav-item {% if current_route == 'upload_sessions' %}active{% endif %}">
+                        <a href="/sale/upload-sessions" class="nav-link">Sessions</a>
+                    </li>
                     <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
                         <a href="/sale/consumer" class="nav-link">Consumers</a>
                     </li>
@@ -319,6 +322,11 @@
                         <i class="mdi mdi-plus-box-outline mr-2"></i> Create Product
                     </a>
                 </li>
+                <li class="nav-item {% if current_route == 'upload_sessions' %}active{% endif %}">
+                    <a href="/sale/upload-sessions" class="nav-link">
+                        <i class="mdi mdi-history mr-2"></i> Sessions
+                    </a>
+                </li>
                 <li class="nav-item {% if current_route == 'consumers' %}active{% endif %}">
                     <a href="/sale/consumer" class="nav-link">
                         <i class="mdi mdi-account-multiple-outline mr-2"></i> Consumers
@@ -340,6 +348,7 @@
 <!-- Scripts -->
 <script src="/admin-theme/assets/js/jquery.min.js"></script>
 <script src="/admin-theme/assets/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.8/axios.min.js"></script>
 <script src="/admin-theme/assets/js/metismenu.min.js"></script>
 <script src="/admin-theme/assets/js/waves.js"></script>
 <script src="/admin-theme/assets/js/simplebar.min.js"></script>

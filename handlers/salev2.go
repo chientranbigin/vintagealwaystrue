@@ -171,9 +171,9 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 	if page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "12"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if limit < 1 {
-		limit = 12
+		limit = 10
 	}
 	offset := (page - 1) * limit
 
@@ -600,62 +600,218 @@ func (h *SaleV2Handler) ConsumerDetail(c *gin.Context) {
 }
 
 func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
-	var totalProducts int64
-	var availableProducts int64
-	var soldProducts int64
-	var totalOrders int64
-	var totalRevenue int64
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil || loc == nil {
+		loc = time.FixedZone("Asia/Ho_Chi_Minh", 7*3600)
+	}
 
-	h.DB.Model(&models.Product{}).Count(&totalProducts)
-	h.DB.Model(&models.Product{}).Where("status = ?", "AVAILABLE").Count(&availableProducts)
-	h.DB.Model(&models.Product{}).Where("status = ?", "SOLD").Count(&soldProducts)
-	h.DB.Model(&models.Order{}).Count(&totalOrders)
-	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(total_amount), 0)").Scan(&totalRevenue)
+	now := time.Now().In(loc)
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+
+	prevMonthDate := startOfMonth.AddDate(0, -1, 0)
+	startOfPrevMonth := time.Date(prevMonthDate.Year(), prevMonthDate.Month(), 1, 0, 0, 0, 0, loc)
+	endOfPrevMonth := startOfPrevMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+
+	// All orders
+	var allOrdersCount int64
+	var allOrdersRevenue int64
+	h.DB.Model(&models.Order{}).Count(&allOrdersCount)
+	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(final_amount), 0)").Scan(&allOrdersRevenue)
 
 	type TypeStat struct {
 		Type   string `json:"type"`
 		Status string `json:"status"`
 		Count  int64  `json:"count"`
 	}
-	var typeStats []TypeStat
-	h.DB.Model(&models.Product{}).Select("type, status, count(*) as count").Group("type, status").Scan(&typeStats)
+	var allTypeStats []TypeStat
+	h.DB.Model(&models.Product{}).Select("type, status, count(*) as count").Group("type, status").Scan(&allTypeStats)
+
+	// New/Hold orders
+	var newOrdersCount int64
+	var newOrdersRevenue int64
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&newOrdersCount)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&newOrdersRevenue)
+
+	// Current Month
+	var curMonthOrdersCount int64
+	var curMonthOrdersRevenue int64
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Count(&curMonthOrdersCount)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&curMonthOrdersRevenue)
+
+	type SoldTypeStat struct {
+		Type  string `json:"type"`
+		Count int64  `json:"count"`
+	}
+	var currentTypeStats []SoldTypeStat
+	h.DB.Table("products").
+		Joins("JOIN order_products ON products.id = order_products.product_id").
+		Joins("JOIN orders ON orders.id = order_products.order_id").
+		Where("orders.created_at BETWEEN ? AND ? AND products.status = 'SOLD'", startOfMonth, endOfMonth).
+		Select("products.type, count(*) as count").
+		Group("products.type").
+		Scan(&currentTypeStats)
+
+	// Prev Month
+	var prevMonthOrdersCount int64
+	var prevMonthOrdersRevenue int64
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Count(&prevMonthOrdersCount)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&prevMonthOrdersRevenue)
+
+	var prevTypeStats []SoldTypeStat
+	h.DB.Table("products").
+		Joins("JOIN order_products ON products.id = order_products.product_id").
+		Joins("JOIN orders ON orders.id = order_products.order_id").
+		Where("orders.created_at BETWEEN ? AND ? AND products.status = 'SOLD'", startOfPrevMonth, endOfPrevMonth).
+		Select("products.type, count(*) as count").
+		Group("products.type").
+		Scan(&prevTypeStats)
+
+	// Order counts by status
+	type OrderCount struct {
+		Status string `json:"status"`
+		Count  int64  `json:"count"`
+	}
+	var orderCounts []OrderCount
+	h.DB.Model(&models.Order{}).Select("status, count(*) as count").Group("status").Scan(&orderCounts)
+
+	// Monthly Sales (last 12 months)
+	sub12Months := now.AddDate(0, -12, 0)
+	type MonthlySale struct {
+		Month       string `json:"month"`
+		Number      int64  `json:"number"`
+		FinalAmount int64  `json:"final_amount"`
+	}
+	var monthlySales []MonthlySale
+	h.DB.Model(&models.Order{}).
+		Select("DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+07:00'), '%Y-%m') as month, count(*) as number, COALESCE(sum(final_amount), 0) as final_amount").
+		Where("created_at >= ?", sub12Months).
+		Group("month").
+		Order("month ASC").
+		Scan(&monthlySales)
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_products":     totalProducts,
-		"available_products": availableProducts,
-		"sold_products":      soldProducts,
-		"total_orders":       totalOrders,
-		"total_revenue":      totalRevenue,
-		"type_stats":         typeStats,
+		"new_orders_count":     newOrdersCount,
+		"new_orders_revenue":   newOrdersRevenue,
+		"month_orders_count":   curMonthOrdersCount,
+		"month_orders_revenue": curMonthOrdersRevenue,
+		"all": gin.H{
+			"total_orders":  allOrdersCount,
+			"total_revenue": allOrdersRevenue,
+			"type_stats":    allTypeStats,
+		},
+		"current_month": gin.H{
+			"total_orders":  curMonthOrdersCount,
+			"total_revenue": curMonthOrdersRevenue,
+			"type_stats":    currentTypeStats,
+		},
+		"prev_month": gin.H{
+			"total_orders":  prevMonthOrdersCount,
+			"total_revenue": prevMonthOrdersRevenue,
+			"type_stats":    prevTypeStats,
+		},
+		"order_counts":  orderCounts,
+		"monthly_sales": monthlySales,
+
+		// Flat keys for backwards compatibility:
+		"total_orders":  allOrdersCount,
+		"total_revenue": allOrdersRevenue,
+		"type_stats":    allTypeStats,
 	})
 }
 
 func (h *SaleV2Handler) UploadSessions(c *gin.Context) {
-	type SessionSummary struct {
-		SessionID    string    `json:"session_id"`
-		TotalFiles   int64     `json:"total_files"`
-		SuccessFiles int64     `json:"success_files"`
-		FirstUpload  time.Time `json:"first_upload"`
+	type RawSession struct {
+		SessionID string    `json:"session_id"`
+		CreatedAt time.Time `json:"created_at"`
 	}
 
-	var sessions []SessionSummary
+	var rawSessions []RawSession
 	h.DB.Model(&models.ProductUploadLog{}).
-		Select("session_id, COUNT(*) as total_files, SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as success_files, MIN(created_at) as first_upload").
+		Select("session_id, MIN(created_at) as created_at").
 		Group("session_id").
-		Order("first_upload DESC").
-		Limit(50).
-		Scan(&sessions)
+		Order("created_at DESC").
+		Scan(&rawSessions)
+
+	if len(rawSessions) == 0 {
+		c.JSON(http.StatusOK, gin.H{"sessions": []interface{}{}})
+		return
+	}
+
+	var sessionIDs []string
+	for _, s := range rawSessions {
+		sessionIDs = append(sessionIDs, s.SessionID)
+	}
+
+	type ProductStat struct {
+		SessionID string `json:"session_id"`
+		Type      string `json:"type"`
+		Status    string `json:"status"`
+		Count     int    `json:"count"`
+	}
+
+	var stats []ProductStat
+	h.DB.Table("product_upload_logs").
+		Joins("JOIN products ON products.id = product_upload_logs.product_id").
+		Where("product_upload_logs.session_id IN ?", sessionIDs).
+		Select("product_upload_logs.session_id, products.type, products.status, count(*) as count").
+		Group("product_upload_logs.session_id, products.type, products.status").
+		Scan(&stats)
+
+	statsMap := make(map[string][]ProductStat)
+	for _, st := range stats {
+		statsMap[st.SessionID] = append(statsMap[st.SessionID], st)
+	}
+
+	type SessionOut struct {
+		SessionID     string         `json:"session_id"`
+		CreatedAt     string         `json:"created_at"`
+		TotalProducts int            `json:"total_products"`
+		SoldProducts  int            `json:"sold_products"`
+		TypeBreakdown map[string]int `json:"type_breakdown"`
+	}
+
+	var sessions []SessionOut
+	for _, s := range rawSessions {
+		total := 0
+		sold := 0
+		breakdown := make(map[string]int)
+
+		for _, st := range statsMap[s.SessionID] {
+			total += st.Count
+			if st.Status == "SOLD" {
+				sold += st.Count
+			}
+			if st.Type != "" {
+				breakdown[st.Type] += st.Count
+			}
+		}
+
+		sessions = append(sessions, SessionOut{
+			SessionID:     s.SessionID,
+			CreatedAt:     s.CreatedAt.Format("2006-01-02 15:04:05"),
+			TotalProducts: total,
+			SoldProducts:  sold,
+			TypeBreakdown: breakdown,
+		})
+	}
 
 	c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 }
 
 func (h *SaleV2Handler) UploadSessionProducts(c *gin.Context) {
 	sessionID := c.Param("id")
+	if sessionID == "" {
+		sessionID = c.Param("sessionId")
+	}
+
 	var logs []models.ProductUploadLog
-	h.DB.Where("session_id = ?", sessionID).
+	h.DB.Table("product_upload_logs").
+		Where("product_upload_logs.session_id = ?", sessionID).
+		Joins("LEFT JOIN products ON products.id = product_upload_logs.product_id").
 		Preload("Product.Images").
 		Preload("Product.Sizes").
-		Order("id ASC").
+		Order("CASE WHEN products.status = 'SOLD' THEN 0 ELSE 1 END, product_upload_logs.id ASC").
 		Find(&logs)
 
 	for i := range logs {
@@ -665,6 +821,163 @@ func (h *SaleV2Handler) UploadSessionProducts(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"logs": logs})
+}
+
+func (h *SaleV2Handler) ProductsByLatestUpload(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "60"))
+	if limit < 1 {
+		limit = 60
+	}
+	offset := (page - 1) * limit
+
+	subQuery := "(SELECT product_id, MAX(created_at) as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary"
+
+	query := h.DB.Model(&models.Product{}).
+		Joins("LEFT JOIN " + subQuery + " ON upload_summary.product_id = products.id").
+		Where("products.path_thumb IS NOT NULL AND products.path_thumb != ''")
+
+	if status := c.Query("status"); status != "" {
+		query = query.Where("products.status = ?", status)
+	}
+	if pType := c.Query("type"); pType != "" {
+		query = query.Where("products.type = ?", pType)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var products []models.Product
+	query.Select("products.*, upload_summary.latest_upload").
+		Preload("Images").
+		Preload("Sizes").
+		Order("COALESCE(upload_summary.latest_upload, products.created_at) DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&products)
+
+	for i := range products {
+		h.formatProduct(&products[i])
+	}
+
+	c.JSON(http.StatusOK, LaravelPagination{
+		CurrentPage: page,
+		Data:        products,
+		From:        offset + 1,
+		LastPage:    int(math.Ceil(float64(total) / float64(limit))),
+		PerPage:     limit,
+		To:          offset + len(products),
+		Total:       total,
+	})
+}
+
+func (h *SaleV2Handler) SoldByDate(c *gin.Context) {
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil || loc == nil {
+		loc = time.FixedZone("Asia/Ho_Chi_Minh", 7*3600)
+	}
+
+	type ActualRow struct {
+		Date         string `json:"date"`
+		Total        int    `json:"total"`
+		TotalRevenue int64  `json:"total_revenue"`
+		Types        string `json:"types"`
+	}
+
+	var actualRows []ActualRow
+	h.DB.Table("order_products").
+		Joins("JOIN products ON products.id = order_products.product_id").
+		Joins("JOIN orders ON orders.id = order_products.order_id").
+		Select("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d') as date, COUNT(*) as total, COALESCE(SUM(products.price), 0) as total_revenue, GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ',') as types").
+		Group("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d')").
+		Scan(&actualRows)
+
+	if len(actualRows) == 0 {
+		c.JSON(http.StatusOK, gin.H{"dates": []interface{}{}})
+		return
+	}
+
+	actualMap := make(map[string]ActualRow)
+	var earliestStr string
+	for _, r := range actualRows {
+		actualMap[r.Date] = r
+		if earliestStr == "" || r.Date < earliestStr {
+			earliestStr = r.Date
+		}
+	}
+
+	earliest, err := time.ParseInLocation("2006-01-02", earliestStr, loc)
+	if err != nil {
+		earliest = time.Now().In(loc).AddDate(0, -1, 0)
+	}
+
+	today := time.Now().In(loc)
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
+
+	type DateOut struct {
+		Date          string         `json:"date"`
+		Total         int            `json:"total"`
+		TotalRevenue  int64          `json:"total_revenue"`
+		TypeBreakdown map[string]int `json:"type_breakdown"`
+		IsEmpty       bool           `json:"is_empty"`
+	}
+
+	var allDates []DateOut
+	for d := today; !d.Before(earliest); d = d.AddDate(0, 0, -1) {
+		dateStr := d.Format("2006-01-02")
+		if row, ok := actualMap[dateStr]; ok {
+			breakdown := make(map[string]int)
+			if row.Types != "" {
+				for _, t := range strings.Split(row.Types, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						breakdown[t]++
+					}
+				}
+			}
+			allDates = append(allDates, DateOut{
+				Date:          dateStr,
+				Total:         row.Total,
+				TotalRevenue:  row.TotalRevenue,
+				TypeBreakdown: breakdown,
+				IsEmpty:       false,
+			})
+		} else {
+			allDates = append(allDates, DateOut{
+				Date:          dateStr,
+				Total:         0,
+				TotalRevenue:  0,
+				TypeBreakdown: make(map[string]int),
+				IsEmpty:       true,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"dates": allDates})
+}
+
+func (h *SaleV2Handler) SoldByDateProducts(c *gin.Context) {
+	date := c.Param("date")
+	var products []models.Product
+
+	h.DB.Table("products").
+		Joins("JOIN order_products ON order_products.product_id = products.id").
+		Joins("JOIN orders ON orders.id = order_products.order_id").
+		Where("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d') = ?", date).
+		Select("products.*").
+		Preload("Images").
+		Preload("Sizes").
+		Order("orders.created_at DESC").
+		Find(&products)
+
+	for i := range products {
+		h.formatProduct(&products[i])
+	}
+
+	c.JSON(http.StatusOK, gin.H{"products": products})
 }
 
 func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
