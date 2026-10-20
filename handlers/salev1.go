@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -151,6 +152,27 @@ func init() {
 		}
 		return pongo2.AsValue(baseURL + clean), nil
 	})
+}
+
+func resolveImgURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	clean := strings.TrimLeft(path, "/")
+	baseURL := os.Getenv("MEDIA_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://www.tadimedia.vn/storage/"
+	}
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	if strings.HasPrefix(clean, "storage/") {
+		clean = strings.TrimPrefix(clean, "storage/")
+	}
+	return baseURL + clean
 }
 
 func formatNumberWithCommas(n int64) string {
@@ -534,6 +556,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 		Price         int64
 		DisplayThumb  string
 		PathThumb     string
+		FBPostID      string
 		SizeFormatted string
 	}
 	var productViews []ProductView
@@ -545,6 +568,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 			Price:         int64Val(p.Price),
 			DisplayThumb:  getDisplayThumb(&p),
 			PathThumb:     strVal(p.PathThumb),
+			FBPostID:      strVal(p.FBPostID),
 			SizeFormatted: sizeStr,
 		})
 	}
@@ -1049,25 +1073,69 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	var orders []models.Order
 	query.Limit(100).Find(&orders)
 
-	var totalOrderNew int64
-	var totalOrderNewPrice float64
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Count(&totalOrderNew)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		loc = time.FixedZone("UTC+7", 7*3600)
+	}
+	now := time.Now().In(loc)
+	todayStr := now.Format("2006-01-02")
+	yesterdayStr := now.AddDate(0, 0, -1).Format("2006-01-02")
 
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	type StatResult struct {
+		Count int64
+		Total float64
+	}
+
+	soldByDay := func(dateStr string) StatResult {
+		var res StatResult
+		h.DB.Table("order_products").
+			Select("COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total").
+			Joins("JOIN orders ON orders.id = order_products.order_id").
+			Joins("JOIN products ON products.id = order_products.product_id").
+			Where("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", dateStr).
+			Scan(&res)
+		return res
+	}
+
+	todayStat := soldByDay(todayStr)
+	yesterdayStat := soldByDay(yesterdayStr)
+
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
 	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Count(&currentTotalOrder)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
+	h.DB.Table("orders").
+		Where("created_at BETWEEN ? AND ?", startOfMonth.UTC(), endOfMonth.UTC()).
+		Count(&currentTotalOrder)
+	h.DB.Table("orders").
+		Where("created_at BETWEEN ? AND ?", startOfMonth.UTC(), endOfMonth.UTC()).
+		Select("COALESCE(SUM(final_amount), 0)").
+		Scan(&currentTotalFinalPrice)
 
 	type ProductItemView struct {
 		ID           uint
 		Name         string
 		DisplayThumb string
 		PathThumb    string
+	}
+
+	type CaptureProductItem struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}
+
+	type CaptureOrderPayload struct {
+		ID       uint                 `json:"id"`
+		Name     string               `json:"name"`
+		Phone    string               `json:"phone"`
+		Address  string               `json:"address"`
+		Note     string               `json:"note"`
+		Total    int64                `json:"total"`
+		Deposit  int64                `json:"deposit"`
+		Final    int64                `json:"final"`
+		IsPaid   bool                 `json:"is_paid"`
+		Products []CaptureProductItem `json:"products"`
 	}
 
 	type SummaryOrderView struct {
@@ -1087,6 +1155,7 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		ViettelOrderAmount int64
 		IsPaid             bool
 		Products           []ProductItemView
+		CaptureJSON        string
 	}
 	var orderViews []SummaryOrderView
 	for _, o := range orders {
@@ -1101,12 +1170,17 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		}
 
 		var prodList []ProductItemView
+		var captureProds []CaptureProductItem
 		for _, p := range o.Products {
 			prodList = append(prodList, ProductItemView{
 				ID:           p.ID,
 				Name:         strVal(p.Name),
 				DisplayThumb: getDisplayThumb(&p),
 				PathThumb:    strVal(p.PathThumb),
+			})
+			captureProds = append(captureProds, CaptureProductItem{
+				Name: strVal(p.Name),
+				Path: resolveImgURL(getDisplayThumb(&p)),
 			})
 		}
 
@@ -1119,6 +1193,20 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		if o.ConsumerID != nil {
 			consID = *o.ConsumerID
 		}
+
+		payload := CaptureOrderPayload{
+			ID:       o.ID,
+			Name:     strVal(o.Name),
+			Phone:    strVal(o.Phone),
+			Address:  strVal(o.Address),
+			Note:     strVal(o.Note),
+			Total:    tot,
+			Deposit:  dep,
+			Final:    rem,
+			IsPaid:   o.IsPaid,
+			Products: captureProds,
+		}
+		captureBytes, _ := json.Marshal(payload)
 
 		orderViews = append(orderViews, SummaryOrderView{
 			ID:                 o.ID,
@@ -1137,17 +1225,20 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 			ViettelOrderAmount: rem,
 			IsPaid:             o.IsPaid,
 			Products:           prodList,
+			CaptureJSON:        string(captureBytes),
 		})
 	}
 
 	h.render(c, "orders-summary.html", pongo2.Context{
-		"current_route":            "summary",
-		"orders":                   orderViews,
-		"search":                   search,
-		"total_order_new":          totalOrderNew,
-		"total_order_new_price":    int64(totalOrderNewPrice),
-		"current_total_order":      currentTotalOrder,
-		"current_total_final_price": int64(currentTotalFinalPrice),
+		"current_route":              "summary",
+		"orders":                     orderViews,
+		"search":                     search,
+		"total_sold_today":           todayStat.Count,
+		"total_sold_today_price":     int64(todayStat.Total),
+		"total_sold_yesterday":       yesterdayStat.Count,
+		"total_sold_yesterday_price": int64(yesterdayStat.Total),
+		"current_total_order":        currentTotalOrder,
+		"current_total_final_price":  int64(currentTotalFinalPrice),
 	})
 }
 
@@ -1396,14 +1487,33 @@ func (h *SaleV1Handler) OrderDelete(c *gin.Context) {
 func (h *SaleV1Handler) OrderComplete(c *gin.Context) {
 	id := c.Param("id")
 	h.DB.Model(&models.Order{}).Where("id = ?", id).Update("status", "COMPLETED")
-	c.Redirect(http.StatusFound, c.Request.Referer())
+	referer := c.Request.Referer()
+	if referer == "" {
+		referer = "/sale/order-summary"
+	}
+	c.Redirect(http.StatusFound, referer)
 }
 
 // 15. Order Ship
 func (h *SaleV1Handler) OrderShip(c *gin.Context) {
 	id := c.Param("id")
 	h.DB.Model(&models.Order{}).Where("id = ?", id).Update("status", "A SHIP NOW")
-	c.Redirect(http.StatusFound, c.Request.Referer())
+	referer := c.Request.Referer()
+	if referer == "" {
+		referer = "/sale/order-summary"
+	}
+	c.Redirect(http.StatusFound, referer)
+}
+
+// 15b. Order Hold
+func (h *SaleV1Handler) OrderHold(c *gin.Context) {
+	id := c.Param("id")
+	h.DB.Model(&models.Order{}).Where("id = ?", id).Update("status", "ON HOLD")
+	referer := c.Request.Referer()
+	if referer == "" {
+		referer = "/sale/order-summary"
+	}
+	c.Redirect(http.StatusFound, referer)
 }
 
 // 16. Smart Order Create

@@ -10,10 +10,10 @@ type Product struct {
 	Name               *string        `json:"name"`
 	ImportPrice        *float64       `json:"import_price"`
 	Price              *int64         `json:"price"`
-	URLDetail          *string        `json:"url_detail"`
+	URLDetail          *string        `gorm:"column:url_detail" json:"url_detail"`
 	PathThumb          *string        `json:"path_thumb"`
 	ImageThumbScale    *string        `json:"image_thumb_scale"`
-	FBPostID           *string        `json:"fb_post_id"`
+	FBPostID           *string        `gorm:"column:fb_post_id" json:"fb_post_id"`
 	Status             *string        `json:"status"`
 	CreatedAt          *time.Time     `json:"created_at"`
 	UpdatedAt          *time.Time     `json:"updated_at"`

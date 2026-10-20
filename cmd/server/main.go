@@ -127,6 +127,7 @@ func main() {
 		sale.POST("/smart-order-create", v1.SmartOrderCreate)
 		sale.GET("/complete/:id", v1.OrderComplete)
 		sale.GET("/ship/:id", v1.OrderShip)
+		sale.GET("/hold/:id", v1.OrderHold)
 		sale.GET("/consumer", v1.Consumers)
 	}
 
