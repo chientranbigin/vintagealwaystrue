@@ -125,7 +125,8 @@ func (a *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 			strings.HasPrefix(path, "/js/") ||
 			strings.HasPrefix(path, "/css/") ||
 			strings.HasPrefix(path, "/admin-theme/") ||
-			strings.HasPrefix(path, "/customer-theme/") {
+			strings.HasPrefix(path, "/customer-theme/") ||
+			strings.HasPrefix(path, "/storage/") {
 			c.Next()
 			return
 		}
