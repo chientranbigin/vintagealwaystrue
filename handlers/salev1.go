@@ -876,15 +876,24 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	search := c.Query("search")
 	status := c.Query("status")
 
-	query := h.DB.Model(&models.Order{}).Preload("Products").Order("id DESC")
+	query := h.DB.Model(&models.Order{}).Preload("Products")
 
 	if status != "" {
-		query = query.Where("status = ?", status)
+		if status == "NEW" || status == "open" {
+			query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
+		} else {
+			query = query.Where("status = ?", status).Order("id DESC")
+		}
+	} else {
+		query = query.Order("id DESC")
 	}
 
 	if search != "" {
 		sUpper := strings.ToUpper(search)
-		query = query.Where("UPPER(name) LIKE ? OR phone LIKE ? OR UPPER(address) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%")
+		query = query.Joins("LEFT JOIN order_products ON order_products.order_id = orders.id").
+			Joins("LEFT JOIN products ON products.id = order_products.product_id").
+			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%", "%"+sUpper+"%").
+			Distinct("orders.id")
 	}
 
 	var total int64
@@ -896,8 +905,8 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 
 	var totalOrderNew int64
 	var totalOrderNewPrice float64
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&totalOrderNew)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Count(&totalOrderNew)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
 
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
@@ -1017,14 +1026,24 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	search := c.Query("search")
 	status := c.Query("status")
 
-	query := h.DB.Model(&models.Order{}).Preload("Products").Order("id DESC")
+	query := h.DB.Model(&models.Order{}).Preload("Products")
 
 	if status != "" {
-		query = query.Where("status = ?", status)
+		if status == "NEW" || status == "open" {
+			query = query.Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Order("status ASC, id DESC")
+		} else {
+			query = query.Where("status = ?", status).Order("id DESC")
+		}
+	} else {
+		query = query.Order("id DESC")
 	}
+
 	if search != "" {
 		sUpper := strings.ToUpper(search)
-		query = query.Where("UPPER(name) LIKE ? OR phone LIKE ? OR UPPER(address) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%")
+		query = query.Joins("LEFT JOIN order_products ON order_products.order_id = orders.id").
+			Joins("LEFT JOIN products ON products.id = order_products.product_id").
+			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%", "%"+sUpper+"%").
+			Distinct("orders.id")
 	}
 
 	var orders []models.Order
@@ -1032,8 +1051,8 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 
 	var totalOrderNew int64
 	var totalOrderNewPrice float64
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&totalOrderNew)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Count(&totalOrderNew)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD', 'A SHIP NOW')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
 
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
