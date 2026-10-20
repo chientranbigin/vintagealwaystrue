@@ -89,6 +89,16 @@ func strVal(p *string) string {
 	return *p
 }
 
+func getDisplayThumb(p *models.Product) string {
+	if p.ImageThumbScale != nil && *p.ImageThumbScale != "" {
+		return *p.ImageThumbScale
+	}
+	if p.PathThumb != nil {
+		return *p.PathThumb
+	}
+	return ""
+}
+
 func int64Ptr(n int64) *int64 {
 	return &n
 }
@@ -379,6 +389,7 @@ func (h *SaleV1Handler) Products(c *gin.Context) {
 		Type            string
 		Name            string
 		Price           int64
+		DisplayThumb    string
 		PathThumb       string
 		Description     string
 		Status          string
@@ -395,6 +406,7 @@ func (h *SaleV1Handler) Products(c *gin.Context) {
 			Type:            strVal(p.Type),
 			Name:            strVal(p.Name),
 			Price:           pPrice,
+			DisplayThumb:    getDisplayThumb(&p),
 			PathThumb:       strVal(p.PathThumb),
 			Description:     strVal(p.Description),
 			Status:          strVal(p.Status),
@@ -520,6 +532,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 		ID            uint
 		Name          string
 		Price         int64
+		DisplayThumb  string
 		PathThumb     string
 		SizeFormatted string
 	}
@@ -530,6 +543,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 			ID:            p.ID,
 			Name:          strVal(p.Name),
 			Price:         int64Val(p.Price),
+			DisplayThumb:  getDisplayThumb(&p),
 			PathThumb:     strVal(p.PathThumb),
 			SizeFormatted: sizeStr,
 		})
@@ -895,11 +909,12 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
 
 	type ProductItemView struct {
-		ID        uint
-		Name      string
-		Type      string
-		Price     int64
-		PathThumb string
+		ID           uint
+		Name         string
+		Type         string
+		Price        int64
+		DisplayThumb string
+		PathThumb    string
 	}
 
 	type OrderItemView struct {
@@ -939,8 +954,9 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 				ID:        p.ID,
 				Name:      strVal(p.Name),
 				Type:      strVal(p.Type),
-				Price:     int64Val(p.Price),
-				PathThumb: strVal(p.PathThumb),
+				Price:        int64Val(p.Price),
+				DisplayThumb: getDisplayThumb(&p),
+				PathThumb:    strVal(p.PathThumb),
 			})
 		}
 
@@ -1029,9 +1045,10 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
 
 	type ProductItemView struct {
-		ID        uint
-		Name      string
-		PathThumb string
+		ID           uint
+		Name         string
+		DisplayThumb string
+		PathThumb    string
 	}
 
 	type SummaryOrderView struct {
@@ -1067,9 +1084,10 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		var prodList []ProductItemView
 		for _, p := range o.Products {
 			prodList = append(prodList, ProductItemView{
-				ID:        p.ID,
-				Name:      strVal(p.Name),
-				PathThumb: strVal(p.PathThumb),
+				ID:           p.ID,
+				Name:         strVal(p.Name),
+				DisplayThumb: getDisplayThumb(&p),
+				PathThumb:    strVal(p.PathThumb),
 			})
 		}
 
@@ -1186,27 +1204,33 @@ func (h *SaleV1Handler) OrderDetail(c *gin.Context) {
 	h.DB.Where("status = 'AVAILABLE'").Order("id DESC").Limit(100).Find(&availableProducts)
 
 	type ProductItemView struct {
-		ID    uint
-		Name  string
-		Type  string
-		Price int64
+		ID           uint
+		Name         string
+		Type         string
+		Price        int64
+		DisplayThumb string
+		PathThumb    string
 	}
 
 	var orderProds, availProds []ProductItemView
 	for _, p := range order.Products {
 		orderProds = append(orderProds, ProductItemView{
-			ID:    p.ID,
-			Name:  strVal(p.Name),
-			Type:  strVal(p.Type),
-			Price: int64Val(p.Price),
+			ID:           p.ID,
+			Name:         strVal(p.Name),
+			Type:         strVal(p.Type),
+			Price:        int64Val(p.Price),
+			DisplayThumb: getDisplayThumb(&p),
+			PathThumb:    strVal(p.PathThumb),
 		})
 	}
 	for _, p := range availableProducts {
 		availProds = append(availProds, ProductItemView{
-			ID:    p.ID,
-			Name:  strVal(p.Name),
-			Type:  strVal(p.Type),
-			Price: int64Val(p.Price),
+			ID:           p.ID,
+			Name:         strVal(p.Name),
+			Type:         strVal(p.Type),
+			Price:        int64Val(p.Price),
+			DisplayThumb: getDisplayThumb(&p),
+			PathThumb:    strVal(p.PathThumb),
 		})
 	}
 
@@ -1308,18 +1332,22 @@ func (h *SaleV1Handler) OrderCreate(c *gin.Context) {
 	}
 
 	type ProductItemView struct {
-		ID    uint
-		Name  string
-		Type  string
-		Price int64
+		ID           uint
+		Name         string
+		Type         string
+		Price        int64
+		DisplayThumb string
+		PathThumb    string
 	}
 	var availProds []ProductItemView
 	for _, p := range availableProducts {
 		availProds = append(availProds, ProductItemView{
-			ID:    p.ID,
-			Name:  strVal(p.Name),
-			Type:  strVal(p.Type),
-			Price: int64Val(p.Price),
+			ID:           p.ID,
+			Name:         strVal(p.Name),
+			Type:         strVal(p.Type),
+			Price:        int64Val(p.Price),
+			DisplayThumb: getDisplayThumb(&p),
+			PathThumb:    strVal(p.PathThumb),
 		})
 	}
 
