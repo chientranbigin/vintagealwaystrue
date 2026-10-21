@@ -58,10 +58,25 @@ Do Render free tier sẽ tự động tắt (spin down) khi không có request s
 - **Tần suất**: Mỗi 10 phút một lần (`*/10 * * * *`, múi giờ `Asia/Ho_Chi_Minh`)
 - **Trạng thái**: Đang kích hoạt (Active)
 
-### 2.4. Lưu trữ Media & File ảnh (CDN)
-- **CDN Base URL**: `https://res.cloudinary.com/leq5n17r/image/upload/`
+### 2.4. Lưu trữ Media & File ảnh (CDN & Object Storage)
+
+#### A. Cloudinary CDN (Đang hoạt động chính thức trên Web & Backend)
+Hệ thống sử dụng Cloudinary để lưu trữ và phân phối hình ảnh sản phẩm (`storage/sale/`):
 - **Cloud Name**: `leq5n17r`
-- **Cơ chế**: Route Go `/storage/*filepath` ưu tiên phục vụ file local nếu có; nếu không có, sẽ tự động chuyển hướng 301 sang CDN Cloudinary để ảnh luôn hiển thị sắc nét với tốc độ cao.
+- **API Key**: `859827999643589`
+- **API Secret**: `2fLjdB1nZnBDenXAKKzh4tXAdug`
+- **CDN Base URL**: `https://res.cloudinary.com/leq5n17r/image/upload/`
+- **Cơ chế**:
+  - Khi xem ảnh: Route Go `/storage/*filepath` ưu tiên phục vụ file local nếu có; nếu không có, sẽ tự động chuyển hướng 301 sang CDN Cloudinary để ảnh luôn hiển thị sắc nét với tốc độ cao.
+  - Khi upload ảnh mới: Service `services/storage.go` ký HMAC-SHA1 với `APISecret` và gửi multipart upload trực tiếp lên Cloudinary API.
+
+#### B. Cloudflare R2 (Kho Object Storage tương thích S3 dự phòng)
+- **Account ID**: `af062376ce59e8aec5b89faad256ff24`
+- **API Token**: `cfat_` + `37diC49zOl1DZDfG8pabPuzt51JcRUygnskomfCz1d59a4a1` (nối liền 2 chuỗi khi sử dụng)
+- **Access Key ID**: `520b7baa8f238d127c5af4eeab69bb01`
+- **Secret Access Key**: `21a3d24ca0d8cb69120c6ae84ac8ae499b1c78f4c3390526a4e5250891ec231c`
+- **S3 Endpoint**: `https://af062376ce59e8aec5b89faad256ff24.r2.cloudflarestorage.com`
+
 
 ### 2.5. Tài khoản đăng nhập hệ thống (Auth)
 - **Master Admin Password**: `vintage2026` (Ngoài ra chấp nhận các mật khẩu mặc định của các tài khoản có sẵn trong DB: `admin`, `123456`, `vintagealwaystrue`).
