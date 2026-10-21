@@ -215,15 +215,15 @@
         <!-- Date row -->
         <div :key="'date-d-' + row.date"
              :class="['mb-3 rounded-2xl border shadow-sm overflow-hidden', row.is_empty ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100']">
-          <div class="flex flex-wrap items-center gap-3 p-4 cursor-pointer hover:bg-opacity-80 transition-colors"
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 cursor-pointer hover:bg-opacity-80 transition-colors"
                @click="!row.is_empty && toggleSoldDate(row)">
-            <div class="flex items-center gap-2 flex-1 min-w-0">
+            <div class="flex items-center gap-2 w-full md:w-auto md:flex-1 min-w-0">
               <i v-if="!row.is_empty" :class="openSoldDates[row.date] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
               <i v-else class="el-icon-warning-outline text-red-400 flex-shrink-0"></i>
               <p :class="['font-bold text-sm', row.is_empty ? 'text-red-400' : 'text-slate-800']">{{ formatDateShort(row.date) }}</p>
               <span v-if="row.is_empty" class="text-xs text-red-300 font-normal">— không bán được</span>
             </div>
-            <div v-if="!row.is_empty" class="flex flex-wrap items-center gap-2">
+            <div v-if="!row.is_empty" class="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <el-tag v-for="(count, type) in row.type_breakdown" :key="type" size="small" class="font-bold">{{ type }}: {{ count }}</el-tag>
               <el-tag size="small" type="primary">{{ row.total }} sp</el-tag>
               <el-tag size="small" type="success">{{ formatPrice(row.total_revenue) }}</el-tag>
