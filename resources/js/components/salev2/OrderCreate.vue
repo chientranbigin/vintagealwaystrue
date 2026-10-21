@@ -107,13 +107,13 @@
                          </div>
                          <div class="flex justify-between items-center text-sm">
                              <div class="flex items-center gap-2">
-                                 <span class="text-slate-500">Giảm giá / Discount</span>
+                                 <span class="text-slate-500">Discount</span>
                                  <div class="inline-flex rounded-md p-0.5 bg-slate-100 border border-slate-200">
                                      <button type="button" 
                                              @click="setDiscountType('amount')" 
                                              :class="discountType === 'amount' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'" 
                                              class="px-2 py-0.5 text-xs rounded transition-all">
-                                         VNĐ
+                                         VND
                                      </button>
                                      <button type="button" 
                                              @click="setDiscountType('percent')" 
