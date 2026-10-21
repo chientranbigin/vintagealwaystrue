@@ -8,11 +8,95 @@
     </div>
 
     <el-tabs v-model="activeTab" type="card" class="premium-tabs mb-6" @tab-click="handleTabChange">
+      <el-tab-pane label="Sold by Date" name="sold"></el-tab-pane>
       <el-tab-pane label="Sessions" name="sessions"></el-tab-pane>
       <el-tab-pane label="Latest Uploads" name="latest"></el-tab-pane>
-      <el-tab-pane label="Sold by Date" name="sold"></el-tab-pane>
     </el-tabs>
 
+    <!-- ===== Tab: Sold by Date ===== -->
+    <div v-if="activeTab === 'sold'" v-loading="loadingSold">
+      <div v-if="!soldDates.length && !loadingSold" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+        <i class="el-icon-box text-4xl text-slate-200 mb-4 block"></i>
+        <p class="text-slate-400 font-medium">No data found</p>
+      </div>
+
+      <template v-for="(row, rIdx) in soldDates">
+        <!-- Week separator -->
+        <div v-if="rIdx === 0 || getISOWeek(row.date) !== getISOWeek(soldDates[rIdx - 1].date)"
+             :key="'week-d-' + row.date"
+             class="flex items-center gap-3 my-5">
+          <div class="flex-1 h-px bg-slate-200"></div>
+          <span class="text-[11px] font-black text-slate-400 uppercase tracking-widest px-2">{{ getISOWeek(row.date) }}</span>
+          <div class="flex-1 h-px bg-slate-200"></div>
+        </div>
+
+        <!-- Date row -->
+        <div :key="'date-d-' + row.date"
+             :class="['mb-3 rounded-2xl border shadow-sm overflow-hidden', row.is_empty ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100']">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 cursor-pointer hover:bg-opacity-80 transition-colors"
+               @click="!row.is_empty && toggleSoldDate(row)">
+            <div class="flex items-center gap-2 w-full md:w-auto md:flex-1 min-w-0">
+              <i v-if="!row.is_empty" :class="openSoldDates[row.date] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
+              <i v-else class="el-icon-warning-outline text-red-400 flex-shrink-0"></i>
+              <p :class="['font-bold text-sm', row.is_empty ? 'text-red-400' : 'text-slate-800']">{{ formatDateShort(row.date) }}</p>
+              <span v-if="row.is_empty" class="text-xs text-red-300 font-normal">— không bán được</span>
+            </div>
+            <div v-if="!row.is_empty" class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <el-tag v-for="(count, type) in row.type_breakdown" :key="type" size="small" class="font-bold">{{ type }}: {{ count }}</el-tag>
+              <el-tag size="small" type="primary">{{ row.total }} sp</el-tag>
+              <el-tag size="small" type="success">{{ formatPrice(row.total_revenue) }}</el-tag>
+            </div>
+          </div>
+
+          <div v-if="!row.is_empty && openSoldDates[row.date]" class="border-t border-slate-100">
+            <div v-loading="loadingSoldProducts[row.date]" class="p-4">
+              <div v-if="soldDateProducts[row.date]">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                  <div v-for="product in soldDateProducts[row.date]" :key="product.id"
+                       class="group relative bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300">
+                    <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
+                      <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1" @error="e => e.target.src = product.path_thumb">
+                      <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
+                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10" @click.stop="editProduct(product)">
+                        <el-button type="primary" size="medium" class="w-40 font-bold" @click.stop="editProduct(product)">DETAIL</el-button>
+                        <el-button type="success" size="medium" class="w-40 font-bold" icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
+                        <el-button type="info" size="medium" class="w-40 font-bold" icon="el-icon-camera" @click.stop="copyMain(product)">COPY MAIN</el-button>
+                        <el-button type="warning" size="medium" class="w-40 font-bold" icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
+                      </div>
+                    </div>
+                    <div class="p-3">
+                      <div class="text-center mb-2">
+                        <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ product.name }}</h4>
+                        <p class="text-blue-600 font-bold text-sm">{{ formatPrice(product.price) }}</p>
+                      </div>
+                      <div class="text-center mb-3 px-1">
+                        <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded uppercase inline-block">{{ formatSizes(product).join(' - ') }}</span>
+                      </div>
+                      <div class="flex justify-between items-center pt-2 border-t border-slate-50 gap-2">
+                        <div class="flex-1 text-center md:text-left">
+                          <el-tag :type="getStatusTagType(product.status)" size="mini" class="text-[8px] font-bold uppercase rounded-md px-1">{{ product.status }}</el-tag>
+                        </div>
+                        <div class="md:hidden flex justify-end">
+                          <el-dropdown trigger="click" @command="(cmd) => handleMobileAction(cmd, product)">
+                            <span class="el-dropdown-link p-2"><i class="el-icon-more transform rotate-90 text-lg font-bold text-slate-600"></i></span>
+                            <el-dropdown-menu slot="dropdown">
+                              <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
+                              <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
+                              <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
+                              <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
+                            </el-dropdown-menu>
+                          </el-dropdown>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
     <!-- ===== Tab: Sessions ===== -->
     <div v-if="activeTab === 'sessions'" v-loading="loadingSessions">
       <div v-if="!sessions.length && !loadingSessions" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -195,90 +279,6 @@
       </div>
     </div>
 
-    <!-- ===== Tab: Sold by Date ===== -->
-    <div v-if="activeTab === 'sold'" v-loading="loadingSold">
-      <div v-if="!soldDates.length && !loadingSold" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-        <i class="el-icon-box text-4xl text-slate-200 mb-4 block"></i>
-        <p class="text-slate-400 font-medium">No data found</p>
-      </div>
-
-      <template v-for="(row, rIdx) in soldDates">
-        <!-- Week separator -->
-        <div v-if="rIdx === 0 || getISOWeek(row.date) !== getISOWeek(soldDates[rIdx - 1].date)"
-             :key="'week-d-' + row.date"
-             class="flex items-center gap-3 my-5">
-          <div class="flex-1 h-px bg-slate-200"></div>
-          <span class="text-[11px] font-black text-slate-400 uppercase tracking-widest px-2">{{ getISOWeek(row.date) }}</span>
-          <div class="flex-1 h-px bg-slate-200"></div>
-        </div>
-
-        <!-- Date row -->
-        <div :key="'date-d-' + row.date"
-             :class="['mb-3 rounded-2xl border shadow-sm overflow-hidden', row.is_empty ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100']">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 cursor-pointer hover:bg-opacity-80 transition-colors"
-               @click="!row.is_empty && toggleSoldDate(row)">
-            <div class="flex items-center gap-2 w-full md:w-auto md:flex-1 min-w-0">
-              <i v-if="!row.is_empty" :class="openSoldDates[row.date] ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="text-slate-400 flex-shrink-0"></i>
-              <i v-else class="el-icon-warning-outline text-red-400 flex-shrink-0"></i>
-              <p :class="['font-bold text-sm', row.is_empty ? 'text-red-400' : 'text-slate-800']">{{ formatDateShort(row.date) }}</p>
-              <span v-if="row.is_empty" class="text-xs text-red-300 font-normal">— không bán được</span>
-            </div>
-            <div v-if="!row.is_empty" class="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <el-tag v-for="(count, type) in row.type_breakdown" :key="type" size="small" class="font-bold">{{ type }}: {{ count }}</el-tag>
-              <el-tag size="small" type="primary">{{ row.total }} sp</el-tag>
-              <el-tag size="small" type="success">{{ formatPrice(row.total_revenue) }}</el-tag>
-            </div>
-          </div>
-
-          <div v-if="!row.is_empty && openSoldDates[row.date]" class="border-t border-slate-100">
-            <div v-loading="loadingSoldProducts[row.date]" class="p-4">
-              <div v-if="soldDateProducts[row.date]">
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                  <div v-for="product in soldDateProducts[row.date]" :key="product.id"
-                       class="group relative bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300">
-                    <div class="aspect-[3/4] overflow-hidden bg-slate-50 relative group">
-                      <img v-if="product.image_thumb_scale_url || product.path_thumb" :src="product.image_thumb_scale_url || product.path_thumb" class="w-full h-full object-contain hover:scale-105 transition-transform duration-500 p-1" @error="e => e.target.src = product.path_thumb">
-                      <div v-else class="w-full h-full flex items-center justify-center text-slate-300"><i class="el-icon-picture text-4xl"></i></div>
-                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex flex-col justify-center items-center gap-2 p-6 z-10" @click.stop="editProduct(product)">
-                        <el-button type="primary" size="medium" class="w-40 font-bold" @click.stop="editProduct(product)">DETAIL</el-button>
-                        <el-button type="success" size="medium" class="w-40 font-bold" icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
-                        <el-button type="info" size="medium" class="w-40 font-bold" icon="el-icon-camera" @click.stop="copyMain(product)">COPY MAIN</el-button>
-                        <el-button type="warning" size="medium" class="w-40 font-bold" icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
-                      </div>
-                    </div>
-                    <div class="p-3">
-                      <div class="text-center mb-2">
-                        <h4 class="font-bold text-slate-800 text-sm uppercase leading-tight truncate">{{ product.name }}</h4>
-                        <p class="text-blue-600 font-bold text-sm">{{ formatPrice(product.price) }}</p>
-                      </div>
-                      <div class="text-center mb-3 px-1">
-                        <span class="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded uppercase inline-block">{{ formatSizes(product).join(' - ') }}</span>
-                      </div>
-                      <div class="flex justify-between items-center pt-2 border-t border-slate-50 gap-2">
-                        <div class="flex-1 text-center md:text-left">
-                          <el-tag :type="getStatusTagType(product.status)" size="mini" class="text-[8px] font-bold uppercase rounded-md px-1">{{ product.status }}</el-tag>
-                        </div>
-                        <div class="md:hidden flex justify-end">
-                          <el-dropdown trigger="click" @command="(cmd) => handleMobileAction(cmd, product)">
-                            <span class="el-dropdown-link p-2"><i class="el-icon-more transform rotate-90 text-lg font-bold text-slate-600"></i></span>
-                            <el-dropdown-menu slot="dropdown">
-                              <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
-                              <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
-                              <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
-                              <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
-                            </el-dropdown-menu>
-                          </el-dropdown>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-    </div>
   </div>
 </template>
 
@@ -287,7 +287,7 @@ export default {
   name: 'UploadSessions',
   data() {
     return {
-      activeTab: 'sessions',
+      activeTab: 'sold',
       sessions: [],
       loadingSessions: false,
       openSessions: {},
@@ -339,10 +339,15 @@ export default {
     },
   },
   mounted() {
-    this.fetchSessions();
+    if (this.activeTab === 'sold') {
+      this.fetchSoldDates();
+    } else if (this.activeTab === 'sessions') {
+      this.fetchSessions();
+    }
   },
   methods: {
     handleTabChange() {
+      if (this.activeTab === 'sessions' && !this.sessions.length) this.fetchSessions();
       if (this.activeTab === 'latest' && !this.latestProducts.length) this.fetchLatestProducts(1);
       if (this.activeTab === 'sold' && !this.soldDates.length) this.fetchSoldDates();
     },
