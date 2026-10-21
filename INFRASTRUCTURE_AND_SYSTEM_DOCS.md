@@ -158,47 +158,103 @@ expect {
 
 ---
 
-## 5. QUY TRÌNH BUILD & TRIỂN KHAI (DEPLOY WORKFLOW)
+## 5. QUY TRÌNH BUILD & TRIỂN KHAI KHI CÓ CODE MỚI (DEPLOYMENT GUIDE)
 
-Khi thực hiện sửa đổi mã nguồn trong các task tiếp theo, thực hiện theo các bước sau:
-
-1. **Nếu sửa Vue Component trong Sale V2 (`resources/js/components/salev2/`)**:
-   - Cập nhật file `.vue`.
-   - Cập nhật bundle tương ứng trong `public/js/app.js` (hoặc build lại bằng Webpack/Mix).
-   - Đồng bộ sang cả thư mục `/Applications/MAMP/htdocs/sale/public/js/app.js`.
-
-2. **Kiểm tra biên dịch Go**:
-   ```bash
-   cd /Applications/MAMP/htdocs/vintagealwaystrue-go
-   go build -o /dev/null ./cmd/server
-   ```
-
-3. **Commit và đẩy lên GitHub**:
-   ```bash
-   cd /Applications/MAMP/htdocs/vintagealwaystrue-go
-   git add .
-   git commit -m "Nội dung thay đổi"
-   git push origin go-backend
-   ```
-
-4. **Kích hoạt Deploy trên Render**:
-   ```bash
-   curl -s -X POST https://api.render.com/v1/services/srv-dbbmmu7avr4c7384dcd0/deploys \
-     -H "Authorization: Bearer rnd_R0LMUnydejKZUCl4HmUBIZJ9MVj8" \
-     -H "Content-Type: application/json" \
-     -d '{"clearCache": "do_not_clear"}'
-   ```
-   Sau 1 - 2 phút, kiểm tra trạng thái deploy:
-   ```bash
-   curl -s https://api.render.com/v1/services/srv-dbbmmu7avr4c7384dcd0/deploys?limit=1 \
-     -H "Authorization: Bearer rnd_R0LMUnydejKZUCl4HmUBIZJ9MVj8"
-   ```
-   Khi trường `"status": "live"` là hệ thống đã cập nhật thành công lên Production.
+### 5.1. Cơ chế hoạt động của hệ thống CI/CD trên Render
+- **Repository**: `https://github.com/chientranbigin/vintagealwaystrue.git`
+- **Nhánh triển khai**: `go-backend`
+- **Cơ chế đóng gói**: Render đọc file `Dockerfile` ở thư mục gốc:
+  1. Sử dụng image `golang:1.22-alpine` để biên dịch binary Go từ `./cmd/server`.
+  2. Sao chép các thư mục tài nguyên tĩnh (`public/`, `static/`) vào image runtime `alpine`.
+  3. Khởi chạy binary trên cổng được Render chỉ định qua biến môi trường `$PORT` (mặc định 8080 hoặc 10000).
 
 ---
 
-## 6. HƯỚNG DẪN KHI MỞ CONVERSATION MỚI
-Khi bạn mở phiên làm việc mới với Assistant, bạn chỉ cần gửi yêu cầu kèm nhắc nhở:
-> *"Hãy đọc file `INFRASTRUCTURE_AND_SYSTEM_DOCS.md` trong repo để nắm toàn bộ thông tin hệ thống, hạ tầng, credentials và tiếp tục làm task..."*
+### 5.2. Các bước triển khai chi tiết từng bước (Step-by-Step)
 
-Assistant mới sẽ đọc file này và có thể bắt tay vào làm việc ngay lập tức mà không cần hỏi lại các thông tin hạ tầng hay lịch sử phát triển trước đó.
+#### Bước 1: Chỉnh sửa mã nguồn
+- **Nếu sửa Backend Go**:
+  - Các handler nằm trong: `handlers/` (`salev1.go`, `salev2.go`, `auth.go`, v.v.).
+  - Các model GORM nằm trong: `models/`.
+  - Cấu hình server nằm trong: `cmd/server/main.go` và `config/config.go`.
+- **Nếu sửa Giao diện Sale V2 (Vue SPA)**:
+  - Các component nằm trong: `resources/js/components/salev2/` (`OrderManager.vue`, `OrderEdit.vue`, `OrderCreate.vue`, v.v.).
+  - File bundle Javascript phục vụ người dùng: `public/js/app.js`.
+
+#### Bước 2: Đồng bộ & Kiểm tra bundle Javascript (Nếu có sửa Vue)
+- Đảm bảo mã cập nhật trong file `.vue` đã được phản ánh vào `public/js/app.js`.
+- Kiểm tra tính hợp lệ của cú pháp file bundle:
+  ```bash
+  node -c public/js/app.js
+  ```
+- Đồng bộ file bundle sang cả thư mục dự án Laravel gốc để đồng nhất:
+  ```bash
+  cp /Applications/MAMP/htdocs/vintagealwaystrue-go/public/js/app.js /Applications/MAMP/htdocs/sale/public/js/app.js
+  ```
+
+#### Bước 3: Kiểm tra biên dịch Go cục bộ trước khi push
+Để đảm bảo không có lỗi cú pháp hoặc thiếu package làm gãy tiến trình build trên Render:
+```bash
+cd /Applications/MAMP/htdocs/vintagealwaystrue-go
+go build -o /dev/null ./cmd/server
+```
+*(Nếu lệnh kết thúc không báo lỗi gì tức là code Go đã sẵn sàng deploy)*.
+
+#### Bước 4: Commit và đẩy lên GitHub
+```bash
+cd /Applications/MAMP/htdocs/vintagealwaystrue-go
+git add .
+git commit -m "Mô tả tính năng hoặc fix bug mới"
+git push origin go-backend
+```
+
+#### Bước 5: Kích hoạt triển khai (Trigger Deploy) trên Render
+Bạn có thể kích hoạt ngay từ Terminal mà không cần mở trình duyệt:
+```bash
+curl -s -X POST https://api.render.com/v1/services/srv-dbbmmu7avr4c7384dcd0/deploys \
+  -H "Authorization: Bearer rnd_R0LMUnydejKZUCl4HmUBIZJ9MVj8" \
+  -H "Content-Type: application/json" \
+  -d '{"clearCache": "do_not_clear"}'
+```
+*(Lưu ý: Nếu bạn có thay đổi cấu hình Dockerfile hoặc thư viện Go ngoài `go.mod`, đổi `"clearCache": "clear"` để Render tải lại sạch sẽ)*.
+
+#### Bước 6: Theo dõi tiến độ Deploy
+Kiểm tra trạng thái deploy mới nhất:
+```bash
+curl -s https://api.render.com/v1/services/srv-dbbmmu7avr4c7384dcd0/deploys?limit=1 \
+  -H "Authorization: Bearer rnd_R0LMUnydejKZUCl4HmUBIZJ9MVj8" | grep -o '"status":"[^"]*"'
+```
+- Khi hiển thị `"status":"build_in_progress"`: Hệ thống đang build Docker image (thường mất khoảng 30 - 45 giây).
+- Khi hiển thị `"status":"live"`: Quá trình deploy đã thành công, server mới đã chính thức nhận request!
+
+#### Bước 7: Kiểm tra xác nhận trên Production
+1. Kiểm tra endpoint health check:
+   ```bash
+   curl -s https://vintage-sale-go.onrender.com/healthz
+   # Kết quả mong muốn: {"engine":"golang","status":"ok"}
+   ```
+2. Truy cập trình duyệt vào trang web để kiểm tra trực quan:
+   - Sale V1: `https://vintage-sale-go.onrender.com/sale`
+   - Sale V2: `https://vintage-sale-go.onrender.com/salev2/orders`
+   - Nhấn `Cmd + Shift + R` (hoặc `Ctrl + F5`) trên trình duyệt để xóa cache JS/CSS cũ.
+
+---
+
+### 5.3. Xử lý sự cố thường gặp (Troubleshooting)
+
+| Vấn đề | Nguyên nhân | Cách xử lý |
+| :--- | :--- | :--- |
+| **Giao diện V2 không đổi sau khi deploy** | Trình duyệt lưu cache file `app.js` cũ | Nhấn `Cmd + Shift + R` hoặc mở DevTools > tick "Disable cache" > reload lại. |
+| **Status báo `build_failed`** | Lỗi code Go hoặc thiếu file trong Dockerfile | Chạy lệnh xem log deploy:<br>`curl -s https://api.render.com/v1/services/srv-dbbmmu7avr4c7384dcd0/deploys/<deploy-id> -H "Authorization: Bearer rnd_R0LMUnydejKZUCl4HmUBIZJ9MVj8"` |
+| **Cần rollback về bản deploy trước đó** | Bản code mới phát sinh lỗi nghiêm trọng | Lấy ID bản deploy ổn định gần nhất và trigger deploy lại commit đó hoặc revert git commit và push lại. |
+
+---
+
+## 6. HƯỚNG DẪN KHI MỞ CONVERSATION MỚI (HANDOFF PROMPT)
+
+Khi bạn mở phiên làm việc mới với AI Assistant, bạn chỉ cần gửi đoạn tin nhắn sau:
+
+> *"Chào bạn, dự án quản lý đơn hàng Vintage Always True đã được chuyển dịch hoàn toàn sang Golang chạy trên Render. Hãy đọc file `INFRASTRUCTURE_AND_SYSTEM_DOCS.md` trong repo để nắm toàn bộ thông tin hệ thống, các khóa bí mật hạ tầng (Render, DB, Cron-job, Cloudinary), cách SSH vào VPS cũ và quy trình deploy code mới. Sau đó hỗ trợ tôi thực hiện task tiếp theo: [Nội dung task của bạn]..."*
+
+AI Assistant mới sẽ tự động nạp toàn bộ kiến thức dự án từ file tài liệu này và tiếp tục phát triển chuẩn xác 100%!
+
