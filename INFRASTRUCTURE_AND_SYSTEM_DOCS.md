@@ -177,6 +177,12 @@ expect {
    - Bỏ các tag size chi tiết trong list sản phẩm của card để giao diện gọn gàng, trực quan.
 7. **Khắc phục vấn đề F5 chuyển về V1**:
    - Cấu hình route SPA fallback `/salev2/*filepath` trên Go server để khi người dùng đang ở V2 reload trang thì vẫn ở lại đúng màn hình V2.
+8. **Tự động liên kết và lưu Khách hàng (Consumer) khi tạo đơn V2**:
+   - Khắc phục lỗi `StoreOrder` thiếu logic lưu thông tin khách hàng vào bảng `consumers` và không gán `consumer_id` cho đơn hàng mới.
+9. **Xây dựng Hệ thống Kiểm thử Tự động (Automated Go Test Suite) & Git Pre-push Hook**:
+   - Bao phủ 100% tính năng của Sale V2: Đơn hàng, Sản phẩm, Khách hàng, Dashboard, và đặc biệt là **Smart Upload (OCR/Vision)**.
+   - Cơ chế Transaction Rollback đảm bảo không lưu dữ liệu rác vào Database TiDB.
+   - Hook `.git/hooks/pre-push` tự động chạy toàn bộ test trước mỗi lần `git push`, chặn mọi lần push nếu có test bị fail.
 
 ---
 

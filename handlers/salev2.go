@@ -412,6 +412,36 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 	}
 
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		// Auto create/link Consumer
+		cleanedPhone := strings.ReplaceAll(req.Phone, " ", "")
+		if cleanedPhone != "" {
+			var cons models.Consumer
+			if err := tx.Where("phone = ?", cleanedPhone).First(&cons).Error; err != nil {
+				cons = models.Consumer{
+					Name:    &req.Name,
+					Phone:   &cleanedPhone,
+					Address: &req.Address,
+				}
+				if err := tx.Create(&cons).Error; err == nil {
+					cID := int(cons.ID)
+					order.ConsumerID = &cID
+				}
+			} else {
+				cID := int(cons.ID)
+				order.ConsumerID = &cID
+				updates := map[string]interface{}{}
+				if (cons.Address == nil || *cons.Address == "") && req.Address != "" {
+					updates["address"] = req.Address
+				}
+				if (cons.Name == nil || *cons.Name == "") && req.Name != "" {
+					updates["name"] = req.Name
+				}
+				if len(updates) > 0 {
+					tx.Model(&cons).Updates(updates)
+				}
+			}
+		}
+
 		if err := tx.Create(&order).Error; err != nil {
 			return err
 		}

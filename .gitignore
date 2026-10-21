@@ -25,3 +25,4 @@ auth.json
 bin/
 /server
 cookies.txt
+handlers/storage/
