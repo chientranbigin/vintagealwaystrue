@@ -1588,8 +1588,17 @@ func (h *SaleV1Handler) OrderDetail(c *gin.Context) {
 		return
 	}
 
+	var orderProductIDs []uint
+	for _, p := range order.Products {
+		orderProductIDs = append(orderProductIDs, p.ID)
+	}
+
 	var availableProducts []models.Product
-	h.DB.Where("status = 'AVAILABLE'").Order("id DESC").Limit(100).Find(&availableProducts)
+	availQuery := h.DB.Where("status = 'AVAILABLE'")
+	if len(orderProductIDs) > 0 {
+		availQuery = availQuery.Where("id NOT IN ?", orderProductIDs)
+	}
+	availQuery.Order("id DESC").Find(&availableProducts)
 
 	type ProductItemView struct {
 		ID           uint
@@ -1712,7 +1721,7 @@ func (h *SaleV1Handler) OrderCreate(c *gin.Context) {
 	}
 
 	var availableProducts []models.Product
-	h.DB.Where("status = 'AVAILABLE'").Order("id DESC").Limit(200).Find(&availableProducts)
+	h.DB.Where("status = 'AVAILABLE'").Order("id DESC").Find(&availableProducts)
 
 	var consumer models.Consumer
 	if cID := c.Query("consumer_id"); cID != "" {

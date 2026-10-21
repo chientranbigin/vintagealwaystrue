@@ -55,9 +55,14 @@
                             </div>
 
                             <div class="col-md-6 col-sm-12">
-                                <h5>Select Available Products</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h5 class="mb-0">Select Available Products (<span id="availCount">{{ products|length }}</span>)</h5>
+                                </div>
+                                <div class="mb-2">
+                                    <input type="text" id="productFilterInput" class="form-control form-control-sm" placeholder="🔍 Tìm nhanh theo tên, mã (ví dụ: TS4711, JK, quần...)" onkeyup="filterProductTable()">
+                                </div>
                                 <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
-                                    <table class="table mb-0">
+                                    <table class="table mb-0" id="availableProductsTable">
                                         <thead>
                                         <tr>
                                             <th>Checked</th>
@@ -69,8 +74,8 @@
                                         <tbody>
                                         {% for prod in products %}
                                             <tr>
-                                                <td style="text-align: center; vertical-align: middle;">
-                                                    <input type="checkbox" name="products[]" value="{{ prod.ID }}" style="position: static !important; margin: 0 !important; cursor: pointer; width: 18px; height: 18px;">
+                                                <td style="text-align: center; vertical-align: middle; position: relative;">
+                                                    <input type="checkbox" name="products[]" value="{{ prod.ID }}" style="position: static !important; margin: 0 auto !important; display: block; cursor: pointer; width: 18px; height: 18px;">
                                                 </td>
                                                 <td>{{ prod.Type }}</td>
                                                 <td>
@@ -91,4 +96,24 @@
         </div>
     </div>
 </div>
+
+<script>
+function filterProductTable() {
+    var input = document.getElementById("productFilterInput");
+    var filter = input.value.trim().toUpperCase();
+    var table = document.getElementById("availableProductsTable");
+    var trs = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+    var visible = 0;
+    for (var i = 0; i < trs.length; i++) {
+        var text = trs[i].textContent || trs[i].innerText;
+        if (filter === "" || text.toUpperCase().indexOf(filter) > -1) {
+            trs[i].style.display = "";
+            visible++;
+        } else {
+            trs[i].style.display = "none";
+        }
+    }
+    document.getElementById("availCount").innerText = visible;
+}
+</script>
 {% endblock %}

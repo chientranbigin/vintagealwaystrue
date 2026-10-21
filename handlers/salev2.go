@@ -79,6 +79,9 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 	if limit < 1 {
 		limit = 60
 	}
+	if limit > 2000 {
+		limit = 2000
+	}
 	offset := (page - 1) * limit
 
 	query := h.DB.Model(&models.Product{}).Preload("Images").Preload("Sizes")
@@ -103,7 +106,8 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 	// Status filter
 	if status := c.Query("status"); status != "" {
 		query = query.Where("products.status = ?", status)
-		if status == "AVAILABLE" {
+		// Only filter out empty thumbnails for standard Product Vault grid (limit <= 60 and no search)
+		if status == "AVAILABLE" && limit <= 60 && c.Query("search") == "" && c.Query("include_empty_thumb") != "true" {
 			query = query.Where("path_thumb IS NOT NULL AND path_thumb != ''")
 		}
 	}
