@@ -43,7 +43,7 @@ func NewStorageService() *StorageService {
 
 	baseURL := os.Getenv("MEDIA_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://vintagealwaystrue.id.vn/storage/"
+		baseURL = "https://res.cloudinary.com/leq5n17r/image/upload/"
 	}
 
 	return &StorageService{
@@ -97,7 +97,9 @@ func (s *StorageService) Upload(fileHeader *multipart.FileHeader) (string, error
 
 func (s *StorageService) uploadToCloudinary(fileData []byte, filename string) (string, error) {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
-	paramsToSign := fmt.Sprintf("timestamp=%s%s", ts, s.APISecret)
+	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+	publicID := "sale/" + nameWithoutExt
+	paramsToSign := fmt.Sprintf("public_id=%s&timestamp=%s%s", publicID, ts, s.APISecret)
 
 	hasher := sha1.New()
 	hasher.Write([]byte(paramsToSign))
@@ -115,6 +117,7 @@ func (s *StorageService) uploadToCloudinary(fileData []byte, filename string) (s
 	}
 
 	_ = writer.WriteField("api_key", s.APIKey)
+	_ = writer.WriteField("public_id", publicID)
 	_ = writer.WriteField("timestamp", ts)
 	_ = writer.WriteField("signature", signature)
 	_ = writer.Close()

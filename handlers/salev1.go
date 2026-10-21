@@ -149,7 +149,7 @@ func init() {
 		clean := strings.TrimLeft(path, "/")
 		baseURL := os.Getenv("MEDIA_BASE_URL")
 		if baseURL == "" {
-			baseURL = "https://vintagealwaystrue.id.vn/storage/"
+			baseURL = "https://res.cloudinary.com/leq5n17r/image/upload/"
 		}
 		if strings.HasPrefix(clean, "storage/") {
 			clean = strings.TrimPrefix(clean, "storage/")
@@ -172,7 +172,7 @@ func resolveImgURL(path string) string {
 	clean := strings.TrimLeft(path, "/")
 	baseURL := os.Getenv("MEDIA_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://vintagealwaystrue.id.vn/storage/"
+		baseURL = "https://res.cloudinary.com/leq5n17r/image/upload/"
 	}
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"

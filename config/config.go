@@ -38,8 +38,8 @@ func LoadConfig() *Config {
 
 	mediaBase := os.Getenv("MEDIA_BASE_URL")
 	if mediaBase == "" {
-		// Public CDN endpoint from existing server with SSL
-		mediaBase = "https://vintagealwaystrue.id.vn/storage/"
+		// Cloudinary CDN endpoint for sale storage
+		mediaBase = "https://res.cloudinary.com/leq5n17r/image/upload/"
 	}
 
 	return &Config{
