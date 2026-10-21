@@ -89,8 +89,11 @@
                                             {{ order.Phone }}<br>
                                             {{ order.Address }}
                                         </a>
+                                        {% if order.CreatedAtFormatted %}
+                                            <br><small class="text-muted"><i class="mdi mdi-clock-outline"></i> {{ order.CreatedAtFormatted }}</small>
+                                        {% endif %}
                                         {% if order.Note %}
-                                            <br><br>
+                                            <br>
                                             <span class="right badge badge-danger">{{ order.Note }}</span>
                                         {% endif %}
                                     </td>

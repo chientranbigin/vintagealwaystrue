@@ -1191,19 +1191,18 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	}
 
 	if search != "" {
-		sUpper := strings.ToUpper(search)
+		sUpper := "%" + strings.ToUpper(search) + "%"
 		query = query.Joins("LEFT JOIN order_products ON order_products.order_id = orders.id").
 			Joins("LEFT JOIN products ON products.id = order_products.product_id").
-			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%", "%"+sUpper+"%").
-			Distinct("orders.id")
+			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", sUpper, "%"+search+"%", sUpper, sUpper)
 	}
 
 	var total int64
-	query.Count(&total)
+	query.Distinct("orders.id").Count(&total)
 
 	offset := (page - 1) * perPage
 	var orders []models.Order
-	query.Offset(offset).Limit(perPage).Find(&orders)
+	query.Distinct().Select("orders.*").Offset(offset).Limit(perPage).Find(&orders)
 
 	var totalOrderNew int64
 	var totalOrderNewPrice float64
@@ -1237,6 +1236,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 		Note               string
 		Desc               string
 		Status             string
+		CreatedAtFormatted string
 		TotalAmount        int64
 		FinalAmount        int64
 		AdditionalAmount   int64
@@ -1278,6 +1278,11 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 			})
 		}
 
+		cTimeStr := ""
+		if o.CreatedAt != nil {
+			cTimeStr = FormatTimeAgo(o.CreatedAt)
+		}
+
 		payload := CaptureOrderPayload{
 			ID:       o.ID,
 			Name:     strVal(o.Name),
@@ -1300,6 +1305,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 			Note:               strVal(o.Note),
 			Desc:               strVal(o.Desc),
 			Status:             strVal(o.Status),
+			CreatedAtFormatted: cTimeStr,
 			TotalAmount:        tot,
 			FinalAmount:        int64Val(o.FinalAmount),
 			AdditionalAmount:   int64Val(o.AdditionalAmount),
@@ -1359,15 +1365,14 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 	}
 
 	if search != "" {
-		sUpper := strings.ToUpper(search)
+		sUpper := "%" + strings.ToUpper(search) + "%"
 		query = query.Joins("LEFT JOIN order_products ON order_products.order_id = orders.id").
 			Joins("LEFT JOIN products ON products.id = order_products.product_id").
-			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", "%"+sUpper+"%", "%"+search+"%", "%"+sUpper+"%", "%"+sUpper+"%").
-			Distinct("orders.id")
+			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", sUpper, "%"+search+"%", sUpper, sUpper)
 	}
 
 	var orders []models.Order
-	query.Limit(100).Find(&orders)
+	query.Distinct().Select("orders.*").Limit(100).Find(&orders)
 
 	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
 	if err != nil {
@@ -1464,7 +1469,7 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 
 		cTimeStr := ""
 		if o.CreatedAt != nil {
-			cTimeStr = o.CreatedAt.Format("02/01/2006 15:04")
+			cTimeStr = FormatTimeAgo(o.CreatedAt)
 		}
 
 		consID := 0
@@ -1909,4 +1914,46 @@ func formatProductSizes(p *models.Product) string {
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, " - ")
+}
+
+func FormatTimeAgo(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return ""
+	}
+	now := time.Now()
+	diff := now.Sub(*t)
+	if diff < 0 {
+		return "just now"
+	}
+
+	seconds := int(diff.Seconds())
+	minutes := int(diff.Minutes())
+	hours := int(diff.Hours())
+	days := hours / 24
+
+	if seconds < 60 {
+		return "just now"
+	} else if minutes == 1 {
+		return "1 min ago"
+	} else if minutes < 60 {
+		return fmt.Sprintf("%d mins ago", minutes)
+	} else if hours == 1 {
+		return "1 hour ago"
+	} else if hours < 24 {
+		return fmt.Sprintf("%d hours ago", hours)
+	} else if days == 1 {
+		return "1 day ago"
+	} else if days < 30 {
+		return fmt.Sprintf("%d days ago", days)
+	} else if days < 60 {
+		return "1 month ago"
+	} else if days < 365 {
+		return fmt.Sprintf("%d months ago", days/30)
+	} else {
+		years := days / 365
+		if years == 1 {
+			return "1 year ago"
+		}
+		return fmt.Sprintf("%d years ago", years)
+	}
 }

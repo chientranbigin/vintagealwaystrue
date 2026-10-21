@@ -180,7 +180,11 @@ func main() {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
 			return
 		}
-		if strings.HasPrefix(path, "/sale") {
+		if strings.HasPrefix(path, "/salev2") {
+			c.File("./static/salev2/index.html")
+			return
+		}
+		if path == "/sale" || strings.HasPrefix(path, "/sale/") {
 			c.Redirect(http.StatusFound, "/sale")
 			return
 		}

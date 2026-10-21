@@ -45,6 +45,9 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1">
+                    <el-tag v-if="order.is_paid" type="success" size="mini" effect="dark" class="rounded-pill uppercase font-bold text-[8px]">
+                        PAID
+                    </el-tag>
                     <el-tag :type="getStatusType(order.status)" size="mini" effect="dark" class="rounded-pill uppercase font-bold text-[8px]">
                         {{ order.status }}
                     </el-tag>
@@ -76,7 +79,7 @@
           </div>
 
           <!-- Card Body: Summary & Products -->
-          <div class="p-4 flex-1 space-y-4">
+          <div class="p-4 flex-1 flex flex-col justify-between space-y-4">
             <!-- Product Preview -->
             <div class="grid grid-cols-2 gap-2 pb-2">
                 <div v-for="p in order.products" :key="p.id" class="flex flex-col">
@@ -88,7 +91,7 @@
             </div>
 
             <!-- Summary Block (Matches Legacy Layout) -->
-            <div class="bg-gray-50 rounded-xl p-3 text-[10px] space-y-1">
+            <div class="bg-gray-50 rounded-xl p-3 text-[10px] space-y-1 mt-auto">
                 <div v-for="p in order.products" :key="p.id" class="text-slate-600 block mb-1">
                    <div class="font-bold flex justify-between">
                        <span>{{ p.type }} {{ p.name }}</span>
@@ -100,7 +103,7 @@
                     <span>Phí cộng thêm:</span>
                     <span>+{{ formatPrice(order.additional_amount) }}</span>
                 </div>
-                <div v-if="parseFloat(order.is_paid) || parseFloat(order.deposit_amount) > 0" class="text-emerald-600 font-bold flex justify-between">
+                <div v-if="order.is_paid || (order.deposit_amount && parseFloat(order.deposit_amount) > 0)" class="text-emerald-600 font-bold flex justify-between">
                     <span>{{ order.is_paid ? 'Đã thanh toán:' : 'Cọc:' }}</span>
                     <span>-{{ formatPrice(order.is_paid ? order.total_amount : order.deposit_amount) }}</span>
                 </div>
@@ -114,7 +117,9 @@
                     <span class="text-[9px] text-slate-400 font-black uppercase block leading-none mb-1 ">Viettel Amount</span>
                     <div class="flex items-baseline gap-1">
                         <span class="text-xl font-black text-slate-900">{{ formatPrice(order.viettel_amount) }}</span>
-                        <span class="text-[10px] font-bold text-slate-400">+ phí ship</span>
+                        <span class="text-[10px] font-bold" :class="order.is_paid ? 'text-emerald-600 font-bold' : 'text-slate-400'">
+                            {{ order.is_paid ? 'Freeship' : '+ phí ship' }}
+                        </span>
                     </div>
                 </div>
                 <div v-if="order.is_old" class="animate-pulse bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-pill">DELAY</div>

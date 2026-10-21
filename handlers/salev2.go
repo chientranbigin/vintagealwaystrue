@@ -213,7 +213,7 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 		o := &orders[i]
 		if o.CreatedAt != nil {
 			o.IsOld = now.Sub(*o.CreatedAt).Hours() >= 72 // 3 days
-			o.CreatedAtHuman = o.CreatedAt.Format("02/01/2006 15:04")
+			o.CreatedAtHuman = FormatTimeAgo(o.CreatedAt)
 		}
 
 		if o.IsPaid {
@@ -281,6 +281,10 @@ func (h *SaleV2Handler) OrderDetail(c *gin.Context) {
 
 	for j := range order.Products {
 		h.formatProduct(&order.Products[j])
+	}
+
+	if order.CreatedAt != nil {
+		order.CreatedAtHuman = FormatTimeAgo(order.CreatedAt)
 	}
 
 	c.JSON(http.StatusOK, order)
