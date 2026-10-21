@@ -83,8 +83,21 @@
             <!-- Product Preview -->
             <div class="grid grid-cols-2 gap-2 pb-2">
                 <div v-for="p in order.products" :key="p.id" class="flex flex-col">
-                    <span class="text-[10px] font-bold text-slate-700 truncate mb-1">{{ p.name }}</span>
-                    <img :src="p.image_thumb_scale_url || p.path_thumb"
+                    <router-link v-if="p.id" :to="{ name: 'product-edit', params: { id: p.id } }"
+                                 class="text-[10px] font-bold text-slate-700 truncate mb-1 hover:text-blue-600 transition-colors block"
+                                 :title="p.name">
+                        {{ p.name }}
+                    </router-link>
+                    <span v-else class="text-[10px] font-bold text-slate-700 truncate mb-1">{{ p.name }}</span>
+
+                    <router-link v-if="p.id" :to="{ name: 'product-edit', params: { id: p.id } }"
+                                 class="cursor-pointer block overflow-hidden rounded group/img"
+                                 title="Xem chi tiết sản phẩm">
+                        <img :src="p.image_thumb_scale_url || p.path_thumb"
+                             class="w-full h-auto object-contain bg-slate-100 rounded shadow-sm border border-slate-100 group-hover/img:scale-105 group-hover/img:opacity-90 transition-all duration-200 cursor-pointer"
+                             @error="e => e.target.src = p.path_thumb" />
+                    </router-link>
+                    <img v-else :src="p.image_thumb_scale_url || p.path_thumb"
                          class="w-full h-auto object-contain bg-slate-100 rounded shadow-sm border border-slate-100"
                          @error="e => e.target.src = p.path_thumb" />
                 </div>
@@ -356,6 +369,16 @@ export default {
             this.fetchOrders(1);
         } else {
             this.$router.push({ path: '/salev2/orders', query: { search: order.phone } });
+        }
+    },
+    viewProductDetail(product) {
+        if (product && product.id) {
+            this.$router.push({ name: 'product-edit', params: { id: product.id } });
+        }
+    },
+    viewOrder(order) {
+        if (order && order.id) {
+            this.$router.push({ name: 'order-edit', params: { id: order.id } });
         }
     }
   },
