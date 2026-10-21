@@ -105,10 +105,36 @@
                              <span class="text-slate-500">Additional Fee</span>
                              <el-input-number v-model="order.additional_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
                          </div>
-                         <div class="flex justify-between text-sm items-center">
-                              <span class="text-slate-500">Freeship/Discount</span>
-                              <el-input-number v-model="order.freeship_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
-                          </div>
+                         <div class="flex justify-between items-center text-sm">
+                             <div class="flex items-center gap-2">
+                                 <span class="text-slate-500">Giảm giá / Discount</span>
+                                 <div class="inline-flex rounded-md p-0.5 bg-slate-100 border border-slate-200">
+                                     <button type="button" 
+                                             @click="setDiscountType('amount')" 
+                                             :class="discountType === 'amount' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'" 
+                                             class="px-2 py-0.5 text-xs rounded transition-all">
+                                         VNĐ
+                                     </button>
+                                     <button type="button" 
+                                             @click="setDiscountType('percent')" 
+                                             :class="discountType === 'percent' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'" 
+                                             class="px-2 py-0.5 text-xs rounded transition-all">
+                                         %
+                                     </button>
+                                 </div>
+                             </div>
+                             <div class="flex items-center gap-1.5">
+                                 <template v-if="discountType === 'percent'">
+                                     <span v-if="order.freeship_amount" class="text-xs font-semibold text-red-500 mr-1">-{{ formatPrice(order.freeship_amount) }}</span>
+                                     <el-input-number v-model="discountPercent" :min="0" :max="100" :step="5" size="mini" controls-position="right" class="w-24" @change="recalcFromPercent"></el-input-number>
+                                     <span class="text-xs font-bold text-slate-500">%</span>
+                                 </template>
+                                 <template v-else>
+                                     <span v-if="order.freeship_amount && subtotal" class="text-[11px] text-slate-400 font-medium mr-1">({{ percentOfSubtotal }}%)</span>
+                                     <el-input-number v-model="order.freeship_amount" :min="0" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                                 </template>
+                             </div>
+                         </div>
                          <div class="flex justify-between text-sm items-center">
                              <span class="text-slate-500">Deposit</span>
                              <el-input-number v-model="order.deposit_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
@@ -178,6 +204,8 @@ export default {
                 deposit_amount: 0,
                 products: []
             },
+            discountType: 'amount',
+            discountPercent: 0,
             showProductSelector: false,
             productSearch: '',
             availableProducts: []
@@ -186,6 +214,10 @@ export default {
     computed: {
         subtotal() {
             return this.order.products.reduce((sum, p) => sum + Number(p.price), 0);
+        },
+        percentOfSubtotal() {
+            if (!this.subtotal || !this.order.freeship_amount) return 0;
+            return Math.round((this.order.freeship_amount / this.subtotal) * 100);
         },
         totalAmount() {
             let total = this.subtotal + (this.order.additional_amount || 0) - (this.order.freeship_amount || 0);
@@ -197,6 +229,11 @@ export default {
         }
     },
     watch: {
+        subtotal() {
+            if (this.discountType === 'percent') {
+                this.recalcFromPercent();
+            }
+        },
         '$route.query.consumer_id': {
             immediate: true,
             handler(id) {
@@ -208,6 +245,21 @@ export default {
         this.fetchAvailableProducts();
     },
     methods: {
+        setDiscountType(type) {
+            this.discountType = type;
+            if (type === 'percent') {
+                if (this.subtotal > 0 && this.order.freeship_amount > 0) {
+                    this.discountPercent = Math.round((this.order.freeship_amount / this.subtotal) * 100);
+                } else if (!this.order.freeship_amount) {
+                    this.discountPercent = 0;
+                }
+                this.recalcFromPercent();
+            }
+        },
+        recalcFromPercent() {
+            const pct = Number(this.discountPercent) || 0;
+            this.order.freeship_amount = Math.round((this.subtotal * pct) / 100);
+        },
         formatPrice(val) {
             return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val);
         },
