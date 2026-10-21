@@ -105,7 +105,10 @@
                              <span class="text-slate-500">Additional Fee</span>
                              <el-input-number v-model="order.additional_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
                          </div>
-              
+                         <div class="flex justify-between text-sm items-center">
+                             <span class="text-slate-500">Discount (Giảm giá)</span>
+                             <el-input-number v-model="order.freeship_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                         </div>
                          <div class="flex justify-between text-sm items-center">
                              <span class="text-slate-500">Deposit</span>
                              <el-input-number v-model="order.deposit_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
@@ -175,8 +178,8 @@ export default {
         },
         totalAmount() {
             if (!this.order) return 0;
-            let total = this.subtotal + (this.order.additional_amount || 0);
-            return total;
+            let total = this.subtotal + (this.order.additional_amount || 0) - (this.order.freeship_amount || 0);
+            return total > 0 ? total : 0;
         },
         viettelAmount() {
             if (!this.order) return 0;
@@ -212,6 +215,7 @@ export default {
                 this.$set(this.order, 'products', uniqueProds);
                 // Ensure number fields for EL input (reactive)
                 this.$set(this.order, 'additional_amount', parseFloat(this.order.additional_amount || 0));
+                this.$set(this.order, 'freeship_amount', parseFloat(this.order.freeship_amount || 0));
                 this.$set(this.order, 'deposit_amount', parseFloat(this.order.deposit_amount || 0));
             } catch(e) {
                 this.$message.error('Failed to load order');
@@ -259,8 +263,9 @@ export default {
                 // Prepare payload
                 const payload = {
                     ...this.order,
-                    additional_amount: this.order.additional_amount,
-                    deposit_amount: this.order.deposit_amount,
+                    additional_amount: this.order.additional_amount || 0,
+                    freeship_amount: this.order.freeship_amount || 0,
+                    deposit_amount: this.order.deposit_amount || 0,
                     products: cleanProducts.map(p => Number(p.id)),
                     products_info: cleanProducts.map(p => ({ id: Number(p.id), price: p.price })),
                     total_amount: this.totalAmount,

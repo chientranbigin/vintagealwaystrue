@@ -103,6 +103,10 @@
                     <span>Phí cộng thêm:</span>
                     <span>+{{ formatPrice(order.additional_amount) }}</span>
                 </div>
+                <div v-if="order.freeship_amount > 0" class="text-orange-500 font-bold flex justify-between">
+                    <span>Giảm giá:</span>
+                    <span>-{{ formatPrice(order.freeship_amount) }}</span>
+                </div>
                 <div v-if="order.is_paid || (order.deposit_amount && parseFloat(order.deposit_amount) > 0)" class="text-emerald-600 font-bold flex justify-between">
                     <span>{{ order.is_paid ? 'Đã thanh toán:' : 'Cọc:' }}</span>
                     <span>-{{ formatPrice(order.is_paid ? order.total_amount : order.deposit_amount) }}</span>
@@ -154,10 +158,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="Additionals" width="120" align="center">
+        <el-table-column label="Additionals" width="130" align="center">
             <template slot-scope="scope">
-                <p class="text-[10px]"><span class="text-blue-600">Phí thêm:</span> {{ formatPrice(scope.row.additional_amount) }}</p>
-                <p class="text-[10px]"><span class="text-emerald-600">Cọc:</span> {{ formatPrice(scope.row.deposit_amount) }}</p>
+                <p class="text-[10px]" v-if="scope.row.additional_amount > 0"><span class="text-blue-600">Phí thêm:</span> +{{ formatPrice(scope.row.additional_amount) }}</p>
+                <p class="text-[10px]" v-if="scope.row.freeship_amount > 0"><span class="text-orange-500">Giảm giá:</span> -{{ formatPrice(scope.row.freeship_amount) }}</p>
+                <p class="text-[10px]" v-if="scope.row.deposit_amount > 0"><span class="text-emerald-600">Cọc:</span> {{ formatPrice(scope.row.deposit_amount) }}</p>
             </template>
         </el-table-column>
         <el-table-column label="Viettel Amt" width="120" align="center">
@@ -221,6 +226,9 @@
                 </div>
             </div>
             <div class="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100 font-bold">
+                <div class="flex justify-between mb-3 text-sm text-slate-500"><span>Tiền hàng</span><span>{{ formatPrice(currentCapture?.products?.reduce((s, p) => s + Number(p.price), 0)) }}</span></div>
+                <div v-if="currentCapture?.additional_amount > 0" class="flex justify-between mb-3 text-sm text-blue-600"><span>Phí thêm</span><span>+{{ formatPrice(currentCapture.additional_amount) }}</span></div>
+                <div v-if="currentCapture?.freeship_amount > 0" class="flex justify-between mb-3 text-sm text-orange-500"><span>Giảm giá</span><span>-{{ formatPrice(currentCapture.freeship_amount) }}</span></div>
                 <div class="flex justify-between mb-3 text-sm text-slate-500"><span>Tổng đơn</span><span>{{ formatPrice(currentCapture?.total_amount) }}</span></div>
                 <div class="pt-4 border-t border-slate-200 flex justify-between items-center"><span class="text-lg">Viettel Amount</span><span class="text-2xl text-blue-600">{{ formatPrice(currentCapture?.viettel_amount) }}</span></div>
             </div>

@@ -630,6 +630,9 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 			add := int64(val)
 			order.AdditionalAmount = &add
 		}
+		if val, ok := req["freeship_amount"].(float64); ok {
+			order.FreeshipAmount = &val
+		}
 		if val, ok := req["final_amount"].(float64); ok {
 			fin := int64(val)
 			order.FinalAmount = &fin
