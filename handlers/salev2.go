@@ -503,10 +503,18 @@ func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 		prefix = p
 	}
 
-	var last models.Product
-	h.DB.Where("type = ?", req.Type).Order("id DESC").First(&last)
-	nextID := last.ID + 1
-	codeName := fmt.Sprintf("%s%d", prefix, nextID)
+	var latest models.Product
+	h.DB.Where("type = ?", req.Type).Order("id DESC").First(&latest)
+	re := regexp.MustCompile(`\d+`)
+	num := 1
+	if latest.Name != nil {
+		if m := re.FindString(*latest.Name); m != "" {
+			if n, err := strconv.Atoi(m); err == nil {
+				num = n + 1
+			}
+		}
+	}
+	codeName := fmt.Sprintf("%s%d", prefix, num)
 	status := "AVAILABLE"
 
 	product := models.Product{
@@ -517,11 +525,18 @@ func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 		Status:      &status,
 	}
 
+	if file, err := c.FormFile("banner"); err == nil && file != nil {
+		if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
+			product.PathThumb = &uploadedPath
+		}
+	}
+
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&product).Error; err != nil {
 			return err
 		}
 
+		savedSizes := 0
 		for _, sz := range req.Sizes {
 			if sz.Value != nil {
 				s := models.Size{
@@ -532,8 +547,31 @@ func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 				if err := tx.Create(&s).Error; err != nil {
 					return err
 				}
+				savedSizes++
 			}
 		}
+
+		// Fallback for multipart form data if req.Sizes wasn't bound
+		if savedSizes == 0 {
+			for i := 0; i < 30; i++ {
+				sName := c.PostForm(fmt.Sprintf("sizes[%d][name]", i))
+				sValStr := c.PostForm(fmt.Sprintf("sizes[%d][value]", i))
+				if sName != "" && sValStr != "" {
+					val, err := strconv.ParseFloat(sValStr, 64)
+					if err == nil {
+						s := models.Size{
+							ProductID: &product.ID,
+							Name:      &sName,
+							Value:     &val,
+						}
+						if err := tx.Create(&s).Error; err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
 		return nil
 	})
 
