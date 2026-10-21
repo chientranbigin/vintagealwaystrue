@@ -39,7 +39,7 @@ func LoadConfig() *Config {
 	mediaBase := os.Getenv("MEDIA_BASE_URL")
 	if mediaBase == "" {
 		// Public CDN endpoint from existing server with SSL
-		mediaBase = "https://www.tadimedia.vn/storage/"
+		mediaBase = "https://vintagealwaystrue.id.vn/storage/"
 	}
 
 	return &Config{

@@ -139,13 +139,17 @@ func init() {
 		if path == "" {
 			return pongo2.AsValue(""), nil
 		}
+		if strings.Contains(path, "tadimedia.vn") {
+			path = strings.Replace(path, "www.tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+			path = strings.Replace(path, "tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+		}
 		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 			return pongo2.AsValue(path), nil
 		}
 		clean := strings.TrimLeft(path, "/")
 		baseURL := os.Getenv("MEDIA_BASE_URL")
 		if baseURL == "" {
-			baseURL = "https://www.tadimedia.vn/storage/"
+			baseURL = "https://vintagealwaystrue.id.vn/storage/"
 		}
 		if strings.HasPrefix(clean, "storage/") {
 			clean = strings.TrimPrefix(clean, "storage/")
@@ -158,13 +162,17 @@ func resolveImgURL(path string) string {
 	if path == "" {
 		return ""
 	}
+	if strings.Contains(path, "tadimedia.vn") {
+		path = strings.Replace(path, "www.tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+		path = strings.Replace(path, "tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path
 	}
 	clean := strings.TrimLeft(path, "/")
 	baseURL := os.Getenv("MEDIA_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://www.tadimedia.vn/storage/"
+		baseURL = "https://vintagealwaystrue.id.vn/storage/"
 	}
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"

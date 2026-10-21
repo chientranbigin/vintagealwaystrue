@@ -28,6 +28,10 @@ func (h *SaleV2Handler) FormatImagePath(path string) string {
 	if path == "" {
 		return ""
 	}
+	if strings.Contains(path, "tadimedia.vn") {
+		path = strings.Replace(path, "www.tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+		path = strings.Replace(path, "tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path
 	}

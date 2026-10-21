@@ -43,7 +43,7 @@ func NewStorageService() *StorageService {
 
 	baseURL := os.Getenv("MEDIA_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://www.tadimedia.vn/storage/"
+		baseURL = "https://vintagealwaystrue.id.vn/storage/"
 	}
 
 	return &StorageService{
