@@ -185,25 +185,28 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	query := h.DB.Model(&models.Order{}).Preload("Products.Images").Preload("Products.Sizes")
+	query := h.DB.Model(&models.Order{})
 
 	if status := c.Query("status"); status != "" {
 		if status == "NEW" {
-			query = query.Where("status != ? AND status != ?", "COMPLETED", "READY FOR SHIPPING").Order("status ASC")
+			query = query.Where("orders.status != ? AND orders.status != ?", "COMPLETED", "READY FOR SHIPPING").Order("orders.status ASC")
 		} else {
-			query = query.Where("status = ?", status)
+			query = query.Where("orders.status = ?", status)
 		}
 	}
 
 	if search := c.Query("search"); search != "" {
-		query = query.Where("name LIKE ? OR phone LIKE ?", "%"+search+"%", "%"+search+"%")
+		sUpper := "%" + strings.ToUpper(search) + "%"
+		query = query.Joins("LEFT JOIN order_products ON order_products.order_id = orders.id").
+			Joins("LEFT JOIN products ON products.id = order_products.product_id").
+			Where("UPPER(orders.name) LIKE ? OR orders.phone LIKE ? OR UPPER(orders.address) LIKE ? OR UPPER(products.name) LIKE ?", sUpper, "%"+search+"%", sUpper, sUpper)
 	}
 
 	var total int64
-	query.Count(&total)
+	query.Distinct("orders.id").Count(&total)
 
 	var orders []models.Order
-	query.Order("id DESC").Limit(limit).Offset(offset).Find(&orders)
+	query.Distinct().Select("orders.*").Preload("Products.Images").Preload("Products.Sizes").Order("orders.id DESC").Limit(limit).Offset(offset).Find(&orders)
 
 	now := time.Now()
 	for i := range orders {
