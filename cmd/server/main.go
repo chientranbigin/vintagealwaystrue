@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -100,9 +101,32 @@ func main() {
 		sale.GET("/", v1.Home)
 
 		sale.GET("/product", v1.Products)
+		sale.POST("/product", func(c *gin.Context) {
+			values := url.Values{}
+			for _, key := range []string{"search", "type", "status", "from_search_key", "from_search_value", "to_search_value", "sold_from", "sold_to"} {
+				if val := strings.TrimSpace(c.PostForm(key)); val != "" {
+					values.Set(key, val)
+				}
+			}
+			redirectURL := "/sale/product"
+			if qs := values.Encode(); qs != "" {
+				redirectURL += "?" + qs
+			}
+			c.Redirect(http.StatusFound, redirectURL)
+		})
 		sale.GET("/available-product", v1.AvailableProducts)
 		sale.POST("/available-product", func(c *gin.Context) {
-			c.Redirect(http.StatusFound, "/sale/available-product")
+			values := url.Values{}
+			for _, key := range []string{"search", "type", "from_search_key", "from_search_value", "to_search_value", "from_search_key_2", "from_search_value_2", "to_search_value_2"} {
+				if val := strings.TrimSpace(c.PostForm(key)); val != "" {
+					values.Set(key, val)
+				}
+			}
+			redirectURL := "/sale/available-product"
+			if qs := values.Encode(); qs != "" {
+				redirectURL += "?" + qs
+			}
+			c.Redirect(http.StatusFound, redirectURL)
 		})
 		sale.GET("/product/:id", v1.ProductDetail)
 		sale.POST("/product/:id", v1.ProductDetail)

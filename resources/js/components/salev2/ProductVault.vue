@@ -56,7 +56,7 @@
                     <!-- Key (Mobile: Order 1, Desktop: Order 1) -->
                     <div class="w-[calc(100%-2.5rem)] md:w-32 order-1 md:order-1">
                         <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block tracking-wider">Key</label>
-                        <el-select v-model="filter.key" placeholder="Key" clearable class="w-full" size="mini">
+                        <el-select v-model="filter.key" placeholder="Key" clearable class="w-full" size="mini" @change="debouncedFetch">
                         <el-option v-for="s in sizes" :key="s" :label="s" :value="s"></el-option>
                         </el-select>
                     </div>
@@ -64,13 +64,13 @@
                     <!-- From (Mobile: Order 3, Desktop: Order 2) -->
                     <div class="w-[48%] md:w-28 order-3 md:order-2">
                         <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block tracking-wider">From</label>
-                        <el-input-number v-model="filter.from" :precision="1" :step="0.5" placeholder="From" class="w-full" controls-position="right" size="mini"></el-input-number>
+                        <el-input-number v-model="filter.from" :precision="1" :step="0.5" placeholder="From" class="w-full" controls-position="right" size="mini" @change="debouncedFetch"></el-input-number>
                     </div>
                     
                     <!-- To (Mobile: Order 4, Desktop: Order 3) -->
                     <div class="w-[48%] md:w-28 order-4 md:order-3">
                             <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block tracking-wider">To</label>
-                            <el-input-number v-model="filter.to" :precision="1" :step="0.5" placeholder="To" class="w-full" controls-position="right" size="mini"></el-input-number>
+                            <el-input-number v-model="filter.to" :precision="1" :step="0.5" placeholder="To" class="w-full" controls-position="right" size="mini" @change="debouncedFetch"></el-input-number>
                     </div>
                     
                     <!-- Remove Button (Mobile: Order 2, Desktop: Order 4) -->
@@ -283,6 +283,7 @@ export default {
     },
     removeSizeFilter(index) {
         this.sizeFilters.splice(index, 1);
+        this.fetchProducts(1);
     },
     async fetchProducts(page = 1) {
       this.page = page;
@@ -299,6 +300,9 @@ export default {
           from_search_key_2: this.sizeFilters[1]?.key,
           from_search_value_2: this.sizeFilters[1]?.from,
           to_search_value_2: this.sizeFilters[1]?.to,
+          from_search_key_3: this.sizeFilters[2]?.key,
+          from_search_value_3: this.sizeFilters[2]?.from,
+          to_search_value_3: this.sizeFilters[2]?.to,
         };
         if (this.sortByUpload) params.sort = 'upload';
         const res = await axios.get('/salev2/api/products', { params });

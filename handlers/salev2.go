@@ -150,6 +150,35 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 		query = query.Where("type = ?", pType)
 	}
 
+	// Size filters (EXISTS subquery handles ranges and avoid duplicates/join collision)
+	applySizeFilter := func(key, fromVal, toVal string) {
+		key = strings.TrimSpace(key)
+		fromVal = strings.TrimSpace(fromVal)
+		toVal = strings.TrimSpace(toVal)
+		if key == "" {
+			return
+		}
+		subQuery := "SELECT 1 FROM sizes WHERE sizes.product_id = products.id AND sizes.name = ?"
+		args := []interface{}{key}
+		if fromVal != "" {
+			if fVal, err := strconv.ParseFloat(fromVal, 64); err == nil {
+				subQuery += " AND sizes.value >= ?"
+				args = append(args, fVal)
+			}
+		}
+		if toVal != "" {
+			if tVal, err := strconv.ParseFloat(toVal, 64); err == nil {
+				subQuery += " AND sizes.value <= ?"
+				args = append(args, tVal)
+			}
+		}
+		query = query.Where("EXISTS ("+subQuery+")", args...)
+	}
+
+	applySizeFilter(c.Query("from_search_key"), c.Query("from_search_value"), c.Query("to_search_value"))
+	applySizeFilter(c.Query("from_search_key_2"), c.Query("from_search_value_2"), c.Query("to_search_value_2"))
+	applySizeFilter(c.Query("from_search_key_3"), c.Query("from_search_value_3"), c.Query("to_search_value_3"))
+
 	var total int64
 	query.Count(&total)
 

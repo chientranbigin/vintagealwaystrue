@@ -451,17 +451,32 @@ func (h *SaleV1Handler) Products(c *gin.Context) {
 		query = query.Where("status = ?", selectedStatus)
 	}
 
-	if fromSearchKey != "" && (fromSearchVal != "" || toSearchVal != "") {
-		query = query.Joins("JOIN sizes ON sizes.product_id = products.id").Where("sizes.name = ?", fromSearchKey)
-		if fromSearchVal != "" {
-			fVal, _ := strconv.ParseFloat(fromSearchVal, 64)
-			query = query.Where("sizes.value >= ?", fVal)
+	// Size filter using EXISTS subquery to avoid join collisions and duplication
+	applySizeFilter := func(key, fromVal, toVal string) {
+		key = strings.TrimSpace(key)
+		fromVal = strings.TrimSpace(fromVal)
+		toVal = strings.TrimSpace(toVal)
+		if key == "" {
+			return
 		}
-		if toSearchVal != "" {
-			tVal, _ := strconv.ParseFloat(toSearchVal, 64)
-			query = query.Where("sizes.value <= ?", tVal)
+		subQuery := "SELECT 1 FROM sizes WHERE sizes.product_id = products.id AND sizes.name = ?"
+		args := []interface{}{key}
+		if fromVal != "" {
+			if fVal, err := strconv.ParseFloat(fromVal, 64); err == nil {
+				subQuery += " AND sizes.value >= ?"
+				args = append(args, fVal)
+			}
 		}
+		if toVal != "" {
+			if tVal, err := strconv.ParseFloat(toVal, 64); err == nil {
+				subQuery += " AND sizes.value <= ?"
+				args = append(args, tVal)
+			}
+		}
+		query = query.Where("EXISTS ("+subQuery+")", args...)
 	}
+
+	applySizeFilter(fromSearchKey, fromSearchVal, toSearchVal)
 
 	if soldFrom != "" && soldTo != "" {
 		query = query.Joins("JOIN order_products ON products.id = order_products.product_id").
@@ -589,29 +604,34 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 		query = query.Where("type = ?", selectedType)
 	}
 
-	if fromSearchKey != "" && (fromSearchVal != "" || toSearchVal != "") {
-		query = query.Joins("JOIN sizes ON sizes.product_id = products.id").Where("sizes.name = ?", fromSearchKey)
-		if fromSearchVal != "" {
-			fVal, _ := strconv.ParseFloat(fromSearchVal, 64)
-			query = query.Where("sizes.value >= ?", fVal)
+	// Size filter using EXISTS subquery to avoid join collisions and duplication
+	applySizeFilter := func(key, fromVal, toVal string) {
+		key = strings.TrimSpace(key)
+		fromVal = strings.TrimSpace(fromVal)
+		toVal = strings.TrimSpace(toVal)
+		if key == "" {
+			return
 		}
-		if toSearchVal != "" {
-			tVal, _ := strconv.ParseFloat(toSearchVal, 64)
-			query = query.Where("sizes.value <= ?", tVal)
+		subQuery := "SELECT 1 FROM sizes WHERE sizes.product_id = products.id AND sizes.name = ?"
+		args := []interface{}{key}
+		if fromVal != "" {
+			if fVal, err := strconv.ParseFloat(fromVal, 64); err == nil {
+				subQuery += " AND sizes.value >= ?"
+				args = append(args, fVal)
+			}
 		}
+		if toVal != "" {
+			if tVal, err := strconv.ParseFloat(toVal, 64); err == nil {
+				subQuery += " AND sizes.value <= ?"
+				args = append(args, tVal)
+			}
+		}
+		query = query.Where("EXISTS ("+subQuery+")", args...)
 	}
 
-	if fromSearchKey2 != "" && (fromSearchVal2 != "" || toSearchVal2 != "") {
-		query = query.Joins("JOIN sizes sizes_2 ON sizes_2.product_id = products.id").Where("sizes_2.name = ?", fromSearchKey2)
-		if fromSearchVal2 != "" {
-			fVal, _ := strconv.ParseFloat(fromSearchVal2, 64)
-			query = query.Where("sizes_2.value >= ?", fVal)
-		}
-		if toSearchVal2 != "" {
-			tVal, _ := strconv.ParseFloat(toSearchVal2, 64)
-			query = query.Where("sizes_2.value <= ?", tVal)
-		}
-	}
+	applySizeFilter(fromSearchKey, fromSearchVal, toSearchVal)
+
+	applySizeFilter(fromSearchKey2, fromSearchVal2, toSearchVal2)
 
 	var total int64
 	query.Count(&total)
