@@ -4,24 +4,57 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"sale-app/config"
 	"sale-app/models"
+	"sale-app/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
+type SmartUploadJob struct {
+	SessionID        string
+	OriginalFileName string
+	MainImagePath    string
+	DetailPaths      []string
+	ProductType      string
+}
+
 type SaleV2Handler struct {
-	DB  *gorm.DB
-	Cfg *config.Config
+	DB          *gorm.DB
+	Cfg         *config.Config
+	Storage     *services.StorageService
+	Vision      *services.VisionService
+	UploadQueue chan SmartUploadJob
 }
 
 func NewSaleV2Handler(db *gorm.DB, cfg *config.Config) *SaleV2Handler {
-	return &SaleV2Handler{DB: db, Cfg: cfg}
+	h := &SaleV2Handler{
+		DB:          db,
+		Cfg:         cfg,
+		Storage:     services.NewStorageService(),
+		Vision:      services.NewVisionService(),
+		UploadQueue: make(chan SmartUploadJob, 100),
+	}
+	h.StartWorkers(3)
+	return h
+}
+
+func (h *SaleV2Handler) StartWorkers(count int) {
+	for i := 0; i < count; i++ {
+		go func(workerID int) {
+			for job := range h.UploadQueue {
+				h.processSmartUploadJob(job)
+			}
+		}(i + 1)
+	}
 }
 
 func (h *SaleV2Handler) FormatImagePath(path string) string {
@@ -1175,6 +1208,15 @@ func (h *SaleV2Handler) SoldByDateProducts(c *gin.Context) {
 }
 
 func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
+	sessionIdsParam := c.Query("session_ids")
+	if sessionIdsParam != "" {
+		sIDs := strings.Split(sessionIdsParam, ",")
+		var logs []models.ProductUploadLog
+		h.DB.Where("session_id IN ?", sIDs).Find(&logs)
+		c.JSON(http.StatusOK, logs)
+		return
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset := (page - 1) * limit
@@ -1201,4 +1243,306 @@ func (h *SaleV2Handler) UploadLogs(c *gin.Context) {
 		Total:       total,
 	})
 }
+
+// UploadSmartGroup accepts a main image and optional detail images and dispatches a background job
+func (h *SaleV2Handler) UploadSmartGroup(c *gin.Context) {
+	sessionID := c.DefaultPostForm("session_id", fmt.Sprintf("SMART_%d", time.Now().UnixNano()))
+	pType := c.DefaultPostForm("type", "TROUSERS")
+
+	// 1. Store Main Image
+	mainFile, err := c.FormFile("main")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Main image is required"})
+		return
+	}
+
+	mainStoredPath, err := h.Storage.Upload(mainFile)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": fmt.Sprintf("Failed to store main image: %v", err)})
+		return
+	}
+
+	// 2. Store Detail Images
+	var detailPaths []string
+	form, err := c.MultipartForm()
+	if err == nil && form != nil {
+		for key, files := range form.File {
+			if strings.HasPrefix(key, "details") {
+				for _, f := range files {
+					if path, err := h.Storage.Upload(f); err == nil && path != "" {
+						detailPaths = append(detailPaths, path)
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Dispatch Job into in-process Queue Channel
+	job := SmartUploadJob{
+		SessionID:        sessionID,
+		OriginalFileName: mainFile.Filename,
+		MainImagePath:    mainStoredPath,
+		DetailPaths:      detailPaths,
+		ProductType:      pType,
+	}
+
+	select {
+	case h.UploadQueue <- job:
+	default:
+		go func() { h.UploadQueue <- job }()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"session_id": sessionID,
+		"status":     "DISPATCHED",
+	})
+}
+
+// processSmartUploadJob processes OCR recognition and product image attachment in background
+func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
+	// 1. Init Log (Step 1 start)
+	logRecord := models.ProductUploadLog{
+		SessionID: job.SessionID,
+		FileName:  job.OriginalFileName,
+		FilePath:  job.MainImagePath,
+		Status:    "PROCESSING",
+		Message:   strPtr("Step 1: Recognition & Product Search..."),
+	}
+	h.DB.Create(&logRecord)
+
+	// 2. STEP 1: RECOGNITION & FIND PRODUCT
+	detectedText, err := h.Vision.ExtractTextFromImage(job.MainImagePath)
+	if err != nil {
+		errMsg := fmt.Sprintf("Không thể đọc được chữ từ ảnh (Google Vision Error): %v", err)
+		h.DB.Model(&models.ProductUploadLog{}).
+			Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
+			Updates(map[string]interface{}{
+				"status":  "ERROR",
+				"message": errMsg,
+			})
+		return
+	}
+
+	// A. Extract Code based on category prefix
+	prefix := job.ProductType
+	if p, ok := ProductKeyTypes[job.ProductType]; ok {
+		prefix = p
+	}
+
+	reCode := regexp.MustCompile(fmt.Sprintf(`(?i)%s\s*(\d+)`, regexp.QuoteMeta(prefix)))
+	matches := reCode.FindStringSubmatch(detectedText)
+	if len(matches) < 2 {
+		errMsg := fmt.Sprintf("Không detect được mã sản phẩm (%s...) từ ảnh hoặc tên file.", prefix)
+		h.DB.Model(&models.ProductUploadLog{}).
+			Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
+			Updates(map[string]interface{}{
+				"status":        "ERROR",
+				"detected_text": detectedText,
+				"message":       errMsg,
+			})
+		return
+	}
+	candidateName := strings.ToUpper(prefix + matches[1])
+
+	// B. Extract Price
+	var price int64
+	rePrice := regexp.MustCompile(`(?i)(\d+)\s*k\b`)
+	pMatches := rePrice.FindStringSubmatch(detectedText)
+	if len(pMatches) >= 2 {
+		if val, err := strconv.ParseInt(pMatches[1], 10, 64); err == nil {
+			price = val * 1000
+		}
+	}
+
+	// Fallback to default category price if price is 0
+	if price == 0 {
+		categoryMap := map[string]int64{
+			"TROUSERS": 180000,
+			"BLAZER":   280000,
+			"GILE":     120000,
+		}
+		if defPrice, ok := categoryMap[job.ProductType]; ok {
+			price = defPrice
+		}
+	}
+
+	// C. Search Existing Product
+	var existing models.Product
+	if err := h.DB.Where("type = ? AND name = ?", job.ProductType, candidateName).First(&existing).Error; err != nil {
+		errMsg := fmt.Sprintf("Sản phẩm mã (%s) không tồn tại. Vui lòng tạo sp trước.", candidateName)
+		h.DB.Model(&models.ProductUploadLog{}).
+			Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
+			Updates(map[string]interface{}{
+				"status":        "ERROR",
+				"product_code":  candidateName,
+				"detected_text": detectedText,
+				"message":       errMsg,
+			})
+		return
+	}
+
+	// Update product record: Price & thumbnail
+	if price > 0 {
+		existing.Price = &price
+	}
+	if existing.PathThumb == nil || *existing.PathThumb == "" {
+		existing.PathThumb = &job.MainImagePath
+	}
+	h.DB.Save(&existing)
+
+	// Step 2: Attaching images
+	prodIDInt := int(existing.ID)
+	priceFloat := float64(price)
+	h.DB.Model(&models.ProductUploadLog{}).
+		Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
+		Updates(map[string]interface{}{
+			"product_code":  candidateName,
+			"product_id":    prodIDInt,
+			"amount":        priceFloat,
+			"detected_text": detectedText,
+			"message":       "Step 2: Attaching images...",
+		})
+
+	// Attach Main Image as a detail
+	h.DB.Create(&models.ProductImage{
+		ProductID: existing.ID,
+		FilePath:  job.MainImagePath,
+		IsMain:    true,
+	})
+
+	// Attach Detail Images
+	for _, dPath := range job.DetailPaths {
+		if dPath != "" {
+			h.DB.Create(&models.ProductImage{
+				ProductID: existing.ID,
+				FilePath:  dPath,
+				IsMain:    false,
+			})
+		}
+	}
+
+	// Log Success
+	h.DB.Model(&models.ProductUploadLog{}).
+		Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
+		Updates(map[string]interface{}{
+			"status":  "SUCCESS",
+			"message": "Xử lý thành công (2 bước)",
+		})
+}
+
+// CleanupImages scans storage for orphaned images and removes them safely
+func (h *SaleV2Handler) CleanupImages(c *gin.Context) {
+	// 1. Query whitelist of in-use images:
+	// - Products with status AVAILABLE
+	// - Products with status SOLD where order is not COMPLETED or created within the last 60 days
+	var activeThumbs []string
+	h.DB.Raw(`
+		SELECT DISTINCT p.path_thumb 
+		FROM products p 
+		LEFT JOIN order_products op ON p.id = op.product_id 
+		LEFT JOIN orders o ON op.order_id = o.id 
+		WHERE p.path_thumb IS NOT NULL AND p.path_thumb != ''
+		  AND (p.status = 'AVAILABLE' OR (p.status = 'SOLD' AND (o.status != 'COMPLETED' OR o.created_at >= NOW() - INTERVAL 60 DAY)))
+	`).Scan(&activeThumbs)
+
+	var activeScaleThumbs []string
+	h.DB.Raw(`
+		SELECT DISTINCT p.image_thumb_scale 
+		FROM products p 
+		LEFT JOIN order_products op ON p.id = op.product_id 
+		LEFT JOIN orders o ON op.order_id = o.id 
+		WHERE p.image_thumb_scale IS NOT NULL AND p.image_thumb_scale != ''
+		  AND (p.status = 'AVAILABLE' OR (p.status = 'SOLD' AND (o.status != 'COMPLETED' OR o.created_at >= NOW() - INTERVAL 60 DAY)))
+	`).Scan(&activeScaleThumbs)
+
+	var activeDetailImages []string
+	h.DB.Raw(`
+		SELECT DISTINCT pi.file_path 
+		FROM product_images pi 
+		JOIN products p ON pi.product_id = p.id 
+		LEFT JOIN order_products op ON p.id = op.product_id 
+		LEFT JOIN orders o ON op.order_id = o.id 
+		WHERE pi.file_path IS NOT NULL AND pi.file_path != ''
+		  AND (p.status = 'AVAILABLE' OR (p.status = 'SOLD' AND (o.status != 'COMPLETED' OR o.created_at >= NOW() - INTERVAL 60 DAY)))
+	`).Scan(&activeDetailImages)
+
+	usedFiles := make(map[string]bool)
+	cleanAndAdd := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		base := filepath.Base(p)
+		if base != "" && base != "." {
+			usedFiles[base] = true
+		}
+	}
+
+	for _, p := range activeThumbs {
+		cleanAndAdd(p)
+	}
+	for _, p := range activeScaleThumbs {
+		cleanAndAdd(p)
+	}
+	for _, p := range activeDetailImages {
+		cleanAndAdd(p)
+	}
+
+	// 2. Scan local storage directory ./storage/sale
+	storageDir := "./storage/sale"
+	entries, err := os.ReadDir(storageDir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success":        false,
+			"error":          fmt.Sprintf("Directory %s not found or unreadable: %v", storageDir, err),
+			"used_images_db": len(usedFiles),
+		})
+		return
+	}
+
+	deletedCount := 0
+	skippedRecent := 0
+	var reclaimedBytes int64 = 0
+	safeThreshold := 24 * time.Hour
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		filename := entry.Name()
+		filePath := filepath.Join(storageDir, filename)
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Skip files modified in last 24h for safety
+		if time.Since(info.ModTime()) < safeThreshold {
+			skippedRecent++
+			continue
+		}
+
+		if !usedFiles[filename] {
+			size := info.Size()
+			if err := os.Remove(filePath); err == nil {
+				deletedCount++
+				reclaimedBytes += size
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":         true,
+		"scanned_files":   len(entries),
+		"deleted_files":   deletedCount,
+		"skipped_recent":  skippedRecent,
+		"used_images_db":  len(usedFiles),
+		"reclaimed_mb":    fmt.Sprintf("%.2f MB", float64(reclaimedBytes)/(1024*1024)),
+		"reclaimed_bytes": reclaimedBytes,
+		"message":         "Image cleanup executed successfully",
+	})
+}
+
 

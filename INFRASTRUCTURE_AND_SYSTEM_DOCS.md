@@ -48,15 +48,22 @@ Hệ thống đã được chuyển dịch (migrate) và tối ưu từ kiến t
   24jHtiebmCYdexH.root:SaleDbPassword@2026@tcp(gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000)/sale_db?tls=true&charset=utf8mb4&parseTime=True&loc=Asia%2FHo_Chi_Minh&time_zone=%27%2B07%3A00%27
   ```
 
-### 2.3. Cron-Job.org (Cơ chế chống ngủ đông Render Free Tier)
-Do Render free tier sẽ tự động tắt (spin down) khi không có request sau 15 phút, hệ thống đã cài đặt cron job tự động ping định kỳ:
+### 2.3. Cron-Job.org (Tự động hóa & Chống ngủ đông Render Free Tier)
+Hệ thống sử dụng [cron-job.org](https://cron-job.org) để thực hiện các tác vụ định kỳ tự động:
 - **Provider**: [cron-job.org](https://cron-job.org)
 - **API Key**: `A8vkUYjuEX4jFS8N3AvOtrV6scMN6KKJv9NHQhW/P6M=`
-- **Job ID**: `8690848`
-- **Tên Job**: `Vintage Sale Go - Keep Alive`
-- **Target URL**: `https://vintage-sale-go.onrender.com/healthz`
-- **Tần suất**: Mỗi 10 phút một lần (`*/10 * * * *`, múi giờ `Asia/Ho_Chi_Minh`)
-- **Trạng thái**: Đang kích hoạt (Active)
+- **Job 1 (Chống ngủ đông Keep Alive)**:
+  - **Job ID**: `8690848`
+  - **Tên Job**: `Vintage Sale Go - Keep Alive`
+  - **Target URL**: `https://vintage-sale-go.onrender.com/healthz`
+  - **Tần suất**: Mỗi 10 phút một lần (`0,10,20,30,40,50 * * * *`, múi giờ `Asia/Ho_Chi_Minh`)
+  - **Trạng thái**: Đang kích hoạt (Active)
+- **Job 2 (Dọn dẹp ảnh mồ côi / Image Cleanup)**:
+  - **Job ID**: `8692178`
+  - **Tên Job**: `Vintage Sale Go - Image Cleanup`
+  - **Target URL**: `https://vintage-sale-go.onrender.com/api/images/cleanup`
+  - **Tần suất**: Mỗi ngày một lần lúc 03:00 sáng (`0 3 * * *`, múi giờ `Asia/Ho_Chi_Minh`)
+  - **Trạng thái**: Đang kích hoạt (Active)
 
 ### 2.4. Lưu trữ Media & File ảnh (CDN & Object Storage)
 

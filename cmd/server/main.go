@@ -166,7 +166,14 @@ func main() {
 		api.GET("/sold-by-date", v2.SoldByDate)
 		api.GET("/sold-by-date/:date/products", v2.SoldByDateProducts)
 		api.GET("/upload-logs", v2.UploadLogs)
+		api.POST("/upload-smart-group", v2.UploadSmartGroup)
+		api.GET("/images/cleanup", v2.CleanupImages)
+		api.POST("/images/cleanup", v2.CleanupImages)
 	}
+
+	// Direct endpoint for external cron jobs (e.g. cron-job.org)
+	r.GET("/api/images/cleanup", v2.CleanupImages)
+	r.POST("/api/images/cleanup", v2.CleanupImages)
 
 	// Serve SaleV2 Vue SPA
 	r.GET("/salev2", func(c *gin.Context) {
