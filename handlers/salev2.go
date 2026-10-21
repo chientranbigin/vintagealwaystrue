@@ -230,6 +230,16 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 			o.ViettelAmount = tot - dep
 		}
 
+		var uniqueProducts []models.Product
+		seen := make(map[uint]bool)
+		for _, p := range o.Products {
+			if !seen[p.ID] {
+				seen[p.ID] = true
+				uniqueProducts = append(uniqueProducts, p)
+			}
+		}
+		o.Products = uniqueProducts
+
 		for j := range o.Products {
 			h.formatProduct(&o.Products[j])
 		}
@@ -258,6 +268,16 @@ func (h *SaleV2Handler) OrderDetail(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
+
+	var uniqueProducts []models.Product
+	seen := make(map[uint]bool)
+	for _, p := range order.Products {
+		if !seen[p.ID] {
+			seen[p.ID] = true
+			uniqueProducts = append(uniqueProducts, p)
+		}
+	}
+	order.Products = uniqueProducts
 
 	for j := range order.Products {
 		h.formatProduct(&order.Products[j])
@@ -309,7 +329,16 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 			return err
 		}
 
+		var cleanProducts []uint
+		seenP := make(map[uint]bool)
 		for _, pID := range req.Products {
+			if pID > 0 && !seenP[pID] {
+				seenP[pID] = true
+				cleanProducts = append(cleanProducts, pID)
+			}
+		}
+
+		for _, pID := range cleanProducts {
 			op := models.OrderProduct{OrderID: &order.ID, ProductID: &pID}
 			if err := tx.Create(&op).Error; err != nil {
 				return err
@@ -318,8 +347,10 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 
 		// Update product status to SOLD
 		soldStatus := "SOLD"
-		if err := tx.Model(&models.Product{}).Where("id IN ?", req.Products).Update("status", soldStatus).Error; err != nil {
-			return err
+		if len(cleanProducts) > 0 {
+			if err := tx.Model(&models.Product{}).Where("id IN ?", cleanProducts).Update("status", soldStatus).Error; err != nil {
+				return err
+			}
 		}
 
 		// Price updates if any
@@ -340,6 +371,8 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.updateProductStatuses()
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "order": order})
 }
@@ -543,7 +576,8 @@ func (h *SaleV2Handler) DestroyProduct(c *gin.Context) {
 func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 	id := c.Param("id")
 	var order models.Order
-	if err := h.DB.Preload("Products").First(&order, id).Error; err != nil {
+	// Note: DO NOT preload Products here! GORM tx.Save(&order) would duplicate many2many join rows
+	if err := h.DB.First(&order, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
@@ -559,7 +593,8 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 			order.Name = &val
 		}
 		if val, ok := req["phone"].(string); ok {
-			order.Phone = &val
+			cleaned := strings.ReplaceAll(val, " ", "")
+			order.Phone = &cleaned
 		}
 		if val, ok := req["address"].(string); ok {
 			order.Address = &val
@@ -587,8 +622,96 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 			dep := int64(val)
 			order.DepositAmount = &dep
 		}
+		if val, ok := req["additional_amount"].(float64); ok {
+			add := int64(val)
+			order.AdditionalAmount = &add
+		}
+		if val, ok := req["final_amount"].(float64); ok {
+			fin := int64(val)
+			order.FinalAmount = &fin
+		} else if order.TotalAmount != nil {
+			order.FinalAmount = order.TotalAmount
+		}
 
-		return tx.Save(&order).Error
+		// Save order fields omitting associations to prevent join table duplicates
+		if err := tx.Omit("Products").Save(&order).Error; err != nil {
+			return err
+		}
+
+		// If products are provided in payload, sync associations cleanly
+		if prodsRaw, ok := req["products"]; ok {
+			var cleanIDs []uint
+			seen := make(map[uint]bool)
+
+			if prodList, okList := prodsRaw.([]interface{}); okList {
+				for _, item := range prodList {
+					var pid uint
+					switch v := item.(type) {
+					case float64:
+						pid = uint(v)
+					case int:
+						pid = uint(v)
+					case int64:
+						pid = uint(v)
+					}
+					if pid > 0 && !seen[pid] {
+						seen[pid] = true
+						cleanIDs = append(cleanIDs, pid)
+					}
+				}
+			}
+
+			// Clear previous join table rows for this order
+			if err := tx.Where("order_id = ?", order.ID).Delete(&models.OrderProduct{}).Error; err != nil {
+				return err
+			}
+
+			// Insert deduplicated association rows
+			for _, pid := range cleanIDs {
+				op := models.OrderProduct{
+					OrderID:   &order.ID,
+					ProductID: &pid,
+				}
+				if err := tx.Create(&op).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		// Update product prices if provided in products_info
+		if prodsInfoRaw, ok := req["products_info"].([]interface{}); ok {
+			for _, item := range prodsInfoRaw {
+				if infoMap, okMap := item.(map[string]interface{}); okMap {
+					if idVal, okID := infoMap["id"]; okID {
+						if priceVal, okPrice := infoMap["price"]; okPrice {
+							var pid uint
+							switch v := idVal.(type) {
+							case float64:
+								pid = uint(v)
+							case int:
+								pid = uint(v)
+							case int64:
+								pid = uint(v)
+							}
+							var price int64
+							switch v := priceVal.(type) {
+							case float64:
+								price = int64(v)
+							case int:
+								price = int64(v)
+							case int64:
+								price = v
+							}
+							if pid > 0 {
+								tx.Model(&models.Product{}).Where("id = ?", pid).Update("price", price)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return nil
 	})
 
 	if err != nil {
@@ -596,7 +719,39 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 		return
 	}
 
+	// Update product statuses across DB so unlinked products become AVAILABLE and linked products become SOLD
+	h.updateProductStatuses()
+
+	// Preload products to return full fresh order
+	h.DB.Preload("Products.Images").Preload("Products.Sizes").First(&order, id)
+	var uniqueProducts []models.Product
+	seen := make(map[uint]bool)
+	for _, p := range order.Products {
+		if !seen[p.ID] {
+			seen[p.ID] = true
+			uniqueProducts = append(uniqueProducts, p)
+		}
+	}
+	order.Products = uniqueProducts
+
+	for j := range order.Products {
+		h.formatProduct(&order.Products[j])
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "order": order})
+}
+
+func (h *SaleV2Handler) DestroyOrder(c *gin.Context) {
+	id := c.Param("id")
+	h.DB.Where("id = ?", id).Delete(&models.Order{})
+	h.DB.Where("order_id = ?", id).Delete(&models.OrderProduct{})
+	h.updateProductStatuses()
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (h *SaleV2Handler) updateProductStatuses() {
+	h.DB.Exec("UPDATE products SET status = 'AVAILABLE' WHERE status != 'ON_HOLD'")
+	h.DB.Exec("UPDATE products SET status = 'SOLD' WHERE id IN (SELECT DISTINCT product_id FROM order_products)")
 }
 
 

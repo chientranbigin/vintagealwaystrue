@@ -94,12 +94,6 @@
                        <span>{{ p.type }} {{ p.name }}</span>
                        <span class="text-slate-400">{{ formatPrice(p.price) }}</span>
                    </div>
-                   <div class="flex flex-wrap gap-1 mt-0.5">
-                       <span v-for="size in formatSizes(p)" :key="size" 
-                             class="text-[8px] bg-slate-200 text-slate-600 px-1 py-0.5 rounded leading-none uppercase">
-                         {{ size }}
-                       </span>
-                   </div>
                 </div>
                 
                 <div v-if="order.additional_amount > 0" class="text-blue-600 font-bold border-t border-slate-100 pt-2 flex justify-between">

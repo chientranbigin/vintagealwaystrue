@@ -198,8 +198,18 @@ export default {
                 const id = this.$route.params.id;
                 const res = await axios.get(`/salev2/api/order/${id}`);
                 this.order = res.data;
-                // Ensure array fields
-                if (!this.order.products) this.$set(this.order, 'products', []);
+                // Ensure array fields and deduplicate
+                const rawProducts = this.order.products || [];
+                const seen = new Set();
+                const uniqueProds = [];
+                for (const p of rawProducts) {
+                    const pid = Number(p.id);
+                    if (pid && !seen.has(pid)) {
+                        seen.add(pid);
+                        uniqueProds.push(p);
+                    }
+                }
+                this.$set(this.order, 'products', uniqueProds);
                 // Ensure number fields for EL input (reactive)
                 this.$set(this.order, 'additional_amount', parseFloat(this.order.additional_amount || 0));
                 this.$set(this.order, 'deposit_amount', parseFloat(this.order.deposit_amount || 0));
@@ -212,23 +222,20 @@ export default {
         },
         async fetchAvailableProducts() {
             try {
-                const res = await axios.get('/salev2/api/products', { params: { status: 'AVAILABLE', search: this.productSearch, limit: 50 } });
+                const res = await axios.get('/salev2/api/products', { params: { status: 'AVAILABLE', search: this.productSearch, limit: 1000 } });
                 this.availableProducts = res.data.data;
             } catch(e) {}
         },
         debouncedSearch: _.debounce(function() { this.fetchAvailableProducts(); }, 500),
         isProductSelected(id) {
-            return this.order && this.order.products.some(p => p.id === id);
+            return !!(this.order && this.order.products && this.order.products.some(p => Number(p.id) === Number(id)));
         },
         toggleProductSelect(product) {
-            if(this.isProductSelected(product.id)) {
-                // If it was originally in order, we remove it. 
-                // Wait, if we remove it, it goes back to AVAILABLE.
-                // If we add it, it goes to SOLD.
-                const idx = this.order.products.findIndex(p => p.id === product.id);
-                if(idx > -1) this.order.products.splice(idx, 1);
+            if (this.isProductSelected(product.id)) {
+                const idx = this.order.products.findIndex(p => Number(p.id) === Number(product.id));
+                if (idx > -1) this.order.products.splice(idx, 1);
             } else {
-                this.order.products.push(product);
+                this.order.products.push({ ...product });
             }
         },
         removeProduct(index) {
@@ -237,20 +244,28 @@ export default {
         async saveOrder() {
             this.submitting = true;
             try {
-                console.log( this.order);
+                // Deduplicate product list
+                const seen = new Set();
+                const cleanProducts = [];
+                for (const p of this.order.products) {
+                    const pid = Number(p.id);
+                    if (pid && !seen.has(pid)) {
+                        seen.add(pid);
+                        cleanProducts.push(p);
+                    }
+                }
+                this.order.products = cleanProducts;
+
                 // Prepare payload
                 const payload = {
                     ...this.order,
-                    additional_amount: this.order.additional_amount, // Ensure explicit
-                    deposit_amount: this.order.deposit_amount,       // Ensure explicit
-                    products: this.order.products.map(p => p.id),
-                    // Send price updates
-                    products_info: this.order.products.map(p => ({ id: p.id, price: p.price })),
-                    // Recalculate financial fields to ensure backend gets correct numbers
-                    total_amount: this.totalAmount, // Backend might recalc but good to send
+                    additional_amount: this.order.additional_amount,
+                    deposit_amount: this.order.deposit_amount,
+                    products: cleanProducts.map(p => Number(p.id)),
+                    products_info: cleanProducts.map(p => ({ id: Number(p.id), price: p.price })),
+                    total_amount: this.totalAmount,
                     final_amount: this.totalAmount,
                 };
-                console.log(payload);
                 await axios.post(`/salev2/api/order/${this.order.id}/update`, payload);
                 this.$message.success('Order Updated');
                 this.$router.push('/salev2/orders');

@@ -152,6 +152,8 @@ func main() {
 		api.POST("/order", v2.StoreOrder)
 		api.POST("/order/:id", v2.UpdateOrder)
 		api.POST("/order/:id/update", v2.UpdateOrder)
+		api.POST("/order/:id/delete", v2.DestroyOrder)
+		api.DELETE("/order/:id", v2.DestroyOrder)
 
 		api.GET("/consumers", v2.Consumers)
 		api.GET("/consumer/:id", v2.ConsumerDetail)
