@@ -206,7 +206,7 @@
     </div>
 
     <!-- Pagination -->
-    <div v-if="orders.length" class="mt-8 flex justify-center">
+    <div v-if="orders.length && activeTab !== 'NEW'" class="mt-8 flex justify-center">
       <el-pagination background layout="prev, pager, next" :current-page.sync="page" :total="total" :page-size="10" @current-change="handlePageChange"></el-pagination>
     </div>
 
@@ -318,7 +318,12 @@ export default {
       this.page = page; this.loading = true;
       try {
         const params = { page, search: this.search };
-        if (this.activeTab === 'NEW') params.status = 'NEW';
+        if (this.activeTab === 'NEW') {
+          params.status = 'NEW';
+          params.limit = 1000;
+        } else {
+          params.limit = 10;
+        }
         
         const res = await axios.get('/salev2/api/orders', { params });
         this.orders = res.data.data; this.total = res.data.total;

@@ -175,19 +175,25 @@ func (h *SaleV2Handler) ProductDetail(c *gin.Context) {
 }
 
 func (h *SaleV2Handler) Orders(c *gin.Context) {
+	status := c.Query("status")
+	isNewTab := status == "NEW"
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if limit < 1 {
-		limit = 10
+	limitStr := c.Query("limit")
+	limit := 10
+	if limitStr != "" {
+		limit, _ = strconv.Atoi(limitStr)
 	}
-	offset := (page - 1) * limit
+
+	// For NEW tab, show all orders without pagination limit
+	noLimit := isNewTab || (limitStr != "" && limit <= 0)
 
 	query := h.DB.Model(&models.Order{})
 
-	if status := c.Query("status"); status != "" {
+	if status != "" {
 		if status == "NEW" {
 			query = query.Where("orders.status != ? AND orders.status != ?", "COMPLETED", "READY FOR SHIPPING").Order("orders.status ASC")
 		} else {
@@ -206,7 +212,13 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 	query.Distinct("orders.id").Count(&total)
 
 	var orders []models.Order
-	query.Distinct().Select("orders.*").Preload("Products.Images").Preload("Products.Sizes").Order("orders.id DESC").Limit(limit).Offset(offset).Find(&orders)
+	dbQuery := query.Distinct().Select("orders.*").Preload("Products.Images").Preload("Products.Sizes").Order("orders.id DESC")
+	offset := 0
+	if !noLimit {
+		offset = (page - 1) * limit
+		dbQuery = dbQuery.Limit(limit).Offset(offset)
+	}
+	dbQuery.Find(&orders)
 
 	now := time.Now()
 	for i := range orders {
@@ -245,9 +257,18 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 		}
 	}
 
-	lastPage := int(math.Ceil(float64(total) / float64(limit)))
-	if lastPage == 0 {
-		lastPage = 1
+	perPage := limit
+	lastPage := 1
+	if noLimit {
+		perPage = int(total)
+		if perPage == 0 {
+			perPage = 1
+		}
+	} else if limit > 0 {
+		lastPage = int(math.Ceil(float64(total) / float64(limit)))
+		if lastPage == 0 {
+			lastPage = 1
+		}
 	}
 
 	c.JSON(http.StatusOK, LaravelPagination{
@@ -255,7 +276,7 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 		Data:        orders,
 		From:        offset + 1,
 		LastPage:    lastPage,
-		PerPage:     limit,
+		PerPage:     perPage,
 		To:          offset + len(orders),
 		Total:       total,
 	})
