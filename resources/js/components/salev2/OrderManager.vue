@@ -13,6 +13,42 @@
       </div>
     </div>
 
+    <!-- Compact Stat Cards (Yesterday, Today, Current Month) -->
+    <div class="grid grid-cols-3 gap-2 md:gap-4 mb-5">
+      <!-- Yesterday Card -->
+      <div class="bg-gradient-to-br from-sky-500 to-cyan-600 text-white rounded-xl p-2.5 md:p-3.5 shadow-sm hover:shadow transition-shadow">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider opacity-90">Yesterday</span>
+          <span class="text-base md:text-2xl font-black leading-none">{{ stats.yesterday.count }}</span>
+        </div>
+        <div class="mt-1 md:mt-2">
+          <span class="text-xs md:text-lg font-black tracking-tight truncate block">{{ formatPrice(stats.yesterday.revenue) }}</span>
+        </div>
+      </div>
+
+      <!-- Today Card -->
+      <div class="bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl p-2.5 md:p-3.5 shadow-sm hover:shadow transition-shadow">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider opacity-90">Today</span>
+          <span class="text-base md:text-2xl font-black leading-none">{{ stats.today.count }}</span>
+        </div>
+        <div class="mt-1 md:mt-2">
+          <span class="text-xs md:text-lg font-black tracking-tight truncate block">{{ formatPrice(stats.today.revenue) }}</span>
+        </div>
+      </div>
+
+      <!-- Current Month Card -->
+      <div class="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl p-2.5 md:p-3.5 shadow-sm hover:shadow transition-shadow">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider opacity-90 truncate">Current Month</span>
+          <span class="text-base md:text-2xl font-black leading-none">{{ stats.current_month.count }}</span>
+        </div>
+        <div class="mt-1 md:mt-2">
+          <span class="text-xs md:text-lg font-black tracking-tight truncate block">{{ formatPrice(stats.current_month.revenue) }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Navigation Tabs -->
     <div class="mb-6 flex justify-between items-center">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" type="card" class="premium-tabs">
@@ -287,6 +323,11 @@ export default {
       viewMode: 'grid',
       orders: [], loading: false, total: 0, page: 1, search: '',
       currentCapture: null, captureVisible: false, captureImg: '',
+      stats: {
+        yesterday: { count: 0, revenue: 0 },
+        today: { count: 0, revenue: 0 },
+        current_month: { count: 0, revenue: 0 }
+      },
       sizeMapping: {
         'VAI': 'V', 'NGỰC': 'N', 'EO': 'E', 'DÀI ÁO': 'D', 'DÀI ÁO SAU': 'DS', 
         'DÀI TAY': 'DT', 'EO QUẦN': 'E', 'ĐÁY': 'ĐA', 'ĐÙI': 'Đ', 'DÀI QUẦN': 'D', 
@@ -316,6 +357,7 @@ export default {
     },
     async fetchOrders(page = 1) {
       this.page = page; this.loading = true;
+      this.fetchStats();
       try {
         const params = { page, search: this.search };
         if (this.activeTab === 'NEW') {
@@ -328,6 +370,14 @@ export default {
         const res = await axios.get('/salev2/api/orders', { params });
         this.orders = res.data.data; this.total = res.data.total;
       } catch (err) { console.error(err); } finally { this.loading = false; }
+    },
+    async fetchStats() {
+      try {
+        const res = await axios.get('/salev2/api/orders-stats');
+        if (res.data) {
+          this.stats = res.data;
+        }
+      } catch (err) { console.error('Failed to fetch order stats:', err); }
     },
     handleTabClick() { this.fetchOrders(1); },
     debouncedFetch: _.debounce(function() { this.fetchOrders(1); }, 500),

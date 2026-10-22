@@ -68,6 +68,8 @@ func setupSaleV2TestRouter(v2 *SaleV2Handler) *gin.Engine {
 		group.GET("/customer-history/:phone", v2.CustomerHistory)
 
 		group.GET("/dashboard-stats", v2.DashboardStats)
+		group.GET("/orders-stats", v2.OrderStats)
+		group.GET("/orders/stats", v2.OrderStats)
 		group.GET("/upload-sessions", v2.UploadSessions)
 		group.GET("/upload-sessions/:id/products", v2.UploadSessionProducts)
 		group.GET("/products-by-upload", v2.ProductsByLatestUpload)

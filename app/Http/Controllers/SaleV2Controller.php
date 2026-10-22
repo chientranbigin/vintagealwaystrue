@@ -143,7 +143,12 @@ class SaleV2Controller extends Controller
             });
         }
 
-        $orders = $query->orderBy('id', 'desc')->paginate($request->get('limit', 12));
+        $limit = $request->get('limit', 10);
+        if ($request->status === 'NEW') {
+            $limit = 1000;
+        }
+
+        $orders = $query->orderBy('id', 'desc')->paginate($limit);
 
         // Legacy calculation: Viettel Amount = total_amount - deposit_amount (if not is_paid)
         $orders->getCollection()->transform(function($order) {
@@ -230,6 +235,48 @@ class SaleV2Controller extends Controller
     {
         $orders = Order::where('phone', $phone)->with('products')->latest()->get();
         return response()->json($orders);
+    }
+
+    public function orderStats()
+    {
+        $loc = 'Asia/Ho_Chi_Minh';
+        $now = Carbon::now($loc);
+        $todayStr = $now->format('Y-m-d');
+        $yesterdayStr = $now->copy()->subDay()->format('Y-m-d');
+
+        $soldByDay = function ($dateStr) {
+            $row = DB::table('order_products')
+                ->join('orders', 'orders.id', '=', 'order_products.order_id')
+                ->join('products', 'products.id', '=', 'order_products.product_id')
+                ->whereRaw("DATE(orders.created_at) = ?", [$dateStr])
+                ->selectRaw('COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total')
+                ->first();
+
+            return [
+                'count' => (int) ($row->count ?? 0),
+                'revenue' => (float) ($row->total ?? 0),
+            ];
+        };
+
+        $todayStat = $soldByDay($todayStr);
+        $yesterdayStat = $soldByDay($yesterdayStr);
+
+        $startOfMonth = $now->copy()->startOfMonth();
+        $endOfMonth = $now->copy()->endOfMonth();
+
+        $monthOrders = DB::table('orders')
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(final_amount), 0) as total')
+            ->first();
+
+        return response()->json([
+            'yesterday' => $yesterdayStat,
+            'today' => $todayStat,
+            'current_month' => [
+                'count' => (int) ($monthOrders->count ?? 0),
+                'revenue' => (float) ($monthOrders->total ?? 0),
+            ],
+        ]);
     }
 
     public function dashboardStats()

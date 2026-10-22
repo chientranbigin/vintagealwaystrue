@@ -344,6 +344,64 @@ func (h *SaleV2Handler) Orders(c *gin.Context) {
 	})
 }
 
+// OrderStats returns statistics for Yesterday, Today, and Current Month (parity with V1)
+func (h *SaleV2Handler) OrderStats(c *gin.Context) {
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil || loc == nil {
+		loc = time.FixedZone("UTC+7", 7*3600)
+	}
+	now := time.Now().In(loc)
+	todayStr := now.Format("2006-01-02")
+	yesterdayStr := now.AddDate(0, 0, -1).Format("2006-01-02")
+
+	type StatResult struct {
+		Count int64   `json:"count"`
+		Total float64 `json:"revenue"`
+	}
+
+	soldByDay := func(dateStr string) StatResult {
+		var res StatResult
+		h.DB.Table("order_products").
+			Select("COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total").
+			Joins("JOIN orders ON orders.id = order_products.order_id").
+			Joins("JOIN products ON products.id = order_products.product_id").
+			Where("DATE(orders.created_at) = ?", dateStr).
+			Scan(&res)
+		return res
+	}
+
+	todayStat := soldByDay(todayStr)
+	yesterdayStat := soldByDay(yesterdayStr)
+
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
+
+	var currentTotalOrder int64
+	var currentTotalFinalPrice float64
+	h.DB.Table("orders").
+		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
+		Count(&currentTotalOrder)
+	h.DB.Table("orders").
+		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
+		Select("COALESCE(SUM(final_amount), 0)").
+		Scan(&currentTotalFinalPrice)
+
+	c.JSON(http.StatusOK, gin.H{
+		"yesterday": gin.H{
+			"count":   yesterdayStat.Count,
+			"revenue": int64(yesterdayStat.Total),
+		},
+		"today": gin.H{
+			"count":   todayStat.Count,
+			"revenue": int64(todayStat.Total),
+		},
+		"current_month": gin.H{
+			"count":   currentTotalOrder,
+			"revenue": int64(currentTotalFinalPrice),
+		},
+	})
+}
+
 func (h *SaleV2Handler) OrderDetail(c *gin.Context) {
 	id := c.Param("id")
 	var order models.Order

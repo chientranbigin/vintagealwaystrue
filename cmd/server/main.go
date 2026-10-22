@@ -184,6 +184,8 @@ func main() {
 		api.GET("/customer-history/:phone", v2.CustomerHistory)
 
 		api.GET("/dashboard-stats", v2.DashboardStats)
+		api.GET("/orders-stats", v2.OrderStats)
+		api.GET("/orders/stats", v2.OrderStats)
 		api.GET("/upload-sessions", v2.UploadSessions)
 		api.GET("/upload-sessions/:id/products", v2.UploadSessionProducts)
 		api.GET("/products-by-upload", v2.ProductsByLatestUpload)

@@ -344,3 +344,55 @@ func TestSaleV2_DestroyOrder(t *testing.T) {
 		t.Errorf("Expected product to revert to status=AVAILABLE upon order deletion, got %s", *checkProd.Status)
 	}
 }
+
+func TestSaleV2_OrderStats(t *testing.T) {
+	db, cfg := getTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	handler := NewSaleV2Handler(tx, cfg)
+	router := setupSaleV2TestRouter(handler)
+
+	// Seed product and order for today
+	pPrice := int64(300000)
+	prod := models.Product{Name: strPtr("STAT_P1"), Price: &pPrice, Status: strPtr("SOLD")}
+	tx.Create(&prod)
+
+	now := time.Now()
+	order := models.Order{
+		Name:        strPtr("Stat Tester"),
+		TotalAmount: int64Ptr(300000),
+		FinalAmount: int64Ptr(300000),
+		Status:      strPtr("NEW"),
+		CreatedAt:   &now,
+	}
+	tx.Create(&order)
+	tx.Create(&models.OrderProduct{OrderID: &order.ID, ProductID: &prod.ID, CreatedAt: &now})
+
+	w := performRequest(router, "GET", "/salev2/api/orders-stats", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var res struct {
+		Yesterday struct {
+			Count   int64 `json:"count"`
+			Revenue int64 `json:"revenue"`
+		} `json:"yesterday"`
+		Today struct {
+			Count   int64 `json:"count"`
+			Revenue int64 `json:"revenue"`
+		} `json:"today"`
+		CurrentMonth struct {
+			Count   int64 `json:"count"`
+			Revenue int64 `json:"revenue"`
+		} `json:"current_month"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Failed to parse json: %v", err)
+	}
+
+	if res.Today.Count < 1 || res.CurrentMonth.Count < 1 {
+		t.Errorf("Expected today and month count >= 1, got today=%d, month=%d", res.Today.Count, res.CurrentMonth.Count)
+	}
+}
