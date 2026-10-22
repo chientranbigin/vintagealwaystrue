@@ -6,10 +6,10 @@
         <p class="text-slate-500 mt-1">Manage sales, shipping, and receipt generation</p>
       </div>
       <div class="flex gap-2 w-full md:w-auto">
-        <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="w-full md:w-64" @input="debouncedFetch"></el-input>
-        <el-button type="danger" plain icon="el-icon-money" @click="$router.push('/salev2/expenses')">Costs</el-button>
-        <el-button type="primary" icon="el-icon-plus" @click="$router.push('/salev2/order/create')">New</el-button>
-        <el-button icon="el-icon-refresh" @click="fetchOrders(1)"></el-button>
+        <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="flex-1 min-w-0 md:w-64 md:flex-initial" @input="debouncedFetch"></el-input>
+        <el-button type="danger" plain icon="el-icon-money" class="flex-shrink-0" @click="$router.push('/salev2/expenses')">Costs</el-button>
+        <el-button type="primary" icon="el-icon-plus" class="flex-shrink-0" @click="$router.push('/salev2/order/create')">New</el-button>
+        <el-button icon="el-icon-refresh" class="mobile-hide" @click="fetchOrders(1)"></el-button>
       </div>
     </div>
 
