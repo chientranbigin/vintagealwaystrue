@@ -335,7 +335,6 @@ export default {
       }
     }
   },
-  mounted() { this.fetchOrders(); },
   methods: {
     formatPrice(val) { return val !== undefined ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val) : '0đ'; },
     getStatusType(s) { return { 'NEW': 'info', 'COMPLETED': 'success', 'A SHIP NOW': 'primary', 'ON HOLD': 'warning' }[s] || 'info'; },
@@ -442,6 +441,7 @@ export default {
           this.search = this.$route.query.search;
       }
       this.fetchOrders();
+      this.fetchStats();
   }
 }
 </script>
