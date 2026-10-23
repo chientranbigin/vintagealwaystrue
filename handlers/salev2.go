@@ -1112,7 +1112,7 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	}
 	var monthlySales []MonthlySale
 	h.DB.Model(&models.Order{}).
-		Select("DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+07:00'), '%Y-%m') as month, count(*) as number, COALESCE(sum(final_amount), 0) as final_amount").
+		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(*) as number, COALESCE(sum(final_amount), 0) as final_amount").
 		Where("created_at >= ?", sub12Months).
 		Group("month").
 		Order("month ASC").
@@ -1319,8 +1319,8 @@ func (h *SaleV2Handler) SoldByDate(c *gin.Context) {
 	h.DB.Table("order_products").
 		Joins("JOIN products ON products.id = order_products.product_id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Select("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d') as date, COUNT(*) as total, COALESCE(SUM(products.price), 0) as total_revenue, GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ',') as types").
-		Group("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d')").
+		Select("DATE_FORMAT(orders.created_at, '%Y-%m-%d') as date, COUNT(*) as total, COALESCE(SUM(products.price), 0) as total_revenue, GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ',') as types").
+		Group("DATE_FORMAT(orders.created_at, '%Y-%m-%d')").
 		Scan(&actualRows)
 
 	if len(actualRows) == 0 {
@@ -1394,7 +1394,7 @@ func (h *SaleV2Handler) SoldByDateProducts(c *gin.Context) {
 	h.DB.Table("products").
 		Joins("JOIN order_products ON order_products.product_id = products.id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Where("DATE_FORMAT(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'), '%Y-%m-%d') = ?", date).
+		Where("DATE_FORMAT(orders.created_at, '%Y-%m-%d') = ?", date).
 		Select("products.*").
 		Preload("Images").
 		Preload("Sizes").
