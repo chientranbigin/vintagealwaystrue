@@ -486,7 +486,7 @@ export default {
         if (size.name === 'DƯ LAI') return;
         const label = this.sizeMapping[size.name] || size.name;
         const value = Math.floor(size.value);
-        results.push(size.name === 'DÀI QUẦN' && duLai ? `${label}${value}(+${Math.floor(duLai.value)})` : `${label}${value}`);
+        results.push(size.name === 'DÀI QUẦN' && duLai ? `${label}${value} (+${Math.floor(duLai.value)})` : `${label}${value}`);
       });
       return results;
     },

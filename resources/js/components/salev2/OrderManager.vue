@@ -347,7 +347,7 @@ export default {
           let label = this.sizeMapping[size.name] || size.name;
           let value = Math.floor(size.value);
           if (size.name === 'DÀI QUẦN' && duLai) {
-              results.push(`${label}${value}(+${Math.floor(duLai.value)})`);
+              results.push(`${label}${value} (+${Math.floor(duLai.value)})`);
           } else {
               results.push(`${label}${value}`);
           }

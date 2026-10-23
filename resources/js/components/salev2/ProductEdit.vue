@@ -1,11 +1,16 @@
 <template>
-  <div class="px-4 md:px-6 py-8">
+  <div class="px-4 md:px-6 py-8 pb-32 md:pb-8">
      <div class="flex justify-between items-center mb-6">
        <div>
-         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Edit Product: {{ form.name }}</h1>
-         <p class="text-slate-500 mt-1">Update product details and measurements</p>
+         <h1 class="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">Edit Product: {{ form.name }}</h1>
+         <p class="text-slate-500 mt-1 text-xs md:text-sm">Update product details and measurements</p>
        </div>
-       <el-button @click="$router.push('/salev2/products')" icon="el-icon-back" circle></el-button>
+       <div class="flex items-center gap-2">
+         <el-button @click="$router.push('/salev2/products')" icon="el-icon-back" circle></el-button>
+         <el-button type="primary" :loading="submitting" @click="submit" icon="el-icon-check" class="shadow-md shadow-blue-200">
+           Save
+         </el-button>
+       </div>
      </div>
 
      <div class="grid grid-cols-1 md:grid-cols-3 gap-6" v-loading="loading">
@@ -110,7 +115,7 @@
              </div>
 
              <!-- Action Buttons -->
-             <div class="fixed bottom-0 md:relative left-0 right-0 p-4 md:p-0 bg-white md:bg-transparent border-t md:border-t-0 border-slate-200 z-40 flex justify-end gap-3">
+             <div class="fixed bottom-16 md:relative left-0 right-0 p-4 md:p-0 bg-white/95 backdrop-blur md:bg-transparent border-t md:border-t-0 border-slate-200 z-40 flex justify-end gap-3 shadow-lg md:shadow-none">
                  <el-button @click="$router.push('/salev2/products')">Cancel</el-button>
                  <el-button type="primary" :loading="submitting" @click="submit" class="w-full md:w-auto px-8 shadow-lg shadow-blue-200">
                      Save Changes
