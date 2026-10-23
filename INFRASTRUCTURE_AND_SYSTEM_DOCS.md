@@ -188,6 +188,15 @@ expect {
    - Bao phủ 100% tính năng của Sale V2: Đơn hàng, Sản phẩm, Khách hàng, Dashboard, và đặc biệt là **Smart Upload (OCR/Vision)**.
    - Cơ chế Transaction Rollback đảm bảo không lưu dữ liệu rác vào Database TiDB.
    - Hook `.git/hooks/pre-push` tự động chạy toàn bộ test trước mỗi lần `git push`, chặn mọi lần push nếu có test bị fail.
+10. **Tự động đồng bộ sản phẩm và trạng thái đơn hàng lên Facebook (Facebook Graph API Sync)**:
+   - Viết service `services/facebook.go` tích hợp Facebook Graph API (`v19.0`).
+   - Khi upload smart sản phẩm thành công: Tự động tải album ảnh (thumbnail và chi tiết) và tạo bài viết kèm thông tin và hashtag chuẩn `#Mã_SP`, `#LOẠI_AVAILABLE`, `#EO_...`, `#SIZE...`. Lưu lại `fb_post_id` vào DB.
+   - Khi tạo đơn / đơn đổi trạng thái `SOLD`: Tự động cập nhật bài viết thành `⛔ ĐÃ BÁN — [Mã]` kèm hashtag `#LOẠI_SOLD`.
+   - Khi hủy đơn / trả hàng về `AVAILABLE`: Tự động cập nhật lại bài viết thành `✅ CÒN HÀNG — [Mã]`.
+   - Có cơ chế retry 3 lần, queue nền asynchronous không chặn luồng chính.
+11. **Công cụ Backfill đồng bộ Facebook (`cmd/backfill_fb`)**:
+   - Chạy lệnh CLI: `go run cmd/backfill_fb/main.go [flags]`
+   - Hỗ trợ: `-session <ID>` (hoặc `-latest-session`), `-product <Code>`, `-type <Type>`, `-dry-run` (xem trước), `-delay <Sec>` (giãn cách tránh rate limit).
 
 ---
 
