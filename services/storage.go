@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -68,16 +69,21 @@ func (s *StorageService) Upload(fileHeader *multipart.FileHeader) (string, error
 		return "", err
 	}
 
-	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	return s.UploadBytes(data, fileHeader.Filename)
+}
+
+// UploadBytes uploads raw image bytes to Cloudinary with local storage fallback
+func (s *StorageService) UploadBytes(data []byte, filename string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
 	if ext == "" {
 		ext = ".jpg"
 	}
 	timestamp := time.Now().UnixNano()
-	filename := fmt.Sprintf("%d_%s%s", timestamp, randomString(8), ext)
+	storedFilename := fmt.Sprintf("%d_%s%s", timestamp, randomString(8), ext)
 
 	// If Cloudinary CloudName is provided, upload to Cloudinary
 	if s.CloudName != "" {
-		cURL, err := s.uploadToCloudinary(data, filename)
+		cURL, err := s.uploadToCloudinary(data, storedFilename)
 		if err == nil && cURL != "" {
 			return cURL, nil
 		}
@@ -86,13 +92,13 @@ func (s *StorageService) Upload(fileHeader *multipart.FileHeader) (string, error
 	}
 
 	// Save to local storage
-	localPath := filepath.Join(s.UploadDir, filename)
+	localPath := filepath.Join(s.UploadDir, storedFilename)
 	if err := os.WriteFile(localPath, data, 0644); err != nil {
 		return "", err
 	}
 
 	// Return path format matching Laravel: "storage/sale/filename.jpg"
-	return "storage/sale/" + filename, nil
+	return "storage/sale/" + storedFilename, nil
 }
 
 func (s *StorageService) uploadToCloudinary(fileData []byte, filename string) (string, error) {
@@ -166,4 +172,91 @@ func randomString(length int) string {
 		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
 	}
 	return string(b)
+}
+
+// ExtractPublicID extracts the Cloudinary public_id (e.g. "sale/abc") from any image path or URL
+func ExtractPublicID(pathOrURL string) string {
+	pathOrURL = strings.TrimSpace(pathOrURL)
+	if pathOrURL == "" {
+		return ""
+	}
+	// If it's a URL, parse its Path
+	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
+		if u, err := url.Parse(pathOrURL); err == nil && u.Path != "" {
+			pathOrURL = u.Path
+		}
+	}
+	// Extract filename after /sale/ or sale/
+	var filename string
+	if idx := strings.Index(pathOrURL, "/sale/"); idx != -1 {
+		filename = pathOrURL[idx+6:]
+	} else if strings.HasPrefix(pathOrURL, "sale/") {
+		filename = strings.TrimPrefix(pathOrURL, "sale/")
+	} else {
+		filename = filepath.Base(pathOrURL)
+	}
+	ext := filepath.Ext(filename)
+	baseWithoutExt := strings.TrimSuffix(filename, ext)
+	baseWithoutExt = strings.Trim(baseWithoutExt, "/")
+	if baseWithoutExt == "" || baseWithoutExt == "." {
+		return ""
+	}
+	return "sale/" + baseWithoutExt
+}
+
+// DeleteFromCloudinary deletes multiple assets from Cloudinary in batches of up to 100
+func (s *StorageService) DeleteFromCloudinary(publicIDs []string) (int, error) {
+	if s.CloudName == "" || s.APIKey == "" || s.APISecret == "" || len(publicIDs) == 0 {
+		return 0, nil
+	}
+
+	totalDeleted := 0
+	batchSize := 100
+	client := &http.Client{Timeout: 60 * time.Second}
+
+	for i := 0; i < len(publicIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(publicIDs) {
+			end = len(publicIDs)
+		}
+		chunk := publicIDs[i:end]
+
+		endpoint := fmt.Sprintf("https://api.cloudinary.com/v1_1/%s/resources/image/upload", s.CloudName)
+		req, err := http.NewRequest("DELETE", endpoint, nil)
+		if err != nil {
+			return totalDeleted, err
+		}
+		req.SetBasicAuth(s.APIKey, s.APISecret)
+
+		q := req.URL.Query()
+		for _, pid := range chunk {
+			q.Add("public_ids[]", pid)
+		}
+		req.URL.RawQuery = q.Encode()
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("cloudinary delete request failed: %w", err)
+		}
+
+		respBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return totalDeleted, fmt.Errorf("cloudinary delete error (status %d): %s", resp.StatusCode, string(respBytes))
+		}
+
+		var res struct {
+			Deleted map[string]string `json:"deleted"`
+		}
+		if err := json.Unmarshal(respBytes, &res); err == nil {
+			for _, status := range res.Deleted {
+				if status == "deleted" {
+					totalDeleted++
+				}
+			}
+		}
+	}
+
+	return totalDeleted, nil
 }

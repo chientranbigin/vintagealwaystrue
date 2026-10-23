@@ -226,6 +226,7 @@ type SaleV1Handler struct {
 	DB          *gorm.DB
 	Cfg         *config.Config
 	Storage     *services.StorageService
+	FB          *services.FacebookService
 	templateSet *pongo2.TemplateSet
 }
 
@@ -233,10 +234,20 @@ func NewSaleV1Handler(db *gorm.DB, cfg *config.Config) *SaleV1Handler {
 	loader := pongo2.MustNewLocalFileSystemLoader("./templates/sale")
 	ts := pongo2.NewSet("sale_templates", loader)
 
+	fbPageID := ""
+	fbPageToken := ""
+	mediaBase := ""
+	if cfg != nil {
+		fbPageID = cfg.FBPageID
+		fbPageToken = cfg.FBPageToken
+		mediaBase = cfg.MediaBaseURL
+	}
+
 	return &SaleV1Handler{
 		DB:          db,
 		Cfg:         cfg,
 		Storage:     services.NewStorageService(),
+		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase),
 		templateSet: ts,
 	}
 }
@@ -1171,6 +1182,7 @@ func (h *SaleV1Handler) ProductBatchUploadSingle(c *gin.Context) {
 	matched := false
 	if err := h.DB.Where("name = ?", baseName).First(&prod).Error; err == nil {
 		prod.PathThumb = strPtr(uploadedPath)
+		prod.ImageThumbScale = strPtr(uploadedPath)
 		if pType != "" {
 			prod.Type = strPtr(pType)
 		}
@@ -1898,8 +1910,36 @@ func (h *SaleV1Handler) Consumers(c *gin.Context) {
 }
 
 func (h *SaleV1Handler) updateProductStatuses() {
+	var oldSoldIDs []uint
+	h.DB.Model(&models.Product{}).Where("status = 'SOLD'").Pluck("id", &oldSoldIDs)
+
 	h.DB.Exec("UPDATE products SET status = 'AVAILABLE' WHERE status != 'ON_HOLD'")
 	h.DB.Exec("UPDATE products SET status = 'SOLD' WHERE id IN (SELECT DISTINCT product_id FROM order_products)")
+
+	var newSoldIDs []uint
+	h.DB.Model(&models.OrderProduct{}).Distinct("product_id").Pluck("product_id", &newSoldIDs)
+
+	if h.FB != nil {
+		oldMap := make(map[uint]bool)
+		for _, id := range oldSoldIDs {
+			oldMap[id] = true
+		}
+		newMap := make(map[uint]bool)
+		for _, id := range newSoldIDs {
+			newMap[id] = true
+		}
+
+		for _, id := range newSoldIDs {
+			if !oldMap[id] {
+				h.FB.Dispatch(id, services.FBActionSold)
+			}
+		}
+		for _, id := range oldSoldIDs {
+			if !newMap[id] {
+				h.FB.Dispatch(id, services.FBActionRevert)
+			}
+		}
+	}
 }
 
 func formatProductSizes(p *models.Product) string {

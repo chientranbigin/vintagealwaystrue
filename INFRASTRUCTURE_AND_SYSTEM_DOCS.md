@@ -89,6 +89,11 @@ Hệ thống sử dụng Cloudinary để lưu trữ và phân phối hình ản
 - **Master Admin Password**: `vintage2026` (Ngoài ra chấp nhận các mật khẩu mặc định của các tài khoản có sẵn trong DB: `admin`, `123456`, `vintagealwaystrue`).
 - **Auth Token Secret**: `vintage-always-true-secret-key-2026` (HMAC SHA-256).
 
+### 2.6. Tích hợp Facebook Graph API (Auto-post & Cập nhật SOLD)
+- **FB Page ID**: `1132727476600909`
+- **FB Page Token**: `EAATKmSkHta0BR50o5b5kYpy7Yd71qm101h70sktZACFuCahua9n6AHrWZCmvqAlWFa2LVUJAKZBRBzZC841azGfgtHkRtGBbvCb3A3gnwf0A57QO4yQalUDTpfgHiQwaqc8vXW0GrtJIrEwitf9ACBOQQEZBChmzRZCoKlY0mNao5ta2tBrNClpBd8DrtY5XEvV2PD`
+- **Graph API Base URL**: `https://graph.facebook.com/v19.0/`
+
 ---
 
 ## 3. THÔNG TIN & CÁCH SSH VÀO VPS CŨ (VINAHOST)

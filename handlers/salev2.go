@@ -32,15 +32,25 @@ type SaleV2Handler struct {
 	Cfg         *config.Config
 	Storage     *services.StorageService
 	Vision      *services.VisionService
+	FB          *services.FacebookService
 	UploadQueue chan SmartUploadJob
 }
 
 func NewSaleV2Handler(db *gorm.DB, cfg *config.Config) *SaleV2Handler {
+	fbPageID := ""
+	fbPageToken := ""
+	mediaBase := ""
+	if cfg != nil {
+		fbPageID = cfg.FBPageID
+		fbPageToken = cfg.FBPageToken
+		mediaBase = cfg.MediaBaseURL
+	}
 	h := &SaleV2Handler{
 		DB:          db,
 		Cfg:         cfg,
 		Storage:     services.NewStorageService(),
 		Vision:      services.NewVisionService(),
+		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase),
 		UploadQueue: make(chan SmartUploadJob, 100),
 	}
 	h.StartWorkers(3)
@@ -549,6 +559,14 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 
 	h.updateProductStatuses()
 
+	if h.FB != nil {
+		for _, pID := range req.Products {
+			if pID > 0 {
+				h.FB.Dispatch(pID, services.FBActionSold)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "order": order})
 }
 
@@ -966,8 +984,36 @@ func (h *SaleV2Handler) DestroyOrder(c *gin.Context) {
 }
 
 func (h *SaleV2Handler) updateProductStatuses() {
+	var oldSoldIDs []uint
+	h.DB.Model(&models.Product{}).Where("status = 'SOLD'").Pluck("id", &oldSoldIDs)
+
 	h.DB.Exec("UPDATE products SET status = 'AVAILABLE' WHERE status != 'ON_HOLD'")
 	h.DB.Exec("UPDATE products SET status = 'SOLD' WHERE id IN (SELECT DISTINCT product_id FROM order_products)")
+
+	var newSoldIDs []uint
+	h.DB.Model(&models.OrderProduct{}).Distinct("product_id").Pluck("product_id", &newSoldIDs)
+
+	if h.FB != nil {
+		oldMap := make(map[uint]bool)
+		for _, id := range oldSoldIDs {
+			oldMap[id] = true
+		}
+		newMap := make(map[uint]bool)
+		for _, id := range newSoldIDs {
+			newMap[id] = true
+		}
+
+		for _, id := range newSoldIDs {
+			if !oldMap[id] {
+				h.FB.Dispatch(id, services.FBActionSold)
+			}
+		}
+		for _, id := range oldSoldIDs {
+			if !newMap[id] {
+				h.FB.Dispatch(id, services.FBActionRevert)
+			}
+		}
+	}
 }
 
 
@@ -1584,6 +1630,11 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 			"status":  "SUCCESS",
 			"message": "Xử lý thành công (2 bước)",
 		})
+
+	// Sync to Facebook page
+	if h.FB != nil {
+		h.FB.Dispatch(existing.ID, services.FBActionCreate)
+	}
 }
 
 // CleanupImages scans storage for orphaned images and removes them safely
