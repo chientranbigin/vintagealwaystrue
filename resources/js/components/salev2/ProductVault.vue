@@ -1,5 +1,5 @@
 <template>
-  <div class="px-4 md:px-6 py-4 md:py-8 pt-16 md:pt-8">
+  <div class="px-4 md:px-6 py-4 md:py-8 pt-20 md:pt-8">
     <!-- Mobile Fixed Search Bar on Top -->
     <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm flex items-center gap-2">
       <el-input 
@@ -34,14 +34,13 @@
 
     <!-- Dynamic Filters -->
     <div class="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 mb-8 space-y-4">
-      <!-- Mobile Toggle Header with Filters and Create Action -->
-      <div class="flex justify-between items-center md:hidden pb-2 mb-2 border-b border-slate-100 cursor-pointer">
-          <div class="flex items-center gap-2" @click="mobileFiltersOpen = !mobileFiltersOpen">
+      <!-- Mobile Toggle Header with Filters -->
+      <div class="flex justify-between items-center md:hidden pb-2 mb-2 border-b border-slate-100 cursor-pointer" @click="mobileFiltersOpen = !mobileFiltersOpen">
+          <div class="flex items-center gap-2">
               <i class="el-icon-s-operation text-blue-600"></i>
               <span class="font-bold text-slate-700 text-sm">Filters</span>
               <i :class="mobileFiltersOpen ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="text-slate-400 font-bold"></i>
           </div>
-          <el-button type="primary" size="mini" icon="el-icon-plus" circle @click="$router.push('/salev2/product/create')"></el-button>
       </div>
 
       <!-- Collapsible Content -->

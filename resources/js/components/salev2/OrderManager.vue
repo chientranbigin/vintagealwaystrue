@@ -1,5 +1,5 @@
 <template>
-  <div class="px-4 md:px-6 py-4 md:py-8 pt-16 md:pt-8">
+  <div class="px-4 md:px-6 py-4 md:py-8 pt-20 md:pt-8">
     <!-- Mobile Fixed Search Bar on Top -->
     <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm">
       <el-input 
