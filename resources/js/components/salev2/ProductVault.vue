@@ -1,5 +1,18 @@
 <template>
-  <div class="px-4 md:px-6 py-8">
+  <div class="px-4 md:px-6 py-4 md:py-8 pt-16 md:pt-8">
+    <!-- Mobile Fixed Search Bar on Top -->
+    <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm flex items-center gap-2">
+      <el-input 
+        v-model="search" 
+        placeholder="Search Name, code..." 
+        prefix-icon="el-icon-search" 
+        clearable 
+        class="flex-1"
+        @input="debouncedFetch">
+      </el-input>
+      <el-button type="primary" size="small" icon="el-icon-plus" circle @click="$router.push('/salev2/product/create')"></el-button>
+    </div>
+
     <div class="flex justify-between items-center mb-6 mobile-hide">
       <div>
         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Product Vault</h1>
@@ -36,7 +49,7 @@
         <div class="flex flex-col lg:flex-row gap-6 items-start">
             <!-- Search & Type Group -->
             <div class="w-full lg:w-64 flex-shrink-0 space-y-3">
-                <div>
+                <div class="hidden md:block">
                     <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block tracking-wider">Search</label>
                     <el-input v-model="search" placeholder="Name, code..." prefix-icon="el-icon-search" class="w-full" @input="debouncedFetch" clearable></el-input>
                 </div>
