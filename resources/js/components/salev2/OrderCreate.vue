@@ -14,7 +14,10 @@
              <!-- Left: Customer & Status -->
              <div class="space-y-6">
                  <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                     <h2 class="font-bold text-slate-800 text-lg mb-4">Customer Info</h2>
+                     <div class="flex justify-between items-center mb-4">
+                         <h2 class="font-bold text-slate-800 text-lg">Customer Info</h2>
+                         <el-button type="text" icon="el-icon-magic-stick" class="text-blue-600 font-bold" @click="showSmartModal = true">Smart Paste</el-button>
+                     </div>
                      <div class="space-y-4">
                          <div>
                              <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Name</label>
@@ -180,6 +183,25 @@
             <el-button @click="showProductSelector = false">Done</el-button>
         </span>
     </el-dialog>
+
+    <!-- Smart Paste Dialog -->
+    <el-dialog title="⚡ Smart Paste (AI Parse)" :visible.sync="showSmartModal" width="550px" custom-class="mobile-dialog">
+        <div class="space-y-4">
+            <p class="text-sm text-slate-500">
+                Dán tin nhắn khách hàng (Tên, SĐT, Địa chỉ, Mã SP, Note). Hệ thống sẽ tự động bóc tách và điền vào form cùng sản phẩm.
+            </p>
+            <el-input
+                type="textarea"
+                :rows="6"
+                placeholder="Ví dụ:&#10;Anh Tuấn 0912345678&#10;Số 123 đường Cầu Giấy, Hà Nội&#10;Lấy quần ts1169, áo st567&#10;note: giao giờ hành chính"
+                v-model="smartText">
+            </el-input>
+        </div>
+        <span slot="footer">
+            <el-button @click="showSmartModal = false">Hủy</el-button>
+            <el-button type="primary" :loading="smartLoading" @click="applySmartParse">Phân Tích & Điền</el-button>
+        </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -190,6 +212,9 @@ export default {
         return {
             loading: false,
             submitting: false,
+            showSmartModal: false,
+            smartText: '',
+            smartLoading: false,
             order: {
                 name: '',
                 phone: '',
@@ -243,6 +268,16 @@ export default {
     },
     mounted() {
         this.fetchAvailableProducts();
+        if (this.$route.query.from_smart) {
+            const raw = sessionStorage.getItem('smart_order_prefill');
+            if (raw) {
+                try {
+                    const data = JSON.parse(raw);
+                    sessionStorage.removeItem('smart_order_prefill');
+                    this.applySmartData(data);
+                } catch(e) {}
+            }
+        }
     },
     methods: {
         setDiscountType(type) {
@@ -319,6 +354,46 @@ export default {
                 this.$message.error('Failed to create order');
             } finally {
                 this.submitting = false;
+            }
+        },
+        applySmartData(data) {
+            if (!data) return;
+            if (data.parsed) {
+                if (data.parsed.name) this.order.name = data.parsed.name;
+                if (data.parsed.phone) this.order.phone = data.parsed.phone;
+                if (data.parsed.address) this.order.address = data.parsed.address;
+                if (data.parsed.note) this.order.note = data.parsed.note;
+            }
+            if (data.matched_products && data.matched_products.length > 0) {
+                for (const prod of data.matched_products) {
+                    if (!this.isProductSelected(prod.id)) {
+                        this.order.products.push({ ...prod });
+                    }
+                }
+            }
+            this.$message.success('Đã tự động điền thông tin từ Smart Parse!');
+        },
+        async applySmartParse() {
+            if (!this.smartText.trim()) {
+                this.$message.warning('Vui lòng nhập nội dung tin nhắn');
+                return;
+            }
+            this.smartLoading = true;
+            try {
+                const res = await axios.post('/salev2/api/order/smart-parse', {
+                    description: this.smartText
+                });
+                if (res.data.success) {
+                    this.applySmartData(res.data);
+                    this.showSmartModal = false;
+                    this.smartText = '';
+                } else {
+                    this.$message.error(res.data.error || 'Phân tích thất bại');
+                }
+            } catch (err) {
+                this.$message.error(err.response?.data?.error || 'Có lỗi xảy ra khi phân tích');
+            } finally {
+                this.smartLoading = false;
             }
         }
     }

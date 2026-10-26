@@ -570,6 +570,213 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "order": order})
 }
 
+func (h *SaleV2Handler) SmartOrderCreate(c *gin.Context) {
+	var text string
+
+	var req struct {
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err == nil && req.Description != "" {
+		text = req.Description
+	} else {
+		text = c.PostForm("description")
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nội dung đơn hàng (description) không được để trống"})
+		return
+	}
+
+	smartService := services.NewSmartOrderService()
+	parsed, err := smartService.ParseDescription(c.Request.Context(), text)
+	if err != nil {
+		parsed = smartService.FallbackParse(text)
+	}
+
+	// Find matched AVAILABLE products by code/name
+	var matchedProducts []models.Product
+	var cleanProductIDs []uint
+	var unmatchedCodes []string
+	seenProductIDs := make(map[uint]bool)
+
+	for _, code := range parsed.Products {
+		code = strings.TrimSpace(code)
+		if code == "" {
+			continue
+		}
+		var prod models.Product
+		if err := h.DB.Where("LOWER(name) LIKE ? AND status = 'AVAILABLE'", "%"+strings.ToLower(code)+"%").
+			Preload("Images").Preload("Sizes").
+			Order("id DESC").
+			First(&prod).Error; err == nil {
+			if !seenProductIDs[prod.ID] {
+				seenProductIDs[prod.ID] = true
+				h.formatProduct(&prod)
+				matchedProducts = append(matchedProducts, prod)
+				cleanProductIDs = append(cleanProductIDs, prod.ID)
+			}
+		} else {
+			unmatchedCodes = append(unmatchedCodes, code)
+		}
+	}
+
+	var itemsTotal int64
+	for _, p := range matchedProducts {
+		itemsTotal += int64Val(p.Price)
+	}
+
+	// Consumer handling & Order creation in transaction
+	cleanPhone := strings.ReplaceAll(parsed.Phone, " ", "")
+	var order models.Order
+	status := "NEW"
+
+	txErr := h.DB.Transaction(func(tx *gorm.DB) error {
+		var consumerID *int
+		if cleanPhone != "" {
+			var cons models.Consumer
+			if err := tx.Where("phone = ?", cleanPhone).First(&cons).Error; err != nil {
+				cons = models.Consumer{
+					Name:    strPtr(parsed.Name),
+					Phone:   strPtr(cleanPhone),
+					Address: strPtr(parsed.Address),
+				}
+				if err := tx.Create(&cons).Error; err == nil {
+					cID := int(cons.ID)
+					consumerID = &cID
+				}
+			} else {
+				cID := int(cons.ID)
+				consumerID = &cID
+				updates := map[string]interface{}{}
+				if (cons.Name == nil || *cons.Name == "") && parsed.Name != "" {
+					updates["name"] = parsed.Name
+				}
+				if (cons.Address == nil || *cons.Address == "") && parsed.Address != "" {
+					updates["address"] = parsed.Address
+				}
+				if len(updates) > 0 {
+					tx.Model(&cons).Updates(updates)
+				}
+			}
+		}
+
+		order = models.Order{
+			ConsumerID:  consumerID,
+			Name:        strPtr(parsed.Name),
+			Phone:       strPtr(cleanPhone),
+			Address:     strPtr(parsed.Address),
+			Note:        strPtr(parsed.Note),
+			Desc:        strPtr(text),
+			Status:      strPtr(status),
+			TotalAmount: int64Ptr(itemsTotal),
+			FinalAmount: int64Ptr(itemsTotal),
+		}
+
+		if err := tx.Create(&order).Error; err != nil {
+			return err
+		}
+
+		for _, pID := range cleanProductIDs {
+			prodID := pID
+			oID := order.ID
+			op := models.OrderProduct{
+				OrderID:   &oID,
+				ProductID: &prodID,
+			}
+			if err := tx.Create(&op).Error; err != nil {
+				return err
+			}
+		}
+
+		if len(cleanProductIDs) > 0 {
+			if err := tx.Model(&models.Product{}).Where("id IN ?", cleanProductIDs).Update("status", "SOLD").Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": txErr.Error()})
+		return
+	}
+
+	h.updateProductStatuses()
+
+	if h.FB != nil {
+		for _, pID := range cleanProductIDs {
+			h.FB.Dispatch(pID, services.FBActionSold)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"order":            order,
+		"order_id":         order.ID,
+		"matched_products": matchedProducts,
+		"unmatched_codes":  unmatchedCodes,
+		"parsed":           parsed,
+		"message":          "Đơn hàng thông minh đã được tạo thành công!",
+	})
+}
+
+func (h *SaleV2Handler) SmartOrderParse(c *gin.Context) {
+	var text string
+	var req struct {
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err == nil && req.Description != "" {
+		text = req.Description
+	} else {
+		text = c.PostForm("description")
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nội dung phân tích không được để trống"})
+		return
+	}
+
+	smartService := services.NewSmartOrderService()
+	parsed, err := smartService.ParseDescription(c.Request.Context(), text)
+	if err != nil {
+		parsed = smartService.FallbackParse(text)
+	}
+
+	var matchedProducts []models.Product
+	var unmatchedCodes []string
+	seenProductIDs := make(map[uint]bool)
+
+	for _, code := range parsed.Products {
+		code = strings.TrimSpace(code)
+		if code == "" {
+			continue
+		}
+		var prod models.Product
+		if err := h.DB.Where("LOWER(name) LIKE ? AND status = 'AVAILABLE'", "%"+strings.ToLower(code)+"%").
+			Preload("Images").Preload("Sizes").
+			Order("id DESC").
+			First(&prod).Error; err == nil {
+			if !seenProductIDs[prod.ID] {
+				seenProductIDs[prod.ID] = true
+				h.formatProduct(&prod)
+				matchedProducts = append(matchedProducts, prod)
+			}
+		} else {
+			unmatchedCodes = append(unmatchedCodes, code)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"parsed":           parsed,
+		"matched_products": matchedProducts,
+		"unmatched_codes":  unmatchedCodes,
+	})
+}
+
 func (h *SaleV2Handler) CustomerHistory(c *gin.Context) {
 	phone := c.Param("phone")
 	var orders []models.Order

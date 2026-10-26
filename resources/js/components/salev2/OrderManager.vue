@@ -8,6 +8,7 @@
       <div class="flex gap-2 w-full md:w-auto">
         <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="flex-1 min-w-0 md:w-64 md:flex-initial" @input="debouncedFetch"></el-input>
         <el-button type="danger" plain icon="el-icon-money" class="flex-shrink-0" @click="$router.push('/salev2/expenses')">Costs</el-button>
+        <el-button type="success" icon="el-icon-magic-stick" class="flex-shrink-0" @click="openSmartModal">Smart</el-button>
         <el-button type="primary" icon="el-icon-plus" class="flex-shrink-0" @click="$router.push('/salev2/order/create')">New</el-button>
         <el-button icon="el-icon-refresh" class="mobile-hide" @click="fetchOrders(1)"></el-button>
       </div>
@@ -311,6 +312,28 @@
     <el-dialog title="Order Receipt Generated" :visible.sync="captureVisible" width="500px" custom-class="mobile-dialog">
         <div class="text-center"><img :src="captureImg" class="w-full max-h-[70vh] w-auto mx-auto rounded-2xl border mb-6 shadow-sm"><el-button type="primary" size="medium" icon="el-icon-download" @click="downloadCapture">Download Image</el-button></div>
     </el-dialog>
+
+    <!-- Smart Order Dialog -->
+    <el-dialog title="⚡ Tạo Đơn Hàng Smart (AI Parse)" :visible.sync="showSmartModal" width="550px" custom-class="mobile-dialog">
+        <div class="space-y-4">
+            <p class="text-sm text-slate-500">
+                Dán nội dung tin nhắn chốt đơn (Tên, SĐT, Địa chỉ, Mã SP, Note). Hệ thống tự động bóc tách thông tin và tạo đơn hàng.
+            </p>
+            <el-input
+                type="textarea"
+                :rows="7"
+                placeholder="Ví dụ:&#10;Anh Tuấn 0912345678&#10;Số 123 đường Cầu Giấy, Hà Nội&#10;Lấy quần ts1169, áo st567&#10;note: giao giờ hành chính"
+                v-model="smartText">
+            </el-input>
+        </div>
+        <span slot="footer" class="dialog-footer flex justify-between items-center">
+            <el-button @click="showSmartModal = false">Đóng</el-button>
+            <div class="flex gap-2">
+                <el-button type="warning" plain icon="el-icon-edit-outline" :loading="smartLoading" @click="handleSmartToPOS">Điền vào POS</el-button>
+                <el-button type="primary" icon="el-icon-check" :loading="smartLoading" @click="handleSmartCreate">Tạo Đơn Ngay</el-button>
+            </div>
+        </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -323,6 +346,9 @@ export default {
       viewMode: 'grid',
       orders: [], loading: false, total: 0, page: 1, search: '',
       currentCapture: null, captureVisible: false, captureImg: '',
+      showSmartModal: false,
+      smartText: '',
+      smartLoading: false,
       stats: {
         yesterday: { count: 0, revenue: 0 },
         today: { count: 0, revenue: 0 },
@@ -433,6 +459,61 @@ export default {
     viewOrder(order) {
         if (order && order.id) {
             this.$router.push({ name: 'order-edit', params: { id: order.id } });
+        }
+    },
+    openSmartModal() {
+        this.showSmartModal = true;
+        this.smartText = '';
+    },
+    async handleSmartCreate() {
+        if (!this.smartText.trim()) {
+            this.$message.warning('Vui lòng nhập nội dung tin nhắn');
+            return;
+        }
+        this.smartLoading = true;
+        try {
+            const res = await axios.post('/salev2/api/order/smart-create', {
+                description: this.smartText
+            });
+            if (res.data.success) {
+                this.$message.success(res.data.message || 'Tạo đơn thành công!');
+                this.showSmartModal = false;
+                this.smartText = '';
+                if (res.data.order_id) {
+                    this.$router.push(`/salev2/order/${res.data.order_id}/edit`);
+                } else {
+                    this.fetchOrders(1);
+                }
+            } else {
+                this.$message.error(res.data.error || 'Tạo đơn thất bại');
+            }
+        } catch (err) {
+            this.$message.error(err.response?.data?.error || 'Có lỗi xảy ra khi tạo đơn');
+        } finally {
+            this.smartLoading = false;
+        }
+    },
+    async handleSmartToPOS() {
+        if (!this.smartText.trim()) {
+            this.$message.warning('Vui lòng nhập nội dung tin nhắn');
+            return;
+        }
+        this.smartLoading = true;
+        try {
+            const res = await axios.post('/salev2/api/order/smart-parse', {
+                description: this.smartText
+            });
+            if (res.data.success) {
+                sessionStorage.setItem('smart_order_prefill', JSON.stringify(res.data));
+                this.showSmartModal = false;
+                this.$router.push('/salev2/order/create?from_smart=1');
+            } else {
+                this.$message.error(res.data.error || 'Phân tích thất bại');
+            }
+        } catch (err) {
+            this.$message.error(err.response?.data?.error || 'Có lỗi xảy ra khi phân tích');
+        } finally {
+            this.smartLoading = false;
         }
     }
   },

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -231,7 +230,11 @@ type SaleV1Handler struct {
 }
 
 func NewSaleV1Handler(db *gorm.DB, cfg *config.Config) *SaleV1Handler {
-	loader := pongo2.MustNewLocalFileSystemLoader("./templates/sale")
+	templatePath := "./templates/sale"
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		templatePath = "../templates/sale"
+	}
+	loader := pongo2.MustNewLocalFileSystemLoader(templatePath)
 	ts := pongo2.NewSet("sale_templates", loader)
 
 	fbPageID := ""
@@ -1845,37 +1848,114 @@ func (h *SaleV1Handler) OrderHold(c *gin.Context) {
 func (h *SaleV1Handler) SmartOrderCreate(c *gin.Context) {
 	if c.Request.Method == "POST" {
 		text := c.PostForm("description")
+		if strings.TrimSpace(text) == "" {
+			c.Redirect(http.StatusFound, "/sale/smart-order-create")
+			return
+		}
 
-		phoneRe := regexp.MustCompile(`(0[3|5|7|8|9][0-9]{8})`)
-		phone := phoneRe.FindString(text)
+		smartService := services.NewSmartOrderService()
+		parsed, err := smartService.ParseDescription(c.Request.Context(), text)
+		if err != nil {
+			parsed = smartService.FallbackParse(text)
+		}
 
-		codeRe := regexp.MustCompile(`(?i)\b(TS|HJ|JK|ST|BZ|TI|BE|GL|PS|HA|SU)\d+\b`)
-		codes := codeRe.FindAllString(text, -1)
+		// Find matched AVAILABLE products by code/name
+		var matchedProducts []models.Product
+		var cleanProductIDs []uint
+		seenProductIDs := make(map[uint]bool)
 
-		lines := strings.Split(strings.TrimSpace(text), "\n")
-		name := ""
-		address := ""
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
+		for _, code := range parsed.Products {
+			code = strings.TrimSpace(code)
+			if code == "" {
 				continue
 			}
-			if name == "" && !phoneRe.MatchString(line) && !codeRe.MatchString(line) {
-				name = line
-			} else if strings.Contains(strings.ToLower(line), "địa chỉ") ||
-				strings.Contains(strings.ToLower(line), "đường") ||
-				strings.Contains(strings.ToLower(line), "quận") ||
-				strings.Contains(strings.ToLower(line), "phường") ||
-				strings.Contains(strings.ToLower(line), "hà nội") ||
-				strings.Contains(strings.ToLower(line), "hcm") ||
-				strings.Contains(strings.ToLower(line), "tp") {
-				address = line
+			var prod models.Product
+			if err := h.DB.Where("LOWER(name) LIKE ? AND status = 'AVAILABLE'", "%"+strings.ToLower(code)+"%").
+				Order("id DESC").
+				First(&prod).Error; err == nil {
+				if !seenProductIDs[prod.ID] {
+					seenProductIDs[prod.ID] = true
+					matchedProducts = append(matchedProducts, prod)
+					cleanProductIDs = append(cleanProductIDs, prod.ID)
+				}
 			}
 		}
 
-		searchCodes := strings.Join(codes, ",")
-		c.Redirect(http.StatusFound, fmt.Sprintf("/sale/order-create?name=%s&phone=%s&address=%s&note=%s",
-			url.QueryEscape(name), url.QueryEscape(phone), url.QueryEscape(address), url.QueryEscape(searchCodes)))
+		var itemsTotal int64
+		for _, p := range matchedProducts {
+			itemsTotal += int64Val(p.Price)
+		}
+
+		// Consumer handling
+		var consumerID *int
+		cleanPhone := parsed.Phone
+		if cleanPhone != "" {
+			var cons models.Consumer
+			if err := h.DB.Where("phone = ?", cleanPhone).First(&cons).Error; err != nil {
+				cons = models.Consumer{
+					Name:    strPtr(parsed.Name),
+					Phone:   strPtr(cleanPhone),
+					Address: strPtr(parsed.Address),
+				}
+				if err := h.DB.Create(&cons).Error; err == nil {
+					cID := int(cons.ID)
+					consumerID = &cID
+				}
+			} else {
+				cID := int(cons.ID)
+				consumerID = &cID
+				updates := map[string]interface{}{}
+				if (cons.Name == nil || *cons.Name == "") && parsed.Name != "" {
+					updates["name"] = parsed.Name
+				}
+				if (cons.Address == nil || *cons.Address == "") && parsed.Address != "" {
+					updates["address"] = parsed.Address
+				}
+				if len(updates) > 0 {
+					h.DB.Model(&cons).Updates(updates)
+				}
+			}
+		}
+
+		status := "NEW"
+		order := models.Order{
+			ConsumerID:  consumerID,
+			Name:        strPtr(parsed.Name),
+			Phone:       strPtr(cleanPhone),
+			Address:     strPtr(parsed.Address),
+			Note:        strPtr(parsed.Note),
+			Desc:        strPtr(text),
+			Status:      strPtr(status),
+			TotalAmount: int64Ptr(itemsTotal),
+			FinalAmount: int64Ptr(itemsTotal),
+		}
+
+		if err := h.DB.Create(&order).Error; err != nil {
+			c.Redirect(http.StatusFound, "/sale/smart-order-create")
+			return
+		}
+
+		for _, pID := range cleanProductIDs {
+			prodID := pID
+			oID := order.ID
+			h.DB.Create(&models.OrderProduct{
+				OrderID:   &oID,
+				ProductID: &prodID,
+			})
+		}
+
+		if len(cleanProductIDs) > 0 {
+			h.DB.Model(&models.Product{}).Where("id IN ?", cleanProductIDs).Update("status", "SOLD")
+		}
+		h.updateProductStatuses()
+
+		if h.FB != nil {
+			for _, pID := range cleanProductIDs {
+				h.FB.Dispatch(pID, services.FBActionSold)
+			}
+		}
+
+		c.Redirect(http.StatusFound, fmt.Sprintf("/sale/order/%d", order.ID))
 		return
 	}
 
