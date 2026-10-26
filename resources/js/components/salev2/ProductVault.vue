@@ -1,13 +1,17 @@
 <template>
   <div class="px-4 md:px-6 py-4 md:py-8 pt-20 md:pt-8">
     <!-- Mobile Fixed Search Bar on Top -->
-    <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm flex items-center gap-2">
+    <div 
+      :class="showMobileSearch ? 'translate-y-0' : '-translate-y-full'"
+      class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm flex items-center gap-2 transition-transform duration-300 ease-in-out">
       <el-input 
         v-model="search" 
         placeholder="Search Name, code..." 
         prefix-icon="el-icon-search" 
         clearable 
         class="flex-1"
+        @focus="isSearchFocused = true"
+        @blur="isSearchFocused = false"
         @input="debouncedFetch">
       </el-input>
       <el-button type="primary" size="small" icon="el-icon-plus" circle @click="$router.push('/salev2/product/create')"></el-button>
@@ -243,6 +247,9 @@ export default {
       selectedProducts: [],
       sortByUpload: false,
       downloading: false,
+      showMobileSearch: true,
+      lastScrollTop: 0,
+      isSearchFocused: false,
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI'],
       sizeMapping: {
@@ -257,8 +264,37 @@ export default {
     this.fetchProducts();
     const stored = localStorage.getItem('selectedProducts');
     if (stored) this.selectedProducts = JSON.parse(stored);
+    window.addEventListener('scroll', this.handleScroll, { capture: true, passive: true });
+  },
+  beforeDestroy() {
+    window.removeEventListener('scroll', this.handleScroll, { capture: true });
   },
   methods: {
+    getScrollTop() {
+      const mainEl = document.querySelector('main');
+      const mainScroll = mainEl ? mainEl.scrollTop : 0;
+      const winScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      return Math.max(mainScroll, winScroll);
+    },
+    handleScroll() {
+      if (this.isSearchFocused) return;
+      const currentScroll = this.getScrollTop();
+      const diff = currentScroll - this.lastScrollTop;
+
+      if (currentScroll <= 15) {
+        this.showMobileSearch = true;
+        this.lastScrollTop = currentScroll;
+        return;
+      }
+
+      if (diff > 8) {
+        this.showMobileSearch = false;
+      } else if (diff < -8) {
+        this.showMobileSearch = true;
+      }
+
+      this.lastScrollTop = currentScroll;
+    },
     formatDate(dateStr) {
       if (!dateStr) return 'undefined';
       const d = new Date(dateStr);

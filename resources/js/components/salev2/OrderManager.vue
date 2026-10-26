@@ -1,12 +1,16 @@
 <template>
   <div class="px-4 md:px-6 py-4 md:py-8 pt-20 md:pt-8">
     <!-- Mobile Fixed Search Bar on Top -->
-    <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm">
+    <div 
+      :class="showMobileSearch ? 'translate-y-0' : '-translate-y-full'"
+      class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm transition-transform duration-300 ease-in-out">
       <el-input 
         v-model="search" 
         placeholder="Phone, Name..." 
         prefix-icon="el-icon-search" 
         clearable
+        @focus="isSearchFocused = true"
+        @blur="isSearchFocused = false"
         @input="debouncedFetch">
       </el-input>
     </div>
@@ -358,6 +362,9 @@ export default {
       showSmartModal: false,
       smartText: '',
       smartLoading: false,
+      showMobileSearch: true,
+      lastScrollTop: 0,
+      isSearchFocused: false,
       smartPlaceholder: "Ví dụ:\nAnh Tuấn 0912345678\nSố 123 đường Cầu Giấy, Hà Nội\nLấy quần ts1169, áo st567\nnote: giao giờ hành chính",
       stats: {
         yesterday: { count: 0, revenue: 0 },
@@ -525,6 +532,31 @@ export default {
         } finally {
             this.smartLoading = false;
         }
+    },
+    getScrollTop() {
+        const mainEl = document.querySelector('main');
+        const mainScroll = mainEl ? mainEl.scrollTop : 0;
+        const winScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        return Math.max(mainScroll, winScroll);
+    },
+    handleScroll() {
+        if (this.isSearchFocused) return;
+        const currentScroll = this.getScrollTop();
+        const diff = currentScroll - this.lastScrollTop;
+
+        if (currentScroll <= 15) {
+            this.showMobileSearch = true;
+            this.lastScrollTop = currentScroll;
+            return;
+        }
+
+        if (diff > 8) {
+            this.showMobileSearch = false;
+        } else if (diff < -8) {
+            this.showMobileSearch = true;
+        }
+
+        this.lastScrollTop = currentScroll;
     }
   },
   mounted() {
@@ -533,6 +565,10 @@ export default {
       }
       this.fetchOrders();
       this.fetchStats();
+      window.addEventListener('scroll', this.handleScroll, { capture: true, passive: true });
+  },
+  beforeDestroy() {
+      window.removeEventListener('scroll', this.handleScroll, { capture: true });
   }
 }
 </script>
