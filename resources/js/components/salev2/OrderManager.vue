@@ -1,15 +1,27 @@
 <template>
-  <div class="px-4 md:px-6 py-8">
+  <div class="px-4 md:px-6 py-4 md:py-8 pt-16 md:pt-8">
+    <!-- Mobile Fixed Search Bar on Top -->
+    <div class="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur px-3 py-2.5 border-b border-slate-200 shadow-sm">
+      <el-input 
+        v-model="search" 
+        placeholder="Phone, Name..." 
+        prefix-icon="el-icon-search" 
+        clearable
+        @input="debouncedFetch">
+      </el-input>
+    </div>
+
+    <!-- Desktop Header & Mobile Actions -->
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
       <div class="mobile-hide">
         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Order Center</h1>
         <p class="text-slate-500 mt-1">Manage sales, shipping, and receipt generation</p>
       </div>
-      <div class="flex gap-2 w-full md:w-auto">
-        <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="flex-1 min-w-0 md:w-64 md:flex-initial" @input="debouncedFetch"></el-input>
-        <el-button type="danger" plain icon="el-icon-money" class="flex-shrink-0" @click="$router.push('/salev2/expenses')">Costs</el-button>
-        <el-button type="success" icon="el-icon-magic-stick" class="flex-shrink-0" @click="openSmartModal">Smart</el-button>
-        <el-button type="primary" icon="el-icon-plus" class="flex-shrink-0" @click="$router.push('/salev2/order/create')">New</el-button>
+      <div class="flex gap-2 w-full md:w-auto justify-end">
+        <el-input v-model="search" placeholder="Phone, Name..." prefix-icon="el-icon-search" class="hidden md:block md:w-64" clearable @input="debouncedFetch"></el-input>
+        <el-button type="danger" plain icon="el-icon-money" class="flex-1 md:flex-initial flex-shrink-0" @click="$router.push('/salev2/expenses')">Costs</el-button>
+        <el-button type="success" icon="el-icon-magic-stick" class="flex-1 md:flex-initial flex-shrink-0" @click="openSmartModal">Smart</el-button>
+        <el-button type="primary" icon="el-icon-plus" class="flex-1 md:flex-initial flex-shrink-0" @click="$router.push('/salev2/order/create')">New</el-button>
         <el-button icon="el-icon-refresh" class="mobile-hide" @click="fetchOrders(1)"></el-button>
       </div>
     </div>
@@ -322,16 +334,13 @@
             <el-input
                 type="textarea"
                 :rows="7"
-                placeholder="Ví dụ:&#10;Anh Tuấn 0912345678&#10;Số 123 đường Cầu Giấy, Hà Nội&#10;Lấy quần ts1169, áo st567&#10;note: giao giờ hành chính"
+                :placeholder="smartPlaceholder"
                 v-model="smartText">
             </el-input>
         </div>
         <span slot="footer" class="dialog-footer flex justify-between items-center">
             <el-button @click="showSmartModal = false">Đóng</el-button>
-            <div class="flex gap-2">
-                <el-button type="warning" plain icon="el-icon-edit-outline" :loading="smartLoading" @click="handleSmartToPOS">Điền vào POS</el-button>
-                <el-button type="primary" icon="el-icon-check" :loading="smartLoading" @click="handleSmartCreate">Tạo Đơn Ngay</el-button>
-            </div>
+            <el-button type="primary" icon="el-icon-check" :loading="smartLoading" @click="handleSmartCreate">Tạo Đơn Ngay</el-button>
         </span>
     </el-dialog>
   </div>
@@ -349,6 +358,7 @@ export default {
       showSmartModal: false,
       smartText: '',
       smartLoading: false,
+      smartPlaceholder: "Ví dụ:\nAnh Tuấn 0912345678\nSố 123 đường Cầu Giấy, Hà Nội\nLấy quần ts1169, áo st567\nnote: giao giờ hành chính",
       stats: {
         yesterday: { count: 0, revenue: 0 },
         today: { count: 0, revenue: 0 },

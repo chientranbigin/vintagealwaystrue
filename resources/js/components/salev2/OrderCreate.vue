@@ -193,7 +193,7 @@
             <el-input
                 type="textarea"
                 :rows="6"
-                placeholder="Ví dụ:&#10;Anh Tuấn 0912345678&#10;Số 123 đường Cầu Giấy, Hà Nội&#10;Lấy quần ts1169, áo st567&#10;note: giao giờ hành chính"
+                :placeholder="smartPlaceholder"
                 v-model="smartText">
             </el-input>
         </div>
@@ -215,6 +215,7 @@ export default {
             showSmartModal: false,
             smartText: '',
             smartLoading: false,
+            smartPlaceholder: "Ví dụ:\nAnh Tuấn 0912345678\nSố 123 đường Cầu Giấy, Hà Nội\nLấy quần ts1169, áo st567\nnote: giao giờ hành chính",
             order: {
                 name: '',
                 phone: '',
