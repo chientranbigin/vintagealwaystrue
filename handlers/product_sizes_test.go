@@ -61,3 +61,39 @@ func TestMappingSizesParityWithOldPHP(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeProductSizes(t *testing.T) {
+	val44 := 44.0
+	val35 := 35.0
+	val107 := 107.0
+
+	sVai := "VAI"
+	sNguc := "NGỰC"
+	sDaiAo := "DÀI ÁO"
+
+	sizes := []models.Size{
+		{Name: &sVai, Value: &val44},
+		{Name: &sNguc, Value: &val35},
+		{Name: &sDaiAo, Value: &val107},
+	}
+
+	normalized := normalizeProductSizes("TROUSERS", sizes)
+	if *normalized[0].Name != "EO QUẦN" {
+		t.Errorf("expected EO QUẦN, got %s", *normalized[0].Name)
+	}
+	if *normalized[1].Name != "ĐÁY" {
+		t.Errorf("expected ĐÁY, got %s", *normalized[1].Name)
+	}
+	if *normalized[2].Name != "DÀI QUẦN" {
+		t.Errorf("expected DÀI QUẦN, got %s", *normalized[2].Name)
+	}
+
+	// Should not touch top types
+	jacketSizes := []models.Size{
+		{Name: &sVai, Value: &val44},
+	}
+	jacketNorm := normalizeProductSizes("JACKET", jacketSizes)
+	if *jacketNorm[0].Name != "VAI" {
+		t.Errorf("expected VAI, got %s", *jacketNorm[0].Name)
+	}
+}

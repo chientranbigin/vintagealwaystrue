@@ -810,6 +810,47 @@ func (h *SaleV2Handler) Consumers(c *gin.Context) {
 	})
 }
 
+func normalizeProductSizes(pType string, sizes []models.Size) []models.Size {
+	if pType != "TROUSERS" && pType != "SHORT" {
+		return sizes
+	}
+
+	hasBottom := false
+	hasTop := false
+	for _, s := range sizes {
+		if s.Name == nil || s.Value == nil {
+			continue
+		}
+		if *s.Name == "EO QUẦN" || *s.Name == "ĐÁY" || *s.Name == "DÀI QUẦN" {
+			hasBottom = true
+		}
+		if *s.Name == "VAI" || *s.Name == "NGỰC" || *s.Name == "DÀI ÁO" {
+			hasTop = true
+		}
+	}
+
+	// Only remap if top sizes exist and bottom sizes DO NOT exist (defensive fallback for old cached clients)
+	if hasTop && !hasBottom {
+		nameMap := map[string]string{
+			"VAI":        "EO QUẦN",
+			"NGỰC":       "ĐÁY",
+			"EO":         "ĐÙI",
+			"DÀI ÁO":     "DÀI QUẦN",
+			"DÀI ÁO SAU": "ỐNG",
+			"DÀI TAY":    "DƯ LAI",
+		}
+		for i := range sizes {
+			if sizes[i].Name != nil {
+				if newName, ok := nameMap[*sizes[i].Name]; ok {
+					nameCopy := newName
+					sizes[i].Name = &nameCopy
+				}
+			}
+		}
+	}
+	return sizes
+}
+
 func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 	var req struct {
 		Type        string `json:"type" form:"type" binding:"required"`
@@ -878,39 +919,41 @@ func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 			return err
 		}
 
-		savedSizes := 0
+		var sizesToSave []models.Size
 		for _, sz := range req.Sizes {
 			if sz.Value != nil {
-				s := models.Size{
+				nameCopy := sz.Name
+				sizesToSave = append(sizesToSave, models.Size{
 					ProductID: &product.ID,
-					Name:      &sz.Name,
+					Name:      &nameCopy,
 					Value:     sz.Value,
-				}
-				if err := tx.Create(&s).Error; err != nil {
-					return err
-				}
-				savedSizes++
+				})
 			}
 		}
 
 		// Fallback for multipart form data if req.Sizes wasn't bound
-		if savedSizes == 0 {
+		if len(sizesToSave) == 0 {
 			for i := 0; i < 30; i++ {
 				sName := c.PostForm(fmt.Sprintf("sizes[%d][name]", i))
 				sValStr := c.PostForm(fmt.Sprintf("sizes[%d][value]", i))
 				if sName != "" && sValStr != "" {
 					val, err := strconv.ParseFloat(sValStr, 64)
 					if err == nil {
-						s := models.Size{
+						nameCopy := sName
+						sizesToSave = append(sizesToSave, models.Size{
 							ProductID: &product.ID,
-							Name:      &sName,
+							Name:      &nameCopy,
 							Value:     &val,
-						}
-						if err := tx.Create(&s).Error; err != nil {
-							return err
-						}
+						})
 					}
 				}
+			}
+		}
+
+		sizesToSave = normalizeProductSizes(req.Type, sizesToSave)
+		for _, s := range sizesToSave {
+			if err := tx.Create(&s).Error; err != nil {
+				return err
 			}
 		}
 
@@ -964,38 +1007,46 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 			return err
 		}
 
+		var sizesToSave []models.Size
 		if len(req.Sizes) > 0 {
-			tx.Where("product_id = ?", product.ID).Delete(&models.Size{})
 			for _, sz := range req.Sizes {
 				if sz.Value != nil {
-					s := models.Size{
+					nameCopy := sz.Name
+					sizesToSave = append(sizesToSave, models.Size{
 						ProductID: &product.ID,
-						Name:      &sz.Name,
+						Name:      &nameCopy,
 						Value:     sz.Value,
-					}
-					tx.Create(&s)
+					})
 				}
 			}
 		} else {
-			sizesDeleted := false
 			for i := 0; i < 30; i++ {
 				sName := c.PostForm(fmt.Sprintf("sizes[%d][name]", i))
 				sValStr := c.PostForm(fmt.Sprintf("sizes[%d][value]", i))
 				if sName != "" && sValStr != "" {
 					val, err := strconv.ParseFloat(sValStr, 64)
 					if err == nil {
-						if !sizesDeleted {
-							tx.Where("product_id = ?", product.ID).Delete(&models.Size{})
-							sizesDeleted = true
-						}
-						s := models.Size{
+						nameCopy := sName
+						sizesToSave = append(sizesToSave, models.Size{
 							ProductID: &product.ID,
-							Name:      &sName,
+							Name:      &nameCopy,
 							Value:     &val,
-						}
-						tx.Create(&s)
+						})
 					}
 				}
+			}
+		}
+
+		if len(sizesToSave) > 0 {
+			productType := ""
+			if product.Type != nil {
+				productType = *product.Type
+			}
+			sizesToSave = normalizeProductSizes(productType, sizesToSave)
+
+			tx.Where("product_id = ?", product.ID).Delete(&models.Size{})
+			for _, s := range sizesToSave {
+				tx.Create(&s)
 			}
 		}
 		return nil
