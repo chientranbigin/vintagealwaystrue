@@ -82,6 +82,10 @@ func setupSaleV2TestRouter(v2 *SaleV2Handler) *gin.Engine {
 		group.POST("/upload-smart-group", v2.UploadSmartGroup)
 		group.GET("/images/cleanup", v2.CleanupImages)
 		group.POST("/images/cleanup", v2.CleanupImages)
+
+		group.GET("/expenses", v2.Expenses)
+		group.POST("/expenses", v2.StoreExpense)
+		group.DELETE("/expenses/:id", v2.DestroyExpense)
 	}
 
 	routes(r.Group("/salev2/api"))

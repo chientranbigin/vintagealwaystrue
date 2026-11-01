@@ -33,9 +33,9 @@
                 <div class="bg-slate-50 rounded-lg p-5 border border-slate-200">
                     <h3 class="font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">Measurements</h3>
                     <div v-if="form.type" class="grid grid-cols-2 gap-4">
-                        <div v-for="(size, idx) in activeSizes" :key="idx">
-                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">{{ size }}</label>
-                            <el-input v-model="form.sizes[idx].value" size="small">
+                        <div v-for="item in activeSizes" :key="item.globalIdx">
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">{{ item.name }}</label>
+                            <el-input v-model="form.sizes[item.globalIdx].value" size="small">
                                     <template slot="append">cm</template>
                             </el-input>
                         </div>
@@ -125,11 +125,13 @@ export default {
         activeSizes() {
            // We need to determine which sizes to show based on type. 
            // Legacy logic hides/shows sections: AO (< 6) vs QUAN (>= 6).
-           if(['TROUSERS', 'SHORT'].includes(this.form.type)) {
-               return this.allSizes.slice(6); // The bottom half
-           } else {
-               return this.allSizes.slice(0, 6); // The top half
-           } 
+           const isBottom = ['TROUSERS', 'SHORT'].includes(this.form.type);
+           const start = isBottom ? 6 : 0;
+           const end = isBottom ? 12 : 6;
+           return this.allSizes.slice(start, end).map((name, i) => ({
+               name,
+               globalIdx: start + i
+           }));
         }
     },
     methods: {
@@ -173,9 +175,10 @@ export default {
                     formData.append('banner', this.form.image);
                 }
                 
+                const activeIndices = this.activeSizes.map(item => item.globalIdx);
                 this.form.sizes.forEach((s, i) => {
                     formData.append(`sizes[${i}][name]`, s.name);
-                    formData.append(`sizes[${i}][value]`, s.value);
+                    formData.append(`sizes[${i}][value]`, activeIndices.includes(i) ? s.value : '');
                 });
 
                 const res = await axios.post('/salev2/api/product/store', formData, {

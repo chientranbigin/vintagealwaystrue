@@ -198,6 +198,11 @@ func main() {
 		api.POST("/upload-smart-group", v2.UploadSmartGroup)
 		api.GET("/images/cleanup", v2.CleanupImages)
 		api.POST("/images/cleanup", v2.CleanupImages)
+
+		// Expense Routes
+		api.GET("/expenses", v2.Expenses)
+		api.POST("/expenses", v2.StoreExpense)
+		api.DELETE("/expenses/:id", v2.DestroyExpense)
 	}
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)

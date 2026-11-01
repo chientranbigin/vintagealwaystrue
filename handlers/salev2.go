@@ -976,6 +976,27 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 					tx.Create(&s)
 				}
 			}
+		} else {
+			sizesDeleted := false
+			for i := 0; i < 30; i++ {
+				sName := c.PostForm(fmt.Sprintf("sizes[%d][name]", i))
+				sValStr := c.PostForm(fmt.Sprintf("sizes[%d][value]", i))
+				if sName != "" && sValStr != "" {
+					val, err := strconv.ParseFloat(sValStr, 64)
+					if err == nil {
+						if !sizesDeleted {
+							tx.Where("product_id = ?", product.ID).Delete(&models.Size{})
+							sizesDeleted = true
+						}
+						s := models.Size{
+							ProductID: &product.ID,
+							Name:      &sName,
+							Value:     &val,
+						}
+						tx.Create(&s)
+					}
+				}
+			}
 		}
 		return nil
 	})
@@ -983,6 +1004,13 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if file, err := c.FormFile("banner"); err == nil && file != nil {
+		if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
+			product.PathThumb = &uploadedPath
+			h.DB.Model(&product).Update("path_thumb", uploadedPath)
+		}
 	}
 
 	h.DB.Preload("Sizes").First(&product, product.ID)
@@ -1957,5 +1985,120 @@ func (h *SaleV2Handler) CleanupImages(c *gin.Context) {
 		"message":         "Image cleanup executed successfully",
 	})
 }
+
+type CreateExpenseInput struct {
+	Description string  `json:"description"`
+	Amount      float64 `json:"amount"`
+	EntryDate   string  `json:"entry_date"`
+}
+
+func (h *SaleV2Handler) Expenses(c *gin.Context) {
+	month := strings.TrimSpace(c.Query("month"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	limit := 20
+	offset := (page - 1) * limit
+
+	tx := h.DB.Model(&models.Expense{})
+	if month != "" {
+		var filterTime time.Time
+		var parseErr error
+		if len(month) >= 10 {
+			filterTime, parseErr = time.Parse("2006-01-02", month[:10])
+		} else if len(month) >= 7 {
+			filterTime, parseErr = time.Parse("2006-01", month[:7])
+		} else {
+			parseErr = fmt.Errorf("invalid month")
+		}
+
+		if parseErr == nil {
+			tx = tx.Where("YEAR(entry_date) = ? AND MONTH(entry_date) = ?", filterTime.Year(), int(filterTime.Month()))
+		}
+	}
+
+	var totalCount int64
+	tx.Count(&totalCount)
+
+	var totalAmount float64
+	tx.Session(&gorm.Session{}).Select("COALESCE(SUM(amount), 0)").Scan(&totalAmount)
+
+	var expenses []models.Expense
+	if err := tx.Session(&gorm.Session{}).
+		Order("entry_date DESC, created_at DESC, id DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&expenses).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch expenses"})
+		return
+	}
+
+	if expenses == nil {
+		expenses = []models.Expense{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"expenses": gin.H{
+			"data":         expenses,
+			"total":        totalCount,
+			"per_page":     limit,
+			"current_page": page,
+		},
+		"total": totalAmount,
+	})
+}
+
+func (h *SaleV2Handler) StoreExpense(c *gin.Context) {
+	var input CreateExpenseInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	input.Description = strings.TrimSpace(input.Description)
+	if input.Description == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Description is required"})
+		return
+	}
+	if input.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be greater than 0"})
+		return
+	}
+
+	entryDate := strings.TrimSpace(input.EntryDate)
+	if entryDate == "" {
+		entryDate = time.Now().Format("2006-01-02")
+	} else {
+		if len(entryDate) >= 10 {
+			if t, err := time.Parse("2006-01-02", entryDate[:10]); err == nil {
+				entryDate = t.Format("2006-01-02")
+			}
+		}
+	}
+
+	expense := models.Expense{
+		Description: input.Description,
+		Amount:      input.Amount,
+		EntryDate:   entryDate,
+	}
+
+	if err := h.DB.Create(&expense).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create expense"})
+		return
+	}
+
+	c.JSON(http.StatusOK, expense)
+}
+
+func (h *SaleV2Handler) DestroyExpense(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.DB.Delete(&models.Expense{}, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete expense"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 
 
