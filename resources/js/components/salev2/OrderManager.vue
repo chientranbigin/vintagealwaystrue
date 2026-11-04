@@ -98,6 +98,9 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1">
+                    <button type="button" @click.stop="copyOrderInfo(order)" title="Copy thông tin đơn" class="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition-colors">
+                        <i class="el-icon-document-copy text-sm"></i>
+                    </button>
                     <el-tag v-if="order.is_paid" type="success" size="mini" effect="dark" class="rounded-pill uppercase font-bold text-[8px]">
                         PAID
                     </el-tag>
@@ -109,6 +112,7 @@
                             <i class="el-icon-more text-slate-400"></i>
                         </span>
                         <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item icon="el-icon-document-copy" @click.native="copyOrderInfo(order)">Copy thông tin đơn</el-dropdown-item>
                             <el-dropdown-item icon="el-icon-camera" @click.native="captureOrder(order)">Capture Receipt</el-dropdown-item>
                             <el-dropdown-item icon="el-icon-edit" @click.native="$router.push({name: 'order-edit', params: {id: order.id}})">Edit Order</el-dropdown-item>
                             <el-dropdown-item icon="el-icon-user" @click.native="viewCustomerHistory(order)">Customer History</el-dropdown-item>
@@ -243,16 +247,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Action" align="right" width="100">
+        <el-table-column label="Action" align="right" width="110">
           <template slot-scope="scope">
-            <el-dropdown trigger="click">
-              <el-button type="text" icon="el-icon-more"></el-button>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item icon="el-icon-camera" @click.native="captureOrder(scope.row)">Capture Order</el-dropdown-item>
-                <el-dropdown-item icon="el-icon-view" @click.native="viewOrder(scope.row)">View Detail</el-dropdown-item>
-                <el-dropdown-item icon="el-icon-delete" @click.native="confirmDelete(scope.row.id)" class="text-danger">Delete</el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
+            <div class="flex items-center justify-end gap-1">
+              <el-button type="text" icon="el-icon-document-copy" @click="copyOrderInfo(scope.row)" title="Copy thông tin đơn" class="text-slate-400 hover:text-blue-600"></el-button>
+              <el-dropdown trigger="click">
+                <el-button type="text" icon="el-icon-more"></el-button>
+                <el-dropdown-menu slot="dropdown">
+                  <el-dropdown-item icon="el-icon-document-copy" @click.native="copyOrderInfo(scope.row)">Copy thông tin đơn</el-dropdown-item>
+                  <el-dropdown-item icon="el-icon-camera" @click.native="captureOrder(scope.row)">Capture Order</el-dropdown-item>
+                  <el-dropdown-item icon="el-icon-view" @click.native="viewOrder(scope.row)">View Detail</el-dropdown-item>
+                  <el-dropdown-item icon="el-icon-delete" @click.native="confirmDelete(scope.row.id)" class="text-danger">Delete</el-dropdown-item>
+                </el-dropdown-menu>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -379,6 +387,44 @@ export default {
     }
   },
   methods: {
+    copyOrderInfo(order) {
+      if (!order) return;
+      const name = (order.name || '').trim();
+      const phone = (order.phone || '').trim();
+      const address = (order.address || '').trim();
+      const text = `Gửi đến ${name}\nSđt ${phone}\nĐịa chỉ ${address}`;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          this.$message.success('Đã copy thông tin đơn!');
+        }).catch(() => {
+          this.fallbackCopyText(text);
+        });
+      } else {
+        this.fallbackCopyText(text);
+      }
+    },
+    fallbackCopyText(text) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand('copy');
+        textArea.remove();
+        if (successful) {
+          this.$message.success('Đã copy thông tin đơn!');
+        } else {
+          this.$message.error('Không thể copy thông tin đơn');
+        }
+      } catch (err) {
+        this.$message.error('Không thể copy thông tin đơn: ' + err);
+      }
+    },
     formatPrice(val) { return val !== undefined ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(val) : '0đ'; },
     getStatusType(s) { return { 'NEW': 'info', 'COMPLETED': 'success', 'A SHIP NOW': 'primary', 'ON HOLD': 'warning' }[s] || 'info'; },
     formatSizes(product) {

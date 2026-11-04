@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -83,7 +84,7 @@ func TestSaleV2_ProcessSmartUploadJob_OCR_And_Attachment(t *testing.T) {
 	handler := NewSaleV2Handler(tx, cfg)
 
 	// Seed existing product to match candidate OCR
-	prodName := fmt.Sprintf("Q%d", time.Now().UnixNano()%100000)
+	prodName := fmt.Sprintf("TS%d", time.Now().UnixNano()%100000)
 	initialPrice := int64(100000)
 	prod := models.Product{
 		Name:   &prodName,
@@ -123,6 +124,91 @@ func TestSaleV2_ProcessSmartUploadJob_OCR_And_Attachment(t *testing.T) {
 			if len(attachedImgs) < 1 {
 				t.Errorf("Expected at least 1 image attached to product, got %d", len(attachedImgs))
 			}
+		}
+	})
+
+	t.Run("Job deletes old main and detail images and overwrites with new ones", func(t *testing.T) {
+		_ = os.MkdirAll("./storage/sale", 0755)
+		oldMainFile := fmt.Sprintf("./storage/sale/mock_old_main_%d.jpg", time.Now().UnixNano())
+		oldDetailFile := fmt.Sprintf("./storage/sale/mock_old_detail_%d.jpg", time.Now().UnixNano())
+		newMainFile := fmt.Sprintf("./storage/sale/mock_new_main_%d.jpg", time.Now().UnixNano())
+		newDetailFile := fmt.Sprintf("./storage/sale/mock_new_detail_%d.jpg", time.Now().UnixNano())
+
+		_ = os.WriteFile(oldMainFile, []byte("old main"), 0644)
+		_ = os.WriteFile(oldDetailFile, []byte("old detail"), 0644)
+		_ = os.WriteFile(newMainFile, []byte("new main"), 0644)
+		_ = os.WriteFile(newDetailFile, []byte("new detail"), 0644)
+		defer func() {
+			_ = os.Remove(oldMainFile)
+			_ = os.Remove(oldDetailFile)
+			_ = os.Remove(newMainFile)
+			_ = os.Remove(newDetailFile)
+		}()
+
+		// Set product with old main image and old detail image
+		prod.PathThumb = strPtr(oldMainFile)
+		tx.Save(&prod)
+		tx.Create(&models.ProductImage{
+			ProductID: prod.ID,
+			FilePath:  oldMainFile,
+			IsMain:    true,
+		})
+		tx.Create(&models.ProductImage{
+			ProductID: prod.ID,
+			FilePath:  oldDetailFile,
+			IsMain:    false,
+		})
+
+		sessionID := fmt.Sprintf("SESSION_REPLACE_%d", time.Now().UnixNano()%100000)
+		job := SmartUploadJob{
+			SessionID:        sessionID,
+			OriginalFileName: fmt.Sprintf("%s 220k.jpg", prodName),
+			MainImagePath:    newMainFile,
+			DetailPaths:      []string{newDetailFile},
+			ProductType:      "TROUSERS",
+		}
+
+		handler.processSmartUploadJob(job)
+
+		var logRecord models.ProductUploadLog
+		tx.Where("session_id = ?", sessionID).First(&logRecord)
+		t.Logf("LogRecord status=%s, msg=%v, code=%v, detected=%v", logRecord.Status, strVal(logRecord.Message), strVal(logRecord.ProductCode), strVal(logRecord.DetectedText))
+
+		// Check product record updated
+		var updatedProd models.Product
+		tx.First(&updatedProd, prod.ID)
+		if updatedProd.PathThumb == nil || *updatedProd.PathThumb != newMainFile {
+			t.Errorf("Expected product PathThumb to be updated to %s, got %v", newMainFile, updatedProd.PathThumb)
+		}
+		if updatedProd.Price == nil || *updatedProd.Price != 220000 {
+			t.Errorf("Expected product Price to be 220000, got %v", updatedProd.Price)
+		}
+
+		// Check attached images
+		var attachedImgs []models.ProductImage
+		tx.Where("product_id = ?", prod.ID).Find(&attachedImgs)
+		if len(attachedImgs) != 2 {
+			t.Errorf("Expected exactly 2 attached images (1 main + 1 detail), got %d", len(attachedImgs))
+		}
+		for _, img := range attachedImgs {
+			if img.FilePath == oldMainFile || img.FilePath == oldDetailFile {
+				t.Errorf("Old image still exists in product_images: %s", img.FilePath)
+			}
+		}
+
+		// Check physical files: old files should be removed from disk
+		if _, err := os.Stat(oldMainFile); !os.IsNotExist(err) {
+			t.Errorf("Expected old main file %s to be deleted from disk", oldMainFile)
+		}
+		if _, err := os.Stat(oldDetailFile); !os.IsNotExist(err) {
+			t.Errorf("Expected old detail file %s to be deleted from disk", oldDetailFile)
+		}
+		// New files must still exist
+		if _, err := os.Stat(newMainFile); os.IsNotExist(err) {
+			t.Errorf("Expected new main file %s to still exist", newMainFile)
+		}
+		if _, err := os.Stat(newDetailFile); os.IsNotExist(err) {
+			t.Errorf("Expected new detail file %s to still exist", newDetailFile)
 		}
 	})
 

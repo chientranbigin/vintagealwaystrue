@@ -14,7 +14,10 @@
              <!-- Left: Customer & Status -->
              <div class="space-y-6">
                  <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                     <h2 class="font-bold text-slate-800 text-lg mb-4">Customer Info</h2>
+                     <div class="flex justify-between items-center mb-4">
+                         <h2 class="font-bold text-slate-800 text-lg">Customer Info</h2>
+                         <el-button size="mini" type="primary" plain icon="el-icon-document-copy" @click="copyOrderInfo(order)">Copy thông tin đơn</el-button>
+                     </div>
                      <div class="space-y-4">
                          <div>
                              <label class="block text-slate-400 font-bold text-xs uppercase mb-1">Name</label>
@@ -336,6 +339,44 @@ export default {
                 this.$message.error('Update failed');
             } finally {
                 this.submitting = false;
+            }
+        },
+        copyOrderInfo(order) {
+            if (!order) return;
+            const name = (order.name || '').trim();
+            const phone = (order.phone || '').trim();
+            const address = (order.address || '').trim();
+            const text = `Gửi đến ${name}\nSđt ${phone}\nĐịa chỉ ${address}`;
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    this.$message.success('Đã copy thông tin đơn!');
+                }).catch(() => {
+                    this.fallbackCopyText(text);
+                });
+            } else {
+                this.fallbackCopyText(text);
+            }
+        },
+        fallbackCopyText(text) {
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                textArea.remove();
+                if (successful) {
+                    this.$message.success('Đã copy thông tin đơn!');
+                } else {
+                    this.$message.error('Không thể copy thông tin đơn');
+                }
+            } catch (err) {
+                this.$message.error('Không thể copy thông tin đơn: ' + err);
             }
         }
     }

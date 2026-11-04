@@ -149,10 +149,11 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 	// Status filter
 	if status := c.Query("status"); status != "" {
 		query = query.Where("products.status = ?", status)
-		// Only filter out empty thumbnails for standard Product Vault grid (limit <= 60 and no search)
-		if status == "AVAILABLE" && limit <= 60 && c.Query("search") == "" && c.Query("include_empty_thumb") != "true" {
-			query = query.Where("path_thumb IS NOT NULL AND path_thumb != ''")
-		}
+	}
+
+	// Filter out empty thumbnails for standard Product Vault grid (limit <= 60) unless include_empty_thumb is true
+	if limit <= 60 && c.Query("include_empty_thumb") != "true" {
+		query = query.Where("path_thumb IS NOT NULL AND path_thumb != ''")
 	}
 
 	// Type filter
@@ -1786,6 +1787,85 @@ func (h *SaleV2Handler) UploadSmartGroup(c *gin.Context) {
 	})
 }
 
+// deleteOldProductImages removes both physical files (Cloudinary & local) and database records of old images for a product
+func (h *SaleV2Handler) deleteOldProductImages(product *models.Product, newMainPath string, newDetailPaths []string) {
+	if product == nil || product.ID == 0 {
+		return
+	}
+
+	// Build a set of new paths that must NOT be deleted
+	newPaths := make(map[string]bool)
+	if newMainPath != "" {
+		newPaths[newMainPath] = true
+		newPaths[filepath.Base(newMainPath)] = true
+	}
+	for _, p := range newDetailPaths {
+		if p != "" {
+			newPaths[p] = true
+			newPaths[filepath.Base(p)] = true
+		}
+	}
+
+	// Query existing product images
+	var oldImages []models.ProductImage
+	h.DB.Where("product_id = ?", product.ID).Find(&oldImages)
+
+	// Collect all old paths to clean up
+	var pathsToDelete []string
+	if product.PathThumb != nil && *product.PathThumb != "" {
+		pathsToDelete = append(pathsToDelete, *product.PathThumb)
+	}
+	if product.ImageThumbScale != nil && *product.ImageThumbScale != "" {
+		pathsToDelete = append(pathsToDelete, *product.ImageThumbScale)
+	}
+	for _, img := range oldImages {
+		if img.FilePath != "" {
+			pathsToDelete = append(pathsToDelete, img.FilePath)
+		}
+	}
+
+	// Remove physical files
+	var cloudinaryIDs []string
+	for _, rawPath := range pathsToDelete {
+		trimmed := strings.TrimSpace(rawPath)
+		if trimmed == "" || newPaths[trimmed] || newPaths[filepath.Base(trimmed)] {
+			continue
+		}
+
+		// Cloudinary asset
+		if pid := services.ExtractPublicID(trimmed); pid != "" {
+			cloudinaryIDs = append(cloudinaryIDs, pid)
+		}
+
+		// Local filesystem
+		cleanLoc := strings.TrimLeft(trimmed, "/")
+		if strings.HasPrefix(cleanLoc, "storage/") {
+			cleanLoc = strings.TrimPrefix(cleanLoc, "storage/")
+		}
+		candidates := []string{
+			trimmed,
+			filepath.Join(".", strings.TrimLeft(trimmed, "/")),
+			filepath.Join("./storage/sale", filepath.Base(cleanLoc)),
+			filepath.Join("./storage", cleanLoc),
+			filepath.Join("./public/storage", cleanLoc),
+		}
+		for _, cand := range candidates {
+			if info, err := os.Stat(cand); err == nil && !info.IsDir() {
+				_ = os.Remove(cand)
+				break
+			}
+		}
+	}
+
+	// Delete from Cloudinary if configured
+	if len(cloudinaryIDs) > 0 && h.Storage != nil {
+		_, _ = h.Storage.DeleteFromCloudinary(cloudinaryIDs)
+	}
+
+	// Delete old records in product_images table
+	h.DB.Where("product_id = ?", product.ID).Delete(&models.ProductImage{})
+}
+
 // processSmartUploadJob processes OCR recognition and product image attachment in background
 func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 	// 1. Init Log (Step 1 start)
@@ -1799,16 +1879,14 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 	h.DB.Create(&logRecord)
 
 	// 2. STEP 1: RECOGNITION & FIND PRODUCT
-	detectedText, err := h.Vision.ExtractTextFromImage(job.MainImagePath)
-	if err != nil {
-		errMsg := fmt.Sprintf("Không thể đọc được chữ từ ảnh (Google Vision Error): %v", err)
-		h.DB.Model(&models.ProductUploadLog{}).
-			Where("session_id = ? AND file_path = ?", job.SessionID, job.MainImagePath).
-			Updates(map[string]interface{}{
-				"status":  "ERROR",
-				"message": errMsg,
-			})
-		return
+	var detectedText string
+	if h.Vision != nil {
+		detectedText, _ = h.Vision.ExtractTextFromImage(job.MainImagePath)
+	}
+	if strings.TrimSpace(detectedText) == "" {
+		detectedText = job.OriginalFileName
+	} else {
+		detectedText = detectedText + " " + job.OriginalFileName
 	}
 
 	// A. Extract Code based on category prefix
@@ -1869,13 +1947,15 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 		return
 	}
 
-	// Update product record: Price & thumbnail
+	// Delete old main & detail images (physical files + database records)
+	h.deleteOldProductImages(&existing, job.MainImagePath, job.DetailPaths)
+
+	// Update product record: Price & thumbnail (overwrite with new main image)
 	if price > 0 {
 		existing.Price = &price
 	}
-	if existing.PathThumb == nil || *existing.PathThumb == "" {
-		existing.PathThumb = &job.MainImagePath
-	}
+	existing.PathThumb = &job.MainImagePath
+	existing.ImageThumbScale = nil
 	h.DB.Save(&existing)
 
 	// Step 2: Attaching images

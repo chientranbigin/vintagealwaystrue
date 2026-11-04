@@ -25,19 +25,31 @@ func TestSaleV2_Products_SearchFilterAndPagination(t *testing.T) {
 	priceB := int64(600000)
 
 	prodA := models.Product{
-		Name:   &codeA,
+		Name:      &codeA,
+		Type:      strPtr("TROUSERS"),
+		Price:     &priceA,
+		Status:    strPtr("AVAILABLE"),
+		PathThumb: strPtr("https://res.cloudinary.com/test/prodA.jpg"),
+	}
+	prodB := models.Product{
+		Name:      &codeB,
+		Type:      strPtr("BLAZER"),
+		Price:     &priceB,
+		Status:    strPtr("SOLD"),
+		PathThumb: strPtr("https://res.cloudinary.com/test/prodB.jpg"),
+	}
+	tx.Create(&prodA)
+	tx.Create(&prodB)
+
+	// Seed product without image (empty thumbnail)
+	codeC := fmt.Sprintf("EMPTY_THUMB_%d", time.Now().UnixNano()%100000)
+	prodC := models.Product{
+		Name:   &codeC,
 		Type:   strPtr("TROUSERS"),
 		Price:  &priceA,
 		Status: strPtr("AVAILABLE"),
 	}
-	prodB := models.Product{
-		Name:   &codeB,
-		Type:   strPtr("BLAZER"),
-		Price:  &priceB,
-		Status: strPtr("SOLD"),
-	}
-	tx.Create(&prodA)
-	tx.Create(&prodB)
+	tx.Create(&prodC)
 
 	// Attach size to prodA: dai_ao = 75.5
 	valSize := 75.5
@@ -59,6 +71,34 @@ func TestSaleV2_Products_SearchFilterAndPagination(t *testing.T) {
 		json.Unmarshal(w.Body.Bytes(), &res)
 		if len(res.Data) == 0 {
 			t.Fatalf("Expected product %s to be found", codeA)
+		}
+	})
+
+	// 1b. Exclude products without image when searching
+	t.Run("Exclude products without image when searching", func(t *testing.T) {
+		w := performRequest(router, "GET", "/salev2/api/products?search="+codeC, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d", w.Code)
+		}
+		var res struct {
+			Data []map[string]interface{} `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		if len(res.Data) != 0 {
+			t.Fatalf("Expected product without image not to be returned when searching, got %d", len(res.Data))
+		}
+
+		// When include_empty_thumb is true, it should appear
+		wEmpty := performRequest(router, "GET", "/salev2/api/products?include_empty_thumb=true&search="+codeC, nil)
+		if wEmpty.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d", wEmpty.Code)
+		}
+		var resEmpty struct {
+			Data []map[string]interface{} `json:"data"`
+		}
+		json.Unmarshal(wEmpty.Body.Bytes(), &resEmpty)
+		if len(resEmpty.Data) == 0 {
+			t.Fatalf("Expected product without image to be returned with include_empty_thumb=true")
 		}
 	})
 
