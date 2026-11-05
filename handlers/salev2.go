@@ -127,7 +127,12 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	query := h.DB.Model(&models.Product{}).Preload("Images").Preload("Sizes")
+	subQuery := "(SELECT product_id, DATE_FORMAT(MAX(created_at), '%Y-%m-%d %H:%i:%s') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary"
+
+	query := h.DB.Model(&models.Product{}).
+		Joins("LEFT JOIN " + subQuery + " ON upload_summary.product_id = products.id").
+		Preload("Images").
+		Preload("Sizes")
 
 	// Search filter
 	if search := c.Query("search"); search != "" {
@@ -137,7 +142,7 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 		for _, n := range names {
 			n = strings.TrimSpace(n)
 			if n != "" {
-				conds = append(conds, "name LIKE ?")
+				conds = append(conds, "products.name LIKE ?")
 				args = append(args, "%"+n+"%")
 			}
 		}
@@ -153,12 +158,12 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 
 	// Filter out empty thumbnails for standard Product Vault grid (limit <= 60) unless include_empty_thumb is true
 	if limit <= 60 && c.Query("include_empty_thumb") != "true" {
-		query = query.Where("path_thumb IS NOT NULL AND path_thumb != ''")
+		query = query.Where("products.path_thumb IS NOT NULL AND products.path_thumb != ''")
 	}
 
 	// Type filter
 	if pType := c.Query("type"); pType != "" {
-		query = query.Where("type = ?", pType)
+		query = query.Where("products.type = ?", pType)
 	}
 
 	// Size filters (EXISTS subquery handles ranges and avoid duplicates/join collision)
@@ -195,13 +200,13 @@ func (h *SaleV2Handler) Products(c *gin.Context) {
 
 	// Sorting
 	if c.Query("sort") == "upload" {
-		query = query.Order("created_at DESC")
+		query = query.Order("COALESCE(upload_summary.latest_upload, products.created_at) DESC")
 	} else {
-		query = query.Order("id DESC")
+		query = query.Order("products.id DESC")
 	}
 
 	var products []models.Product
-	query.Limit(limit).Offset(offset).Find(&products)
+	query.Select("products.*, upload_summary.latest_upload").Limit(limit).Offset(offset).Find(&products)
 
 	for i := range products {
 		h.formatProduct(&products[i])
