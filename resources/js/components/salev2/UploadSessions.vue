@@ -432,8 +432,8 @@ export default {
       try {
         const res = await axios.get('/salev2/api/sold-by-date');
         this.soldDates = res.data.dates;
-        const top3 = this.soldDates.filter(r => !r.is_empty).slice(0, 3);
-        await Promise.all(top3.map(row => this.toggleSoldDate(row)));
+        const top1 = this.soldDates.filter(r => !r.is_empty).slice(0, 1);
+        await Promise.all(top1.map(row => this.toggleSoldDate(row)));
       } catch (err) {
         this.$message.error('Failed to load sold dates');
       } finally {
