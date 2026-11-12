@@ -301,7 +301,7 @@
             <div class="flex flex-wrap gap-2.5 mb-6">
                 <div v-for="p in currentCapture?.products" :key="p.id" 
                      :class="getCaptureProductClass(currentCapture?.products?.length)" 
-                     class="text-center">
+                     class="text-center mb-3">
                     <div :class="getCaptureContainerClass(currentCapture?.products?.length)"
                          class="bg-slate-50 rounded-xl mb-1.5 border border-slate-100 flex items-center justify-center overflow-hidden">
                         <img :src="p.image_thumb_scale_url || p.path_thumb" 
@@ -309,7 +309,10 @@
                              crossorigin="anonymous"
                              @error="e => e.target.src = p.path_thumb">
                     </div>
-                    <span class="font-bold block truncate" :class="(currentCapture?.products?.length || 0) <= 2 ? 'text-sm' : 'text-xs'">{{ p.name }}</span>
+                    <div class="font-bold text-slate-800 leading-normal pt-1 pb-1 px-1 break-words" 
+                         :class="(currentCapture?.products?.length || 0) <= 2 ? 'text-sm' : 'text-xs'">
+                        {{ p.name }}
+                    </div>
                 </div>
             </div>
             <div class="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100 font-bold">
