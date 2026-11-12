@@ -55,9 +55,22 @@
                                  <el-option value="CANCELED" label="CANCELED"></el-option>
                              </el-select>
                          </div>
-                         <div class="flex items-center gap-2">
-                             <el-switch v-model="order.is_freeship" active-color="#13ce66"></el-switch>
-                             <span class="text-sm font-medium">Free Shipping (20k)</span>
+                         <div class="space-y-2">
+                             <div class="flex items-center justify-between gap-2">
+                                 <div class="flex items-center gap-2">
+                                     <el-switch v-model="order.is_freeship" active-color="#13ce66" @change="handleFreeshipChange"></el-switch>
+                                     <span class="text-sm font-medium">Free Shipping</span>
+                                 </div>
+                                 <el-input-number
+                                     v-if="order.is_freeship"
+                                     v-model="order.shipping_fee"
+                                     :min="0"
+                                     :step="5000"
+                                     size="mini"
+                                     controls-position="right"
+                                     class="w-32"
+                                 ></el-input-number>
+                             </div>
                          </div>
                          <div class="flex items-center gap-2">
                              <el-switch v-model="order.is_paid" active-color="#13ce66"></el-switch>
@@ -142,10 +155,17 @@
                              <span class="text-slate-500">Deposit</span>
                              <el-input-number v-model="order.deposit_amount" :step="10000" size="mini" controls-position="right" class="w-32"></el-input-number>
                          </div>
-                         <!-- Shipping Fee hidden as requested -->
+                         <div v-if="order.is_freeship" class="flex justify-between text-sm items-center">
+                             <span class="text-slate-500">Freeship Cost (Shop chịu)</span>
+                             <el-input-number v-model="order.shipping_fee" :min="0" :step="5000" size="mini" controls-position="right" class="w-32"></el-input-number>
+                         </div>
                          <div class="flex justify-between text-lg font-black text-slate-900 pt-3 border-t border-dashed border-slate-200">
                              <span>Total</span>
                              <span>{{ formatPrice(totalAmount) }}</span>
+                         </div>
+                         <div v-if="order.is_freeship" class="flex justify-between text-base font-bold text-emerald-600">
+                             <span>Final Amount (Thực nhận)</span>
+                             <span>{{ formatPrice(finalAmount) }}</span>
                          </div>
                          <div class="flex justify-between text-base font-bold text-blue-600">
                              <span>Viettel Amount</span>
@@ -213,13 +233,20 @@ export default {
         },
         totalAmount() {
             if (!this.order) return 0;
-            let total = this.subtotal + (this.order.additional_amount || 0) - (this.order.freeship_amount || 0);
+            let total = this.subtotal + (Number(this.order.additional_amount) || 0) - (Number(this.order.freeship_amount) || 0);
             return total > 0 ? total : 0;
+        },
+        finalAmount() {
+            if (!this.order) return 0;
+            const shipFee = this.order.is_freeship ? (Number(this.order.shipping_fee) || 0) : 0;
+            const finalAmt = this.totalAmount - shipFee;
+            return finalAmt > 0 ? finalAmt : 0;
         },
         viettelAmount() {
             if (!this.order) return 0;
             if (this.order.is_paid) return 0;
-            return this.totalAmount - (this.order.deposit_amount || 0);
+            const cod = this.totalAmount - (Number(this.order.deposit_amount) || 0);
+            return cod > 0 ? cod : 0;
         }
     },
     watch: {
@@ -234,6 +261,16 @@ export default {
         this.fetchAvailableProducts();
     },
     methods: {
+        handleFreeshipChange(val) {
+            if (!this.order) return;
+            if (val) {
+                if (!this.order.shipping_fee) {
+                    this.$set(this.order, 'shipping_fee', 15000);
+                }
+            } else {
+                this.$set(this.order, 'shipping_fee', 0);
+            }
+        },
         setDiscountType(type) {
             this.discountType = type;
             if (type === 'percent') {
@@ -274,6 +311,7 @@ export default {
                 // Ensure number fields for EL input (reactive)
                 this.$set(this.order, 'additional_amount', parseFloat(this.order.additional_amount || 0));
                 this.$set(this.order, 'freeship_amount', parseFloat(this.order.freeship_amount || 0));
+                this.$set(this.order, 'shipping_fee', parseFloat(this.order.shipping_fee || (this.order.is_freeship ? 15000 : 0)));
                 this.$set(this.order, 'deposit_amount', parseFloat(this.order.deposit_amount || 0));
                 if (this.subtotal > 0 && this.order.freeship_amount > 0) {
                     this.discountPercent = Math.round((this.order.freeship_amount / this.subtotal) * 100);
@@ -326,11 +364,12 @@ export default {
                     ...this.order,
                     additional_amount: this.order.additional_amount || 0,
                     freeship_amount: this.order.freeship_amount || 0,
+                    shipping_fee: this.order.is_freeship ? (Number(this.order.shipping_fee) || 0) : 0,
                     deposit_amount: this.order.deposit_amount || 0,
                     products: cleanProducts.map(p => Number(p.id)),
                     products_info: cleanProducts.map(p => ({ id: Number(p.id), price: p.price })),
                     total_amount: this.totalAmount,
-                    final_amount: this.totalAmount,
+                    final_amount: this.finalAmount,
                 };
                 await axios.post(`/salev2/api/order/${this.order.id}/update`, payload);
                 this.$message.success('Order Updated');

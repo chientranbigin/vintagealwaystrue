@@ -880,21 +880,31 @@ class SaleController extends Controller
         $yesterday = Carbon::yesterday('Asia/Ho_Chi_Minh')->format('Y-m-d');
 
         $soldByDay = function ($date) {
-            return DB::table('order_products')
+            $prodRows = DB::table('order_products')
                 ->join('orders', 'orders.id', '=', 'order_products.order_id')
                 ->join('products', 'products.id', '=', 'order_products.product_id')
-                ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", [$date])
+                ->whereRaw("DATE(CONVERT_TZ(COALESCE(order_products.created_at, orders.created_at), '+00:00', '+07:00')) = ?", [$date])
                 ->select('products.price')
                 ->get();
+
+            $adjRow = DB::table('orders')
+                ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ? AND EXISTS (SELECT 1 FROM order_products WHERE order_products.order_id = orders.id)", [$date])
+                ->selectRaw('COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship = 1 THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0) as adj')
+                ->first();
+
+            return [
+                'count' => $prodRows->count(),
+                'price' => max(0, $prodRows->sum('price') + (float)($adjRow->adj ?? 0)),
+            ];
         };
 
         $soldToday = $soldByDay($today);
         $soldYesterday = $soldByDay($yesterday);
 
-        $totalSoldToday = $soldToday->count();
-        $totalSoldTodayPrice = $soldToday->sum('price');
-        $totalSoldYesterday = $soldYesterday->count();
-        $totalSoldYesterdayPrice = $soldYesterday->sum('price');
+        $totalSoldToday = $soldToday['count'];
+        $totalSoldTodayPrice = $soldToday['price'];
+        $totalSoldYesterday = $soldYesterday['count'];
+        $totalSoldYesterdayPrice = $soldYesterday['price'];
 
         $currentOrders = Order::with('products')->whereBetween('created_at', [
             Carbon::now()->startOfMonth(),
@@ -944,14 +954,19 @@ class SaleController extends Controller
 
             $total_amount += intval($request->additional_amount);
             $total_amount -= intval($request->freeship_amount);
+            if ($total_amount < 0) $total_amount = 0;
+
+            $isFreeship = $request->is_freeship == 'on';
+            $shippingFee = $isFreeship ? (float)($request->shipping_fee !== null && $request->shipping_fee !== '' ? $request->shipping_fee : 15000) : 0;
+            $final_amount = max(0, $total_amount - intval($shippingFee));
 
             $request = $request->merge([
-
                 'status' => 'NEW',
                 'total_amount' => $total_amount,
-                'is_freeship' => $request->is_freeship == 'on' ? true : false,
+                'is_freeship' => $isFreeship,
+                'shipping_fee' => $shippingFee,
                 'is_paid' => $request->is_paid == 'on' ? true : false,
-                'final_amount' => $total_amount,
+                'final_amount' => $final_amount,
                 'phone' => str_replace(' ', '', $request->phone),
             ]);
 
@@ -1013,33 +1028,38 @@ class SaleController extends Controller
 
     public function orderUpdate(Request $request)
     {
-
         $order = Order::find($request->id);
-        $products = Product::whereIn('id', $request->products)->get();
+        $products = Product::whereIn('id', $request->products ?? [])->get();
 
+        $total_amount = array_sum($products->pluck('price')->toArray()) + intval($request->additional_amount) - intval($request->freeship_amount);
+        if ($total_amount < 0) $total_amount = 0;
 
-        // $total_amount = array_sum($products->pluck('price')->toArray()) + intval($request->additional_amount) - intval($request->freeship_amount);
-        $total_amount = intval($request->additional_amount)- intval($request->freeship_amount);
+        $isFreeship = $request->is_freeship == 'on';
+        $shippingFee = $isFreeship ? (float)($request->shipping_fee !== null && $request->shipping_fee !== '' ? $request->shipping_fee : 15000) : 0;
+        $final_amount = max(0, $total_amount - intval($shippingFee));
 
         $request = $request->merge([
-
             'total_amount' => $total_amount,
-            'is_freeship' => $request->is_freeship == 'on' ? true : false,
+            'is_freeship' => $isFreeship,
+            'shipping_fee' => $shippingFee,
             'is_paid' => $request->is_paid == 'on' ? true : false,
-            'final_amount' => $total_amount,
+            'final_amount' => $final_amount,
         ]);
 
-        OrderProduct::where('order_id', $order->id)->delete();
-
-        foreach ($products as $product) {
-            OrderProduct::create([
-                'product_id' => $product->id,
-                'order_id' => $order->id,
-
-            ]);
-
-
+        $newIds = $products->pluck('id')->toArray();
+        $oldIds = OrderProduct::where('order_id', $order->id)->pluck('product_id')->toArray();
+        $removedIds = array_diff($oldIds, $newIds);
+        if (!empty($removedIds)) {
+            OrderProduct::where('order_id', $order->id)->whereIn('product_id', $removedIds)->delete();
         }
+        $addedIds = array_diff($newIds, $oldIds);
+        foreach ($addedIds as $pid) {
+            OrderProduct::create([
+                'product_id' => $pid,
+                'order_id' => $order->id,
+            ]);
+        }
+
         $order->update($request->all());
         $this->updateStatusProduct();
 

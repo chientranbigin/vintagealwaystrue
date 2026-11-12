@@ -61,6 +61,14 @@
                                     <input type="number" class="form-control" name="deposit_amount" value="{{ order.DepositAmount }}">
                                 </div>
                                 <div class="form-group w-100 ml-4">
+                                    <input class="form-check-input" type="checkbox" name="is_freeship" id="is_freeship" {% if order.IsFreeship %}checked{% endif %} onchange="toggleFreeshipInput(this)">
+                                    <label class="form-check-label" for="is_freeship">Free Shipping</label>
+                                </div>
+                                <div class="form-group w-100" id="shipping_fee_group" style="{% if not order.IsFreeship %}display: none;{% endif %}">
+                                    <label>Freeship Amount (Chi phí ship shop chịu)</label>
+                                    <input type="number" class="form-control" name="shipping_fee" id="shipping_fee" value="{% if order.IsFreeship and order.ShippingFee == 0 %}15000{% else %}{{ order.ShippingFee }}{% endif %}">
+                                </div>
+                                <div class="form-group w-100 ml-4">
                                     <input class="form-check-input" type="checkbox" name="is_paid" id="is_paid" {% if order.IsPaid %}checked{% endif %}>
                                     <label class="form-check-label" for="is_paid">Is Paid Full</label>
                                 </div>
@@ -122,6 +130,19 @@
 </div>
 
 <script>
+function toggleFreeshipInput(cb) {
+    var grp = document.getElementById("shipping_fee_group");
+    var inp = document.getElementById("shipping_fee");
+    if (cb.checked) {
+        grp.style.display = "block";
+        if (!inp.value || parseInt(inp.value, 10) === 0) {
+            inp.value = 15000;
+        }
+    } else {
+        grp.style.display = "none";
+        inp.value = 0;
+    }
+}
 function filterProductTable() {
     var input = document.getElementById("productFilterInput");
     var filter = input.value.trim().toUpperCase();

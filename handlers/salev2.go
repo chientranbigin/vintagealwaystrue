@@ -381,8 +381,19 @@ func (h *SaleV2Handler) OrderStats(c *gin.Context) {
 			Select("COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total").
 			Joins("JOIN orders ON orders.id = order_products.order_id").
 			Joins("JOIN products ON products.id = order_products.product_id").
-			Where("DATE(orders.created_at) = ?", dateStr).
+			Where("DATE(COALESCE(order_products.created_at, orders.created_at)) = ?", dateStr).
 			Scan(&res)
+
+		var adj float64
+		h.DB.Table("orders").
+			Select("COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0)").
+			Where("DATE(orders.created_at) = ? AND EXISTS (SELECT 1 FROM order_products WHERE order_products.order_id = orders.id)", dateStr).
+			Scan(&adj)
+
+		res.Total += adj
+		if res.Total < 0 {
+			res.Total = 0
+		}
 		return res
 	}
 
@@ -399,7 +410,7 @@ func (h *SaleV2Handler) OrderStats(c *gin.Context) {
 		Count(&currentTotalOrder)
 	h.DB.Table("orders").
 		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
-		Select("COALESCE(SUM(final_amount), 0)").
+		Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").
 		Scan(&currentTotalFinalPrice)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -449,25 +460,44 @@ func (h *SaleV2Handler) OrderDetail(c *gin.Context) {
 
 func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 	var req struct {
-		Name             string                 `json:"name"`
-		Phone            string                 `json:"phone"`
-		Address          string                 `json:"address"`
-		Note             string                 `json:"note"`
-		Desc             string                 `json:"desc"`
-		TotalAmount      int64                  `json:"total_amount"`
-		DepositAmount    int64                  `json:"deposit_amount"`
-		AdditionalAmount int64                  `json:"additional_amount"`
-		FreeshipAmount   float64                `json:"freeship_amount"`
-		IsFreeship       bool                   `json:"is_freeship"`
-		IsPaid           bool                   `json:"is_paid"`
-		Status           string                 `json:"status"`
-		Products         []uint                 `json:"products"`
+		Name             string                   `json:"name"`
+		Phone            string                   `json:"phone"`
+		Address          string                   `json:"address"`
+		Note             string                   `json:"note"`
+		Desc             string                   `json:"desc"`
+		TotalAmount      int64                    `json:"total_amount"`
+		FinalAmount      *int64                   `json:"final_amount"`
+		DepositAmount    int64                    `json:"deposit_amount"`
+		AdditionalAmount int64                    `json:"additional_amount"`
+		FreeshipAmount   float64                  `json:"freeship_amount"`
+		ShippingFee      *float64                 `json:"shipping_fee"`
+		IsFreeship       bool                     `json:"is_freeship"`
+		IsPaid           bool                     `json:"is_paid"`
+		Status           string                   `json:"status"`
+		Products         []uint                   `json:"products"`
 		ProductsInfo     []map[string]interface{} `json:"products_info"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	shippingFee := float64(0)
+	if req.IsFreeship {
+		if req.ShippingFee != nil {
+			shippingFee = *req.ShippingFee
+		} else {
+			shippingFee = 15000
+		}
+	}
+
+	finalAmount := req.TotalAmount - int64(shippingFee)
+	if req.FinalAmount != nil && (!req.IsFreeship || *req.FinalAmount == req.TotalAmount-int64(shippingFee)) {
+		finalAmount = *req.FinalAmount
+	}
+	if finalAmount < 0 {
+		finalAmount = 0
 	}
 
 	order := models.Order{
@@ -477,9 +507,11 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 		Note:             &req.Note,
 		Desc:             &req.Desc,
 		TotalAmount:      &req.TotalAmount,
+		FinalAmount:      &finalAmount,
 		DepositAmount:    &req.DepositAmount,
 		AdditionalAmount: &req.AdditionalAmount,
 		FreeshipAmount:   &req.FreeshipAmount,
+		ShippingFee:      &shippingFee,
 		IsFreeship:       req.IsFreeship,
 		IsPaid:           req.IsPaid,
 		Status:           &req.Status,
@@ -516,8 +548,15 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 			}
 		}
 
-		if err := tx.Create(&order).Error; err != nil {
-			return err
+		// Price updates if any (apply before computing fallback totals)
+		for _, info := range req.ProductsInfo {
+			if idVal, ok := info["id"]; ok {
+				if priceVal, ok2 := info["price"]; ok2 {
+					idFloat, _ := idVal.(float64)
+					priceFloat, _ := priceVal.(float64)
+					tx.Model(&models.Product{}).Where("id = ?", uint(idFloat)).Update("price", int64(priceFloat))
+				}
+			}
 		}
 
 		var cleanProducts []uint
@@ -527,6 +566,26 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 				seenP[pID] = true
 				cleanProducts = append(cleanProducts, pID)
 			}
+		}
+
+		// If total_amount was not provided (0) and products are selected, compute from product prices
+		if (order.TotalAmount == nil || *order.TotalAmount == 0) && len(cleanProducts) > 0 {
+			var itemsTotal int64
+			tx.Table("products").Where("id IN ?", cleanProducts).Select("COALESCE(SUM(price), 0)").Scan(&itemsTotal)
+			calcTotal := itemsTotal + req.AdditionalAmount - int64(req.FreeshipAmount)
+			if calcTotal < 0 {
+				calcTotal = 0
+			}
+			order.TotalAmount = &calcTotal
+			calcFinal := calcTotal - int64(shippingFee)
+			if calcFinal < 0 {
+				calcFinal = 0
+			}
+			order.FinalAmount = &calcFinal
+		}
+
+		if err := tx.Create(&order).Error; err != nil {
+			return err
 		}
 
 		for _, pID := range cleanProducts {
@@ -541,17 +600,6 @@ func (h *SaleV2Handler) StoreOrder(c *gin.Context) {
 		if len(cleanProducts) > 0 {
 			if err := tx.Model(&models.Product{}).Where("id IN ?", cleanProducts).Update("status", soldStatus).Error; err != nil {
 				return err
-			}
-		}
-
-		// Price updates if any
-		for _, info := range req.ProductsInfo {
-			if idVal, ok := info["id"]; ok {
-				if priceVal, ok2 := info["price"]; ok2 {
-					idFloat, _ := idVal.(float64)
-					priceFloat, _ := priceVal.(float64)
-					tx.Model(&models.Product{}).Where("id = ?", uint(idFloat)).Update("price", int64(priceFloat))
-				}
 			}
 		}
 
@@ -1152,59 +1200,19 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 		if val, ok := req["freeship_amount"].(float64); ok {
 			order.FreeshipAmount = &val
 		}
-		if val, ok := req["final_amount"].(float64); ok {
-			fin := int64(val)
-			order.FinalAmount = &fin
-		} else if order.TotalAmount != nil {
-			order.FinalAmount = order.TotalAmount
+		if val, ok := req["shipping_fee"].(float64); ok {
+			order.ShippingFee = &val
+		}
+		if !order.IsFreeship {
+			zeroFee := float64(0)
+			order.ShippingFee = &zeroFee
+		} else if order.ShippingFee == nil {
+			defFee := float64(15000)
+			order.ShippingFee = &defFee
 		}
 
-		// Save order fields omitting associations to prevent join table duplicates
-		if err := tx.Omit("Products").Save(&order).Error; err != nil {
-			return err
-		}
-
-		// If products are provided in payload, sync associations cleanly
-		if prodsRaw, ok := req["products"]; ok {
-			var cleanIDs []uint
-			seen := make(map[uint]bool)
-
-			if prodList, okList := prodsRaw.([]interface{}); okList {
-				for _, item := range prodList {
-					var pid uint
-					switch v := item.(type) {
-					case float64:
-						pid = uint(v)
-					case int:
-						pid = uint(v)
-					case int64:
-						pid = uint(v)
-					}
-					if pid > 0 && !seen[pid] {
-						seen[pid] = true
-						cleanIDs = append(cleanIDs, pid)
-					}
-				}
-			}
-
-			// Clear previous join table rows for this order
-			if err := tx.Where("order_id = ?", order.ID).Delete(&models.OrderProduct{}).Error; err != nil {
-				return err
-			}
-
-			// Insert deduplicated association rows
-			for _, pid := range cleanIDs {
-				op := models.OrderProduct{
-					OrderID:   &order.ID,
-					ProductID: &pid,
-				}
-				if err := tx.Create(&op).Error; err != nil {
-					return err
-				}
-			}
-		}
-
-		// Update product prices if provided in products_info
+		// Update product prices if provided in products_info first
+		_, hasProductsInfo := req["products_info"]
 		if prodsInfoRaw, ok := req["products_info"].([]interface{}); ok {
 			for _, item := range prodsInfoRaw {
 				if infoMap, okMap := item.(map[string]interface{}); okMap {
@@ -1235,6 +1243,125 @@ func (h *SaleV2Handler) UpdateOrder(c *gin.Context) {
 					}
 				}
 			}
+		}
+
+		// If products are provided in payload, sync associations cleanly while preserving existing created_at
+		_, hasProducts := req["products"]
+		if prodsRaw, ok := req["products"]; ok {
+			var cleanIDs []uint
+			seen := make(map[uint]bool)
+
+			if prodList, okList := prodsRaw.([]interface{}); okList {
+				for _, item := range prodList {
+					var pid uint
+					switch v := item.(type) {
+					case float64:
+						pid = uint(v)
+					case int:
+						pid = uint(v)
+					case int64:
+						pid = uint(v)
+					}
+					if pid > 0 && !seen[pid] {
+						seen[pid] = true
+						cleanIDs = append(cleanIDs, pid)
+					}
+				}
+			}
+
+			// Fetch existing order_products for this order to preserve created_at of kept products
+			var existingOPs []models.OrderProduct
+			if err := tx.Where("order_id = ?", order.ID).Order("id ASC").Find(&existingOPs).Error; err != nil {
+				return err
+			}
+
+			newSet := make(map[uint]bool)
+			for _, pid := range cleanIDs {
+				newSet[pid] = true
+			}
+
+			keptProducts := make(map[uint]bool)
+			var idsToDelete []uint
+			for _, op := range existingOPs {
+				if op.ProductID == nil || !newSet[*op.ProductID] || keptProducts[*op.ProductID] {
+					idsToDelete = append(idsToDelete, op.ID)
+				} else {
+					keptProducts[*op.ProductID] = true
+				}
+			}
+
+			if len(idsToDelete) > 0 {
+				if err := tx.Where("id IN ?", idsToDelete).Delete(&models.OrderProduct{}).Error; err != nil {
+					return err
+				}
+			}
+
+			// Insert only newly added products
+			for _, pid := range cleanIDs {
+				if !keptProducts[pid] {
+					prodID := pid
+					op := models.OrderProduct{
+						OrderID:   &order.ID,
+						ProductID: &prodID,
+					}
+					if err := tx.Create(&op).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Recompute total_amount & final_amount when financial or product fields change
+		_, hasTotal := req["total_amount"]
+		_, hasAdditional := req["additional_amount"]
+		_, hasFreeshipAmt := req["freeship_amount"]
+		_, hasShippingFee := req["shipping_fee"]
+		_, hasIsFreeship := req["is_freeship"]
+		_, hasFinal := req["final_amount"]
+
+		if !hasTotal && (hasProducts || hasProductsInfo || hasAdditional || hasFreeshipAmt) {
+			var itemsTotal int64
+			tx.Table("order_products").
+				Joins("JOIN products ON products.id = order_products.product_id").
+				Where("order_products.order_id = ?", order.ID).
+				Select("COALESCE(SUM(products.price), 0)").
+				Scan(&itemsTotal)
+			addAmt := int64(0)
+			if order.AdditionalAmount != nil {
+				addAmt = *order.AdditionalAmount
+			}
+			discAmt := int64(0)
+			if order.FreeshipAmount != nil {
+				discAmt = int64(*order.FreeshipAmount)
+			}
+			calcTot := itemsTotal + addAmt - discAmt
+			if calcTot < 0 {
+				calcTot = 0
+			}
+			order.TotalAmount = &calcTot
+		}
+
+		if hasTotal || hasAdditional || hasFreeshipAmt || hasProducts || hasProductsInfo || hasShippingFee || hasIsFreeship || hasFinal {
+			tot := int64(0)
+			if order.TotalAmount != nil {
+				tot = *order.TotalAmount
+			}
+			ship := int64(0)
+			if order.IsFreeship && order.ShippingFee != nil {
+				ship = int64(*order.ShippingFee)
+			}
+			fin := tot - ship
+			if fin < 0 {
+				fin = 0
+			}
+			order.FinalAmount = &fin
+		} else if order.FinalAmount == nil && order.TotalAmount != nil {
+			order.FinalAmount = order.TotalAmount
+		}
+
+		// Save order fields omitting associations to prevent join table duplicates
+		if err := tx.Omit("Products").Save(&order).Error; err != nil {
+			return err
 		}
 
 		return nil
@@ -1337,7 +1464,7 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	var allOrdersCount int64
 	var allOrdersRevenue int64
 	h.DB.Model(&models.Order{}).Count(&allOrdersCount)
-	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(final_amount), 0)").Scan(&allOrdersRevenue)
+	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&allOrdersRevenue)
 
 	type TypeStat struct {
 		Type   string `json:"type"`
@@ -1351,13 +1478,13 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	var newOrdersCount int64
 	var newOrdersRevenue int64
 	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&newOrdersCount)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&newOrdersRevenue)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&newOrdersRevenue)
 
 	// Current Month
 	var curMonthOrdersCount int64
 	var curMonthOrdersRevenue int64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Count(&curMonthOrdersCount)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&curMonthOrdersRevenue)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&curMonthOrdersRevenue)
 
 	type SoldTypeStat struct {
 		Type  string `json:"type"`
@@ -1367,7 +1494,7 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	h.DB.Table("products").
 		Joins("JOIN order_products ON products.id = order_products.product_id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Where("orders.created_at BETWEEN ? AND ? AND products.status = 'SOLD'", startOfMonth, endOfMonth).
+		Where("COALESCE(order_products.created_at, orders.created_at) BETWEEN ? AND ? AND products.status = 'SOLD'", startOfMonth, endOfMonth).
 		Select("products.type, count(*) as count").
 		Group("products.type").
 		Scan(&currentTypeStats)
@@ -1376,13 +1503,13 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	var prevMonthOrdersCount int64
 	var prevMonthOrdersRevenue int64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Count(&prevMonthOrdersCount)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&prevMonthOrdersRevenue)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&prevMonthOrdersRevenue)
 
 	var prevTypeStats []SoldTypeStat
 	h.DB.Table("products").
 		Joins("JOIN order_products ON products.id = order_products.product_id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Where("orders.created_at BETWEEN ? AND ? AND products.status = 'SOLD'", startOfPrevMonth, endOfPrevMonth).
+		Where("COALESCE(order_products.created_at, orders.created_at) BETWEEN ? AND ? AND products.status = 'SOLD'", startOfPrevMonth, endOfPrevMonth).
 		Select("products.type, count(*) as count").
 		Group("products.type").
 		Scan(&prevTypeStats)
@@ -1404,7 +1531,7 @@ func (h *SaleV2Handler) DashboardStats(c *gin.Context) {
 	}
 	var monthlySales []MonthlySale
 	h.DB.Model(&models.Order{}).
-		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(*) as number, COALESCE(sum(final_amount), 0) as final_amount").
+		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(*) as number, COALESCE(sum(COALESCE(final_amount, total_amount, 0)), 0) as final_amount").
 		Where("created_at >= ?", sub12Months).
 		Group("month").
 		Order("month ASC").
@@ -1611,8 +1738,8 @@ func (h *SaleV2Handler) SoldByDate(c *gin.Context) {
 	h.DB.Table("order_products").
 		Joins("JOIN products ON products.id = order_products.product_id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Select("DATE_FORMAT(orders.created_at, '%Y-%m-%d') as date, COUNT(*) as total, COALESCE(SUM(products.price), 0) as total_revenue, GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ',') as types").
-		Group("DATE_FORMAT(orders.created_at, '%Y-%m-%d')").
+		Select("DATE_FORMAT(COALESCE(order_products.created_at, orders.created_at), '%Y-%m-%d') as date, COUNT(*) as total, COALESCE(SUM(products.price), 0) as total_revenue, GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ',') as types").
+		Group("DATE_FORMAT(COALESCE(order_products.created_at, orders.created_at), '%Y-%m-%d')").
 		Scan(&actualRows)
 
 	if len(actualRows) == 0 {
@@ -1620,9 +1747,29 @@ func (h *SaleV2Handler) SoldByDate(c *gin.Context) {
 		return
 	}
 
+	type OrderAdjRow struct {
+		Date string  `json:"date"`
+		Adj  float64 `json:"adj"`
+	}
+	var adjRows []OrderAdjRow
+	h.DB.Table("orders").
+		Select("DATE_FORMAT(orders.created_at, '%Y-%m-%d') as date, COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0) as adj").
+		Where("EXISTS (SELECT 1 FROM order_products WHERE order_products.order_id = orders.id)").
+		Group("DATE_FORMAT(orders.created_at, '%Y-%m-%d')").
+		Scan(&adjRows)
+
+	adjMap := make(map[string]int64)
+	for _, a := range adjRows {
+		adjMap[a.Date] = int64(a.Adj)
+	}
+
 	actualMap := make(map[string]ActualRow)
 	var earliestStr string
 	for _, r := range actualRows {
+		r.TotalRevenue += adjMap[r.Date]
+		if r.TotalRevenue < 0 {
+			r.TotalRevenue = 0
+		}
 		actualMap[r.Date] = r
 		if earliestStr == "" || r.Date < earliestStr {
 			earliestStr = r.Date
@@ -1686,11 +1833,11 @@ func (h *SaleV2Handler) SoldByDateProducts(c *gin.Context) {
 	h.DB.Table("products").
 		Joins("JOIN order_products ON order_products.product_id = products.id").
 		Joins("JOIN orders ON orders.id = order_products.order_id").
-		Where("DATE_FORMAT(orders.created_at, '%Y-%m-%d') = ?", date).
+		Where("DATE_FORMAT(COALESCE(order_products.created_at, orders.created_at), '%Y-%m-%d') = ?", date).
 		Select("products.*").
 		Preload("Images").
 		Preload("Sizes").
-		Order("orders.created_at DESC").
+		Order("COALESCE(order_products.created_at, orders.created_at) DESC").
 		Find(&products)
 
 	for i := range products {

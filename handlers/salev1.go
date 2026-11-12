@@ -286,7 +286,7 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	var totalOrder int64
 	var totalFinalPrice float64
 	h.DB.Model(&models.Order{}).Count(&totalOrder)
-	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(final_amount), 0)").Scan(&totalFinalPrice)
+	h.DB.Model(&models.Order{}).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&totalFinalPrice)
 
 	type TypeStat struct {
 		Type   string
@@ -338,7 +338,7 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Count(&currentTotalOrder)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&currentTotalFinalPrice)
 
 	prevMonth := now.AddDate(0, -1, 0)
 	startOfPrevMonth := time.Date(prevMonth.Year(), prevMonth.Month(), 1, 0, 0, 0, 0, loc)
@@ -347,7 +347,7 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	var prevTotalOrder int64
 	var prevTotalFinalPrice float64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Count(&prevTotalOrder)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&prevTotalFinalPrice)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfPrevMonth, endOfPrevMonth).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&prevTotalFinalPrice)
 
 	type MonthProductStat struct {
 		Type   string
@@ -397,7 +397,7 @@ func (h *SaleV1Handler) Home(c *gin.Context) {
 	}
 	var orderByMonth []MonthlyOrder
 	h.DB.Table("orders").
-		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(id) as number, COALESCE(SUM(final_amount), 0) as final_amount").
+		Select("DATE_FORMAT(created_at, '%Y-%m') as month, count(id) as number, COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0) as final_amount").
 		Group("month").
 		Order("month ASC").
 		Scan(&orderByMonth)
@@ -496,7 +496,7 @@ func (h *SaleV1Handler) Products(c *gin.Context) {
 	if soldFrom != "" && soldTo != "" {
 		query = query.Joins("JOIN order_products ON products.id = order_products.product_id").
 			Joins("JOIN orders ON orders.id = order_products.order_id").
-			Where("orders.created_at BETWEEN ? AND ?", soldFrom+" 00:00:00", soldTo+" 23:59:59")
+			Where("COALESCE(order_products.created_at, orders.created_at) BETWEEN ? AND ?", soldFrom+" 00:00:00", soldTo+" 23:59:59")
 	}
 
 	var total int64
@@ -1243,7 +1243,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	var totalOrderNew int64
 	var totalOrderNewPrice float64
 	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Count(&totalOrderNew)
-	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(final_amount), 0)").Scan(&totalOrderNewPrice)
+	h.DB.Model(&models.Order{}).Where("status IN ('NEW', 'ON HOLD')").Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&totalOrderNewPrice)
 
 	loc, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
 	now := time.Now().In(loc)
@@ -1253,7 +1253,7 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 	var currentTotalOrder int64
 	var currentTotalFinalPrice float64
 	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Count(&currentTotalOrder)
-	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(final_amount), 0)").Scan(&currentTotalFinalPrice)
+	h.DB.Model(&models.Order{}).Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").Scan(&currentTotalFinalPrice)
 
 	type ProductItemView struct {
 		ID           uint
@@ -1277,10 +1277,12 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 		FinalAmount        int64
 		AdditionalAmount   int64
 		FreeshipAmount     int64
+		ShippingFee        int64
 		DepositAmount      int64
 		RemainingAmount    int64
 		ViettelOrderAmount int64
 		IsPaid             bool
+		IsFreeship         bool
 		Products           []ProductItemView
 		CaptureJSON        string
 	}
@@ -1346,10 +1348,12 @@ func (h *SaleV1Handler) Orders(c *gin.Context) {
 			FinalAmount:        int64Val(o.FinalAmount),
 			AdditionalAmount:   int64Val(o.AdditionalAmount),
 			FreeshipAmount:     int64(float64Val(o.FreeshipAmount)),
+			ShippingFee:        int64(float64Val(o.ShippingFee)),
 			DepositAmount:      dep,
 			RemainingAmount:    rem,
 			ViettelOrderAmount: rem,
 			IsPaid:             o.IsPaid,
+			IsFreeship:         o.IsFreeship,
 			Products:           prodList,
 			CaptureJSON:        string(captureBytes),
 		})
@@ -1429,8 +1433,19 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 			Select("COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total").
 			Joins("JOIN orders ON orders.id = order_products.order_id").
 			Joins("JOIN products ON products.id = order_products.product_id").
-			Where("DATE(orders.created_at) = ?", dateStr).
+			Where("DATE(COALESCE(order_products.created_at, orders.created_at)) = ?", dateStr).
 			Scan(&res)
+
+		var adj float64
+		h.DB.Table("orders").
+			Select("COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0)").
+			Where("DATE(orders.created_at) = ? AND EXISTS (SELECT 1 FROM order_products WHERE order_products.order_id = orders.id)", dateStr).
+			Scan(&adj)
+
+		res.Total += adj
+		if res.Total < 0 {
+			res.Total = 0
+		}
 		return res
 	}
 
@@ -1447,7 +1462,7 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		Count(&currentTotalOrder)
 	h.DB.Table("orders").
 		Where("created_at BETWEEN ? AND ?", startOfMonth, endOfMonth).
-		Select("COALESCE(SUM(final_amount), 0)").
+		Select("COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0)").
 		Scan(&currentTotalFinalPrice)
 
 	type ProductItemView struct {
@@ -1468,11 +1483,14 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 		Status             string
 		CreatedAtFormatted string
 		TotalAmount        int64
+		FinalAmount        int64
 		FreeshipAmount     int64
+		ShippingFee        int64
 		DepositAmount      int64
 		RemainingAmount    int64
 		ViettelOrderAmount int64
 		IsPaid             bool
+		IsFreeship         bool
 		Products           []ProductItemView
 		CaptureJSON        string
 	}
@@ -1538,11 +1556,14 @@ func (h *SaleV1Handler) SummaryOrders(c *gin.Context) {
 			Status:             strVal(o.Status),
 			CreatedAtFormatted: cTimeStr,
 			TotalAmount:        tot,
+			FinalAmount:        int64Val(o.FinalAmount),
 			FreeshipAmount:     int64(float64Val(o.FreeshipAmount)),
+			ShippingFee:        int64(float64Val(o.ShippingFee)),
 			DepositAmount:      dep,
 			RemainingAmount:    rem,
 			ViettelOrderAmount: rem,
 			IsPaid:             o.IsPaid,
+			IsFreeship:         o.IsFreeship,
 			Products:           prodList,
 			CaptureJSON:        string(captureBytes),
 		})
@@ -1579,12 +1600,22 @@ func (h *SaleV1Handler) OrderDetail(c *gin.Context) {
 		o.Desc = strPtr(c.PostForm("desc"))
 		o.Status = strPtr(c.PostForm("status"))
 		o.IsPaid = c.PostForm("is_paid") == "on"
+		o.IsFreeship = c.PostForm("is_freeship") == "on"
 
 		additionalAmount, _ := strconv.ParseInt(c.PostForm("additional_amount"), 10, 64)
 		freeshipAmount, _ := strconv.ParseFloat(c.PostForm("freeship_amount"), 64)
+		shippingFee, errFee := strconv.ParseFloat(c.PostForm("shipping_fee"), 64)
+		if o.IsFreeship {
+			if errFee != nil || (shippingFee == 0 && c.PostForm("shipping_fee") == "") {
+				shippingFee = 15000
+			}
+		} else {
+			shippingFee = 0
+		}
 		depositAmount, _ := strconv.ParseInt(c.PostForm("deposit_amount"), 10, 64)
 		o.AdditionalAmount = int64Ptr(additionalAmount)
 		o.FreeshipAmount = float64Ptr(freeshipAmount)
+		o.ShippingFee = float64Ptr(shippingFee)
 		o.DepositAmount = int64Ptr(depositAmount)
 
 		productIDs := c.PostFormArray("products[]")
@@ -1598,19 +1629,46 @@ func (h *SaleV1Handler) OrderDetail(c *gin.Context) {
 			itemsTotal += int64Val(p.Price)
 		}
 		totalAmount := itemsTotal + additionalAmount - int64(freeshipAmount)
+		shipFee := int64(0)
+		if o.IsFreeship && o.ShippingFee != nil {
+			shipFee = int64(*o.ShippingFee)
+		}
+		finalAmount := totalAmount - shipFee
+		if finalAmount < 0 {
+			finalAmount = 0
+		}
 		o.TotalAmount = int64Ptr(totalAmount)
-		o.FinalAmount = int64Ptr(totalAmount)
+		o.FinalAmount = int64Ptr(finalAmount)
 
 		h.DB.Save(&o)
 
-		h.DB.Where("order_id = ?", o.ID).Delete(&models.OrderProduct{})
+		var existingOPs []models.OrderProduct
+		h.DB.Where("order_id = ?", o.ID).Order("id ASC").Find(&existingOPs)
+		newSet := make(map[uint]bool)
 		for _, p := range products {
-			oID := o.ID
-			pID := p.ID
-			h.DB.Create(&models.OrderProduct{
-				OrderID:   &oID,
-				ProductID: &pID,
-			})
+			newSet[p.ID] = true
+		}
+		keptProducts := make(map[uint]bool)
+		var idsToDelete []uint
+		for _, op := range existingOPs {
+			if op.ProductID == nil || !newSet[*op.ProductID] || keptProducts[*op.ProductID] {
+				idsToDelete = append(idsToDelete, op.ID)
+			} else {
+				keptProducts[*op.ProductID] = true
+			}
+		}
+		if len(idsToDelete) > 0 {
+			h.DB.Where("id IN ?", idsToDelete).Delete(&models.OrderProduct{})
+		}
+		for _, p := range products {
+			if !keptProducts[p.ID] {
+				oID := o.ID
+				pID := p.ID
+				h.DB.Create(&models.OrderProduct{
+					OrderID:   &oID,
+					ProductID: &pID,
+				})
+			}
 		}
 		h.updateProductStatuses()
 
@@ -1684,8 +1742,10 @@ func (h *SaleV1Handler) OrderDetail(c *gin.Context) {
 			"Status":           strVal(order.Status),
 			"AdditionalAmount": int64Val(order.AdditionalAmount),
 			"FreeshipAmount":   int64(float64Val(order.FreeshipAmount)),
+			"ShippingFee":      int64(float64Val(order.ShippingFee)),
 			"DepositAmount":    int64Val(order.DepositAmount),
 			"IsPaid":           order.IsPaid,
+			"IsFreeship":       order.IsFreeship,
 			"Products":         orderProds,
 		},
 		"available_products": availProds,
@@ -1702,9 +1762,18 @@ func (h *SaleV1Handler) OrderCreate(c *gin.Context) {
 		note := c.PostForm("note")
 		desc := c.PostForm("desc")
 		isPaid := c.PostForm("is_paid") == "on"
+		isFreeship := c.PostForm("is_freeship") == "on"
 
 		additionalAmount, _ := strconv.ParseInt(c.PostForm("additional_amount"), 10, 64)
 		freeshipAmount, _ := strconv.ParseFloat(c.PostForm("freeship_amount"), 64)
+		shippingFee, errFee := strconv.ParseFloat(c.PostForm("shipping_fee"), 64)
+		if isFreeship {
+			if errFee != nil || (shippingFee == 0 && c.PostForm("shipping_fee") == "") {
+				shippingFee = 15000
+			}
+		} else {
+			shippingFee = 0
+		}
 		depositAmount, _ := strconv.ParseInt(c.PostForm("deposit_amount"), 10, 64)
 
 		productIDs := c.PostFormArray("products[]")
@@ -1718,6 +1787,13 @@ func (h *SaleV1Handler) OrderCreate(c *gin.Context) {
 			itemsTotal += int64Val(p.Price)
 		}
 		totalAmount := itemsTotal + additionalAmount - int64(freeshipAmount)
+		if totalAmount < 0 {
+			totalAmount = 0
+		}
+		finalAmount := totalAmount - int64(shippingFee)
+		if finalAmount < 0 {
+			finalAmount = 0
+		}
 
 		consumerIDStr := c.PostForm("consumer_id")
 		consumerID, _ := strconv.Atoi(consumerIDStr)
@@ -1739,11 +1815,13 @@ func (h *SaleV1Handler) OrderCreate(c *gin.Context) {
 			Desc:             strPtr(desc),
 			Status:           strPtr("NEW"),
 			TotalAmount:      int64Ptr(totalAmount),
-			FinalAmount:      int64Ptr(totalAmount),
+			FinalAmount:      int64Ptr(finalAmount),
 			AdditionalAmount: int64Ptr(additionalAmount),
 			FreeshipAmount:   float64Ptr(freeshipAmount),
+			ShippingFee:      float64Ptr(shippingFee),
 			DepositAmount:    int64Ptr(depositAmount),
 			IsPaid:           isPaid,
+			IsFreeship:       isFreeship,
 		}
 		h.DB.Create(&order)
 

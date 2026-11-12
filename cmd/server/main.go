@@ -34,6 +34,7 @@ func main() {
 		sqlDB.SetMaxOpenConns(50)
 	}
 	db.Exec("SET time_zone = '+07:00'")
+	db.Exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE DEFAULT 0")
 	fmt.Println("Connected to TiDB Cloud successfully (time_zone = +07:00)!")
 
 	r := gin.Default()

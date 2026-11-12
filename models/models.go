@@ -66,6 +66,7 @@ type Order struct {
 	Desc             *string    `json:"desc"`
 	AdditionalAmount *int64     `json:"additional_amount"`
 	FreeshipAmount   *float64   `json:"freeship_amount"`
+	ShippingFee      *float64   `json:"shipping_fee"`
 	DepositAmount    *int64     `json:"deposit_amount"`
 	TotalAmount      *int64     `json:"total_amount"`
 	FinalAmount      *int64     `json:"final_amount"`

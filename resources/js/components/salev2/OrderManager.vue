@@ -177,6 +177,10 @@
                     <span>Giảm giá:</span>
                     <span>-{{ formatPrice(order.freeship_amount) }}</span>
                 </div>
+                <div v-if="order.is_freeship && order.shipping_fee > 0" class="text-purple-600 font-bold flex justify-between">
+                    <span>Freeship:</span>
+                    <span>-{{ formatPrice(order.shipping_fee) }}</span>
+                </div>
                 <div v-if="order.is_paid || (order.deposit_amount && parseFloat(order.deposit_amount) > 0)" class="text-emerald-600 font-bold flex justify-between">
                     <span>{{ order.is_paid ? 'Đã thanh toán:' : 'Cọc:' }}</span>
                     <span>-{{ formatPrice(order.is_paid ? order.total_amount : order.deposit_amount) }}</span>
@@ -191,8 +195,8 @@
                     <span class="text-[9px] text-slate-400 font-black uppercase block leading-none mb-1 ">Viettel Amount</span>
                     <div class="flex items-baseline gap-1">
                         <span class="text-xl font-black text-slate-900">{{ formatPrice(order.viettel_amount) }}</span>
-                        <span class="text-[10px] font-bold" :class="order.is_paid ? 'text-emerald-600 font-bold' : 'text-slate-400'">
-                            {{ order.is_paid ? 'Freeship' : '+ phí ship' }}
+                        <span class="text-[10px] font-bold" :class="(order.is_paid || order.is_freeship) ? 'text-emerald-600 font-bold' : 'text-slate-400'">
+                            {{ (order.is_paid || order.is_freeship) ? 'Freeship' : '+ phí ship' }}
                         </span>
                     </div>
                 </div>
@@ -232,6 +236,7 @@
             <template slot-scope="scope">
                 <p class="text-[10px]" v-if="scope.row.additional_amount > 0"><span class="text-blue-600">Phí thêm:</span> +{{ formatPrice(scope.row.additional_amount) }}</p>
                 <p class="text-[10px]" v-if="scope.row.freeship_amount > 0"><span class="text-orange-500">Giảm giá:</span> -{{ formatPrice(scope.row.freeship_amount) }}</p>
+                <p class="text-[10px]" v-if="scope.row.is_freeship && scope.row.shipping_fee > 0"><span class="text-purple-600">Freeship:</span> -{{ formatPrice(scope.row.shipping_fee) }}</p>
                 <p class="text-[10px]" v-if="scope.row.deposit_amount > 0"><span class="text-emerald-600">Cọc:</span> {{ formatPrice(scope.row.deposit_amount) }}</p>
             </template>
         </el-table-column>
@@ -293,10 +298,14 @@
             </div>
             <div v-if="currentCapture?.note" class="bg-yellow-50 border border-yellow-100 rounded-xl p-4 mb-6"><p class="text-sm font-medium">{{ currentCapture.note }}</p></div>
             <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4">ĐƠN HÀNG CỦA BẠN</h3>
-            <div class="flex flex-wrap gap-4 mb-6">
-                <div v-for="p in currentCapture?.products" :key="p.id" class="w-[calc(50%-8px)] text-center">
-                    <img :src="p.image_thumb_scale_url || p.path_thumb" class="w-full aspect-[3/4] object-cover rounded-xl bg-slate-50 mb-2 border border-slate-100" @error="e => e.target.src = p.path_thumb">
-                    <span class="text-sm font-bold">{{ p.name }}</span>
+            <div class="flex flex-wrap gap-2.5 mb-6">
+                <div v-for="p in currentCapture?.products" :key="p.id" 
+                     :class="getCaptureProductClass(currentCapture?.products?.length)" 
+                     class="text-center">
+                    <img :src="p.image_thumb_scale_url || p.path_thumb" 
+                         :class="getCaptureImageClass(currentCapture?.products?.length)"
+                         @error="e => e.target.src = p.path_thumb">
+                    <span class="font-bold block truncate" :class="(currentCapture?.products?.length || 0) <= 2 ? 'text-sm' : 'text-xs'">{{ p.name }}</span>
                 </div>
             </div>
             <div class="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100 font-bold">
@@ -304,7 +313,23 @@
                 <div v-if="currentCapture?.additional_amount > 0" class="flex justify-between mb-3 text-sm text-blue-600"><span>Phí thêm</span><span>+{{ formatPrice(currentCapture.additional_amount) }}</span></div>
                 <div v-if="currentCapture?.freeship_amount > 0" class="flex justify-between mb-3 text-sm text-orange-500"><span>Giảm giá</span><span>-{{ formatPrice(currentCapture.freeship_amount) }}</span></div>
                 <div class="flex justify-between mb-3 text-sm text-slate-500"><span>Tổng đơn</span><span>{{ formatPrice(currentCapture?.total_amount) }}</span></div>
-                <div class="pt-4 border-t border-slate-200 flex justify-between items-center"><span class="text-lg">Viettel Amount</span><span class="text-2xl text-blue-600">{{ formatPrice(currentCapture?.viettel_amount) }}</span></div>
+                <div v-if="currentCapture?.is_paid" class="flex justify-between mb-3 text-sm text-emerald-600">
+                    <span>Đã thanh toán trước</span>
+                    <span>-{{ formatPrice(currentCapture?.total_amount) }}</span>
+                </div>
+                <div v-else-if="currentCapture?.deposit_amount > 0" class="flex justify-between mb-3 text-sm text-emerald-600">
+                    <span>Đã cọc</span>
+                    <span>-{{ formatPrice(currentCapture?.deposit_amount) }}</span>
+                </div>
+                <div class="pt-4 border-t border-slate-200 flex justify-between items-center">
+                    <div>
+                        <span class="text-lg block leading-tight">Viettel Amount</span>
+                        <span class="text-[11px] font-bold" :class="(currentCapture?.is_paid || currentCapture?.is_freeship) ? 'text-emerald-600' : 'text-slate-400'">
+                            {{ (currentCapture?.is_paid || currentCapture?.is_freeship) ? 'Miễn phí giao hàng (Freeship)' : '+ phí ship' }}
+                        </span>
+                    </div>
+                    <span class="text-2xl text-blue-600">{{ formatPrice(currentCapture?.viettel_amount) }}</span>
+                </div>
             </div>
             <div class="pt-6 border-t border-dashed border-slate-200 text-slate-500">
                 <div class="flex gap-4 mb-4">
@@ -312,7 +337,8 @@
                         <h4 class="font-black text-slate-800 uppercase mb-2 text-[10px]">🚚 GIAO HÀNG</h4>
                         <ul class="list-none p-0 text-[10px] space-y-1">
                             <li>• Viettel Post: HCM 1-2 ngày, tỉnh 3-5 ngày.</li>
-                            <li>• Phí ship đồng giá: 20k toàn quốc.</li>
+                            <li v-if="currentCapture?.is_paid || currentCapture?.is_freeship" class="text-emerald-600 font-bold">• Đơn hàng được Miễn phí giao hàng (Freeship).</li>
+                            <li v-else>• Phí ship đồng giá: 20k toàn quốc.</li>
                             <li>• Hàng được giặt sấy, là ủi và xếp gọn tỉ mỉ.</li>
                         </ul>
                     </div>
@@ -477,11 +503,45 @@ export default {
         }
         this.$router.push({ name: 'order-create', query: { consumer_id: order.consumer_id } });
     },
+    getCaptureProductClass(count) {
+        if (!count || count === 1) return 'w-full';
+        if (count === 2) return 'w-[calc(50%-5px)]';
+        return 'w-[calc((100%-20px)/3)]';
+    },
+    getCaptureImageClass(count) {
+        if (!count || count === 1) {
+            return 'w-full max-h-[320px] aspect-[4/3] object-contain rounded-xl bg-slate-50 mb-2 border border-slate-100';
+        }
+        return 'w-full aspect-[3/4] object-cover rounded-xl bg-slate-50 mb-1.5 border border-slate-100';
+    },
     async captureOrder(order) {
         this.currentCapture = order;
+        this.loading = true;
         this.$nextTick(async () => {
-            const canvas = await html2canvas(this.$refs.receiptTemplate, { useCORS: true, scale: 2 });
-            this.captureImg = canvas.toDataURL('image/jpeg', 0.9); this.captureVisible = true;
+            try {
+                const el = this.$refs.receiptTemplate;
+                if (el) {
+                    const imgs = Array.from(el.querySelectorAll('img'));
+                    await Promise.race([
+                        Promise.all(imgs.map(img => {
+                            if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
+                            return new Promise(resolve => {
+                                img.onload = resolve;
+                                img.onerror = resolve;
+                            });
+                        })),
+                        new Promise(resolve => setTimeout(resolve, 2000))
+                    ]);
+                }
+                const canvas = await html2canvas(this.$refs.receiptTemplate, { useCORS: true, scale: 2 });
+                this.captureImg = canvas.toDataURL('image/jpeg', 0.9);
+                this.captureVisible = true;
+            } catch (err) {
+                console.error(err);
+                this.$message.error('Không thể tạo ảnh receipt');
+            } finally {
+                this.loading = false;
+            }
         });
     },
     downloadCapture() {

@@ -118,11 +118,14 @@
                                         {% if order.FreeshipAmount > 0 %}
                                             <p>Giảm giá: {{ order.FreeshipAmount|number_format }}đ</p>
                                         {% endif %}
+                                        {% if order.IsFreeship and order.ShippingFee > 0 %}
+                                            <p>Freeship (Shop chịu): -{{ order.ShippingFee|number_format }}đ</p>
+                                        {% endif %}
                                         {% if order.IsPaid or order.DepositAmount > 0 %}
                                             <p>Đã thanh toán trước: {% if order.IsPaid %}{{ order.TotalAmount|number_format }}{% else %}{{ order.DepositAmount|number_format }}{% endif %}đ</p>
                                         {% endif %}
                                         <div class="d-flex">
-                                            <p>Tổng đơn: {{ order.RemainingAmount|number_format }}đ {% if order.IsPaid %}Freeship{% else %}+ Phí ship{% endif %}</p>
+                                            <p>Tổng đơn: {{ order.RemainingAmount|number_format }}đ {% if order.IsPaid or order.IsFreeship %}Freeship{% else %}+ Phí ship{% endif %}</p>
                                         </div>
                                     </td>
                                     <td>
@@ -348,8 +351,10 @@
 
     .c-section-title { font-size: 12px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
 
-    .c-products { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; }
-    .c-prod-item { width: calc(50% - 8px); text-align: center; }
+    .c-products { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 25px; }
+    .c-prod-item { width: calc((100% - 20px) / 3); text-align: center; }
+    .c-prod-item.single { width: 100%; }
+    .c-prod-item.double { width: calc((100% - 10px) / 2); }
     .c-prod-item img { 
         max-width: 100%; 
         max-height: 220px; 
@@ -362,6 +367,9 @@
         display: block;
         margin-left: auto;
         margin-right: auto;
+    }
+    .c-prod-item.single img {
+        max-height: 320px;
     }
     .c-prod-code { font-weight: 700; font-size: 14px; }
 
@@ -434,9 +442,11 @@
             const $prodContainer = $receipt.find('.c-products').empty();
             const imgPromises = [];
             if (orderData.products && orderData.products.length > 0) {
+                const pLen = orderData.products.length;
+                const itemClass = pLen === 1 ? 'c-prod-item single' : (pLen === 2 ? 'c-prod-item double' : 'c-prod-item');
                 orderData.products.forEach(p => {
                     const $item = $(`
-                        <div class="c-prod-item">
+                        <div class="${itemClass}">
                             <img src="${p.path}" crossorigin="anonymous">
                             <div class="c-prod-code">${p.name}</div>
                         </div>

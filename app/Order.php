@@ -14,6 +14,7 @@ class Order extends Model
         'desc',
         'additional_amount',
         'freeship_amount',
+        'shipping_fee',
         'total_amount',
         'final_amount',
         'deposit_amount',

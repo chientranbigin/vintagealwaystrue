@@ -205,8 +205,24 @@ class SaleV2Controller extends Controller
         ]);
 
         return DB::transaction(function () use ($request, $validated) {
-            $order = Order::create($request->all());
-            $order->products()->attach($request->products);
+            $data = $request->all();
+            $isFreeship = !empty($data['is_freeship']);
+            $shippingFee = $isFreeship ? (float)($data['shipping_fee'] ?? 15000) : 0;
+            $data['shipping_fee'] = $shippingFee;
+            $totalAmount = (float)($data['total_amount'] ?? 0);
+            $finalAmount = max(0, $totalAmount - $shippingFee);
+            $data['final_amount'] = $finalAmount;
+
+            $order = Order::create($data);
+            $now = Carbon::now();
+            foreach ($request->products as $pid) {
+                DB::table('order_products')->insert([
+                    'order_id' => $order->id,
+                    'product_id' => $pid,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
 
             // Targeted status update
             Product::whereIn('id', $request->products)->update(['status' => 'SOLD']);
@@ -248,13 +264,18 @@ class SaleV2Controller extends Controller
             $row = DB::table('order_products')
                 ->join('orders', 'orders.id', '=', 'order_products.order_id')
                 ->join('products', 'products.id', '=', 'order_products.product_id')
-                ->whereRaw("DATE(orders.created_at) = ?", [$dateStr])
+                ->whereRaw("DATE(COALESCE(order_products.created_at, orders.created_at)) = ?", [$dateStr])
                 ->selectRaw('COUNT(products.id) as count, COALESCE(SUM(products.price), 0) as total')
+                ->first();
+
+            $adjRow = DB::table('orders')
+                ->whereRaw("DATE(orders.created_at) = ?", [$dateStr])
+                ->selectRaw('COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship = 1 THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0) as adj')
                 ->first();
 
             return [
                 'count' => (int) ($row->count ?? 0),
-                'revenue' => (float) ($row->total ?? 0),
+                'revenue' => (float) (($row->total ?? 0) + ($adjRow->adj ?? 0)),
             ];
         };
 
@@ -266,7 +287,7 @@ class SaleV2Controller extends Controller
 
         $monthOrders = DB::table('orders')
             ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-            ->selectRaw('COUNT(*) as count, COALESCE(SUM(final_amount), 0) as total')
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0) as total')
             ->first();
 
         return response()->json([
@@ -519,17 +540,19 @@ class SaleV2Controller extends Controller
             // 2. Update Order Fields
             $order->fill($request->only([
                 'name', 'phone', 'address', 'status', 
-                'additional_amount', 'deposit_amount', 
+                'additional_amount', 'freeship_amount', 'shipping_fee', 'deposit_amount', 
                 'is_freeship', 'is_paid', 'note',
-                'total_amount', 'final_amount' // Trusting frontend calc or we can recalc
+                'total_amount', 'final_amount'
             ]));
-            
-            // Recalc final amount if not provided but dependencies are?
-            // For safety, let's allow frontend to drive this for now as it has simple logic.
+            if (!$order->is_freeship) {
+                $order->shipping_fee = 0;
+            }
+            $shipFee = $order->is_freeship ? (float)($order->shipping_fee ?? 0) : 0;
+            $order->final_amount = max(0, (float)$order->total_amount - $shipFee);
             
             $order->save();
 
-            // 3. Sync Products and Update Statuses
+            // 3. Sync Products and Update Statuses (preserving existing order_products.created_at)
             if ($request->has('products')) {
                 $newIds = $request->products;
                 $oldIds = $order->products->pluck('id')->toArray();
@@ -538,6 +561,10 @@ class SaleV2Controller extends Controller
                 $removedIds = array_diff($oldIds, $newIds);
                 if (!empty($removedIds)) {
                     Product::whereIn('id', $removedIds)->update(['status' => 'AVAILABLE']);
+                    DB::table('order_products')
+                        ->where('order_id', $order->id)
+                        ->whereIn('product_id', $removedIds)
+                        ->delete();
                     foreach (Product::whereIn('id', $removedIds)->get() as $p) {
                         \App\Jobs\SyncFacebookPost::dispatch($p, 'revert');
                     }
@@ -547,12 +574,19 @@ class SaleV2Controller extends Controller
                 $addedIds = array_diff($newIds, $oldIds);
                 if (!empty($addedIds)) {
                     Product::whereIn('id', $addedIds)->update(['status' => 'SOLD']);
+                    $now = Carbon::now();
+                    foreach ($addedIds as $pid) {
+                        DB::table('order_products')->insert([
+                            'order_id' => $order->id,
+                            'product_id' => $pid,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ]);
+                    }
                     foreach (Product::whereIn('id', $addedIds)->get() as $p) {
                         \App\Jobs\SyncFacebookPost::dispatch($p, 'sold');
                     }
                 }
-
-                $order->products()->sync($newIds);
                 
                 // Handle Price Updates if provided in a separate array or structure
                 // Request 'products_info' could contain [{id, price}]
@@ -628,10 +662,19 @@ class SaleV2Controller extends Controller
             ->join('products', 'products.id', '=', 'order_products.product_id')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
             ->select(
-                DB::raw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) as date"),
+                DB::raw("DATE(CONVERT_TZ(COALESCE(order_products.created_at, orders.created_at), '+00:00', '+07:00')) as date"),
                 DB::raw('COUNT(*) as total'),
                 DB::raw('SUM(products.price) as total_revenue'),
                 DB::raw('GROUP_CONCAT(products.type ORDER BY products.type SEPARATOR ",") as types')
+            )
+            ->groupBy(DB::raw("DATE(CONVERT_TZ(COALESCE(order_products.created_at, orders.created_at), '+00:00', '+07:00'))"))
+            ->get()
+            ->keyBy('date');
+
+        $orderAdj = DB::table('orders')
+            ->select(
+                DB::raw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) as date"),
+                DB::raw('COALESCE(SUM(COALESCE(additional_amount, 0) - COALESCE(freeship_amount, 0) - CASE WHEN is_freeship = 1 THEN COALESCE(shipping_fee, 0) ELSE 0 END), 0) as adj')
             )
             ->groupBy(DB::raw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00'))"))
             ->get()
@@ -649,11 +692,12 @@ class SaleV2Controller extends Controller
             $dateStr = $d->format('Y-m-d');
             if ($actual->has($dateStr)) {
                 $row = $actual[$dateStr];
+                $adj = $orderAdj->has($dateStr) ? (float)$orderAdj[$dateStr]->adj : 0;
                 $typeBreakdown = $row->types ? array_count_values(explode(',', $row->types)) : [];
                 $allDates[] = [
                     'date'          => $dateStr,
                     'total'         => $row->total,
-                    'total_revenue' => $row->total_revenue,
+                    'total_revenue' => (float)$row->total_revenue + $adj,
                     'type_breakdown'=> $typeBreakdown,
                     'is_empty'      => false,
                 ];
@@ -676,9 +720,9 @@ class SaleV2Controller extends Controller
         $products = Product::with(['images', 'sizes'])
             ->join('order_products', 'order_products.product_id', '=', 'products.id')
             ->join('orders', 'orders.id', '=', 'order_products.order_id')
-            ->whereRaw("DATE(CONVERT_TZ(orders.created_at, '+00:00', '+07:00')) = ?", [$date])
+            ->whereRaw("DATE(CONVERT_TZ(COALESCE(order_products.created_at, orders.created_at), '+00:00', '+07:00')) = ?", [$date])
             ->select('products.*')
-            ->orderBy('orders.created_at', 'desc')
+            ->orderByRaw('COALESCE(order_products.created_at, orders.created_at) DESC')
             ->get()
             ->each(function ($product) {
                 $product->image_thumb_scale_url = $this->formatImagePath($product->image_thumb_scale);

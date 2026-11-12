@@ -33,6 +33,7 @@ func getTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 		if err != nil {
 			t.Fatalf("Failed to connect to test database: %v", err)
 		}
+		db.Exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE DEFAULT 0")
 		testDB = db
 	})
 	if testDB == nil {
