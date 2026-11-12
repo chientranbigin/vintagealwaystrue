@@ -721,7 +721,7 @@ func (h *SaleV2Handler) SmartOrderCreate(c *gin.Context) {
 			Phone:       strPtr(cleanPhone),
 			Address:     strPtr(parsed.Address),
 			Note:        strPtr(parsed.Note),
-			Desc:        strPtr(text),
+			Desc:        nil,
 			Status:      strPtr(status),
 			TotalAmount: int64Ptr(itemsTotal),
 			FinalAmount: int64Ptr(itemsTotal),

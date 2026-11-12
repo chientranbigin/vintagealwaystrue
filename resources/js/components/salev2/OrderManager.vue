@@ -302,9 +302,13 @@
                 <div v-for="p in currentCapture?.products" :key="p.id" 
                      :class="getCaptureProductClass(currentCapture?.products?.length)" 
                      class="text-center">
-                    <img :src="p.image_thumb_scale_url || p.path_thumb" 
-                         :class="getCaptureImageClass(currentCapture?.products?.length)"
-                         @error="e => e.target.src = p.path_thumb">
+                    <div :class="getCaptureContainerClass(currentCapture?.products?.length)"
+                         class="bg-slate-50 rounded-xl mb-1.5 border border-slate-100 flex items-center justify-center overflow-hidden">
+                        <img :src="p.image_thumb_scale_url || p.path_thumb" 
+                             :class="getCaptureImageClass(currentCapture?.products?.length)"
+                             crossorigin="anonymous"
+                             @error="e => e.target.src = p.path_thumb">
+                    </div>
                     <span class="font-bold block truncate" :class="(currentCapture?.products?.length || 0) <= 2 ? 'text-sm' : 'text-xs'">{{ p.name }}</span>
                 </div>
             </div>
@@ -360,7 +364,10 @@
 
     <!-- Capture Preview -->
     <el-dialog title="Order Receipt Generated" :visible.sync="captureVisible" width="500px" custom-class="mobile-dialog">
-        <div class="text-center"><img :src="captureImg" class="w-full max-h-[70vh] w-auto mx-auto rounded-2xl border mb-6 shadow-sm"><el-button type="primary" size="medium" icon="el-icon-download" @click="downloadCapture">Download Image</el-button></div>
+        <div class="text-center">
+            <img :src="captureImg" class="max-w-full max-h-[70vh] w-auto h-auto mx-auto rounded-2xl border mb-6 shadow-sm object-contain block">
+            <el-button type="primary" size="medium" icon="el-icon-download" @click="downloadCapture">Download Image</el-button>
+        </div>
     </el-dialog>
 
     <!-- Smart Order Dialog -->
@@ -508,11 +515,19 @@ export default {
         if (count === 2) return 'w-[calc(50%-5px)]';
         return 'w-[calc((100%-20px)/3)]';
     },
+    getCaptureContainerClass(count) {
+        if (!count || count === 1) return 'w-full h-[320px]';
+        if (count === 2) return 'w-full h-[200px]';
+        return 'w-full h-[140px]';
+    },
     getCaptureImageClass(count) {
         if (!count || count === 1) {
-            return 'w-full max-h-[320px] aspect-[4/3] object-contain rounded-xl bg-slate-50 mb-2 border border-slate-100';
+            return 'max-w-full max-h-[320px] w-auto h-auto object-contain block mx-auto';
         }
-        return 'w-full aspect-[3/4] object-cover rounded-xl bg-slate-50 mb-1.5 border border-slate-100';
+        if (count === 2) {
+            return 'max-w-full max-h-[200px] w-auto h-auto object-contain block mx-auto';
+        }
+        return 'max-w-full max-h-[140px] w-auto h-auto object-contain block mx-auto';
     },
     async captureOrder(order) {
         this.currentCapture = order;
