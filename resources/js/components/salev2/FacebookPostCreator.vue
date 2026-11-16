@@ -130,7 +130,7 @@
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">3</span>
           <div>
             <h2 class="font-bold text-slate-800 text-base">Danh sách sản phẩm đăng bài</h2>
-            <p class="text-slate-400 text-xs">Kéo thả hoặc dùng nút mũi tên để đổi vị trí. 4 ảnh đầu tiên là ảnh hiển thị chính trên Feed Facebook.</p>
+            <p class="text-slate-400 text-xs">Sắp xếp theo ngày tải lên mới nhất (Latest Upload). Kéo thả hoặc dùng nút mũi tên để đổi vị trí. 4 ảnh đầu tiên là ảnh hiển thị chính trên Feed Facebook.</p>
           </div>
         </div>
 

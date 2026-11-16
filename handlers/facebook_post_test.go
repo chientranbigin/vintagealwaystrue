@@ -93,7 +93,29 @@ func TestFacebookPostInitAndContent(t *testing.T) {
 		t.Fatalf("FacebookGenerateContent (Holiday OFF) failed with code %d: %s", wGen2.Code, wGen2.Body.String())
 	}
 
-	// 4. Test validation of publish endpoint (rejects empty product_ids)
+	// 4. Test FacebookCategoryProducts (returns products sorted by latest upload, using preview thumbs)
+	reqCat, _ := http.NewRequest("GET", "/salev2/api/facebook/category-products?type=GILE", nil)
+	wCat := httptest.NewRecorder()
+	router.ServeHTTP(wCat, reqCat)
+	if wCat.Code != http.StatusOK {
+		t.Fatalf("FacebookCategoryProducts failed with code %d: %s", wCat.Code, wCat.Body.String())
+	}
+	var catProds struct {
+		Data []struct {
+			ID       uint   `json:"id"`
+			Name     string `json:"name"`
+			ThumbURL string `json:"thumb_url"`
+		} `json:"data"`
+		Count int `json:"count"`
+	}
+	if err := json.Unmarshal(wCat.Body.Bytes(), &catProds); err != nil {
+		t.Fatalf("Failed to parse category products response: %v", err)
+	}
+	if catProds.Count > 0 && catProds.Data[0].ThumbURL == "" {
+		t.Errorf("Expected first product to have valid thumb_url")
+	}
+
+	// 5. Test validation of publish endpoint (rejects empty product_ids)
 	pubEmpty, _ := json.Marshal(map[string]interface{}{
 		"message":     "Test message",
 		"product_ids": []uint{},

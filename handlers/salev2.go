@@ -2704,12 +2704,17 @@ func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
 
 	limit := 120
 	var products []models.Product
-	err := h.DB.Preload("Sizes").Preload("Images").
-		Where("type = ? AND (status = 'AVAILABLE' OR status = '' OR status IS NULL)", pType).
-		Where(`(path_thumb IS NOT NULL AND path_thumb != '') 
-			OR (image_thumb_scale IS NOT NULL AND image_thumb_scale != '') 
+	subQuery := "(SELECT product_id, DATE_FORMAT(MAX(created_at), '%Y-%m-%d %H:%i:%s') as latest_upload FROM product_upload_logs WHERE product_id IS NOT NULL GROUP BY product_id) as upload_summary"
+
+	err := h.DB.Model(&models.Product{}).
+		Joins("LEFT JOIN " + subQuery + " ON upload_summary.product_id = products.id").
+		Preload("Sizes").Preload("Images").
+		Where("products.type = ? AND (products.status = 'AVAILABLE' OR products.status = '' OR products.status IS NULL)", pType).
+		Where(`(products.path_thumb IS NOT NULL AND products.path_thumb != '') 
+			OR (products.image_thumb_scale IS NOT NULL AND products.image_thumb_scale != '') 
 			OR EXISTS (SELECT 1 FROM product_images WHERE product_images.product_id = products.id AND product_images.file_path != '')`).
-		Order("id DESC").
+		Select("products.*, upload_summary.latest_upload").
+		Order("COALESCE(upload_summary.latest_upload, products.created_at) DESC, products.id DESC").
 		Limit(limit).
 		Find(&products).Error
 
@@ -2735,7 +2740,11 @@ func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
 	}
 
 	for _, p := range products {
-		thumb := p.BestQualityThumb()
+		// Preview image: prefer scaled thumbnail (DisplayThumb: image_thumb_scale) for fast rendering
+		thumb := p.DisplayThumb()
+		if thumb == "" {
+			thumb = p.BestQualityThumb()
+		}
 		if thumb == "" {
 			continue
 		}
