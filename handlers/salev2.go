@@ -2926,5 +2926,88 @@ func (h *SaleV2Handler) FacebookPublishMainPost(c *gin.Context) {
 	})
 }
 
+// ResyncCategoryAlbum triggers a resumable manual album resync for a specific category
+func (h *SaleV2Handler) ResyncCategoryAlbum(c *gin.Context) {
+	if h.FB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Facebook service not initialized"})
+		return
+	}
+	var input struct {
+		CategoryCode string `json:"category_code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "category_code is required"})
+		return
+	}
+
+	job, err := h.FB.StartCategoryAlbumResync(input.CategoryCode, "MANUAL")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"job":     job,
+	})
+}
+
+// AlbumResyncStatus returns recent/active album resync jobs
+func (h *SaleV2Handler) AlbumResyncStatus(c *gin.Context) {
+	catCode := strings.TrimSpace(c.Query("category_code"))
+	var jobs []models.AlbumResyncJob
+	q := h.DB.Model(&models.AlbumResyncJob{}).Order("id DESC").Limit(10)
+	if catCode != "" {
+		q = q.Where("category_code = ?", catCode)
+	}
+	if err := q.Find(&jobs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"jobs": jobs,
+	})
+}
+
+// CancelAlbumResync cancels an active or paused album resync job
+func (h *SaleV2Handler) CancelAlbumResync(c *gin.Context) {
+	if h.FB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Facebook service not initialized"})
+		return
+	}
+	idStr := c.Param("id")
+	idVal, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil || idVal == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		return
+	}
+	if err := h.FB.CancelAlbumResyncJob(uint(idVal)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ResumeAlbumResync force-resumes a PAUSED_LIMIT album resync job immediately
+func (h *SaleV2Handler) ResumeAlbumResync(c *gin.Context) {
+	if h.FB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Facebook service not initialized"})
+		return
+	}
+	idStr := c.Param("id")
+	idVal, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil || idVal == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		return
+	}
+	if err := h.FB.ForceResumeAlbumResyncJob(uint(idVal)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+
 
 

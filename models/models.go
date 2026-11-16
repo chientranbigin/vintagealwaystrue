@@ -158,12 +158,35 @@ type User struct {
 }
 
 type Category struct {
-	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Code      string     `gorm:"type:varchar(50);uniqueIndex" json:"code"`
-	Name      string     `gorm:"type:varchar(100)" json:"name"`
-	FBAlbumID *string    `gorm:"column:fb_album_id;type:varchar(100)" json:"fb_album_id"`
-	IsActive  bool       `gorm:"default:true" json:"is_active"`
-	CreatedAt *time.Time `json:"created_at"`
-	UpdatedAt *time.Time `json:"updated_at"`
+	ID                uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code              string     `gorm:"type:varchar(50);uniqueIndex" json:"code"`
+	Name              string     `gorm:"type:varchar(100)" json:"name"`
+	FBAlbumID         *string    `gorm:"column:fb_album_id;type:varchar(100)" json:"fb_album_id"`
+	IsActive          bool       `gorm:"default:true" json:"is_active"`
+	NeedsAlbumReorder bool       `gorm:"column:needs_album_reorder;default:false" json:"needs_album_reorder"`
+	CreatedAt         *time.Time `json:"created_at"`
+	UpdatedAt         *time.Time `json:"updated_at"`
+}
+
+type AlbumResyncJob struct {
+	ID                 uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	CategoryCode       string     `gorm:"type:varchar(50);index" json:"category_code"`
+	CategoryName       string     `gorm:"type:varchar(100)" json:"category_name"`
+	AlbumID            string     `gorm:"type:varchar(100)" json:"album_id"`
+	TriggerType        string     `gorm:"type:varchar(20)" json:"trigger_type"` // "MANUAL" or "NIGHTLY"
+	Status             string     `gorm:"type:varchar(30);index" json:"status"` // "PENDING", "DELETING", "UPLOADING", "PAUSED_LIMIT", "COMPLETED", "CANCELLED", "FAILED"
+	Phase              string     `gorm:"type:varchar(20)" json:"phase"` // "DELETE" or "UPLOAD"
+	TotalDelete        int        `json:"total_delete"`
+	DeletedCount       int        `json:"deleted_count"`
+	TotalUpload        int        `json:"total_upload"`
+	UploadedCount      int        `json:"uploaded_count"`
+	RemainingDeleteIDs string     `gorm:"type:longtext" json:"-"`
+	RemainingUploadIDs string     `gorm:"type:longtext" json:"-"`
+	ResumeAt           *time.Time `json:"resume_at"`
+	LastError          string     `gorm:"type:text" json:"last_error"`
+	StartedAt          *time.Time `json:"started_at"`
+	CompletedAt        *time.Time `json:"completed_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 

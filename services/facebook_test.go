@@ -35,6 +35,7 @@ func getTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 		if err != nil {
 			t.Fatalf("failed to connect to test db: %v", err)
 		}
+		_ = db.AutoMigrate(&models.Category{}, &models.AlbumResyncJob{})
 		sharedDB = db
 	})
 	return sharedDB, sharedCfg
@@ -687,5 +688,131 @@ func TestExecuteSync_HoldAndReconcile(t *testing.T) {
 	otherErr := fmt.Errorf("network timeout")
 	if isFBRateLimitError(otherErr) {
 		t.Errorf("Expected isFBRateLimitError to be false for timeout error")
+	}
+}
+
+func TestAlbumResync_RunPauseRun(t *testing.T) {
+	db, _ := getTestDB(t)
+	if db == nil {
+		t.Skip("Database not available")
+	}
+
+	uploadCount := 0
+	var uploadedCaptions []string
+	deletedPhotos := make(map[string]bool)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "GET" && strings.Contains(r.URL.Path, "/photos") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"old_photo_1"}]}`))
+			return
+		}
+		if r.Method == "DELETE" {
+			parts := strings.Split(r.URL.Path, "/")
+			deletedPhotos[parts[len(parts)-1]] = true
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":true}`))
+			return
+		}
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/photos") {
+			_ = r.ParseForm()
+			uploadCount++
+			uploadedCaptions = append(uploadedCaptions, r.FormValue("caption"))
+			// First upload triggers proactive pause via 88% usage header!
+			if uploadCount == 1 {
+				w.Header().Set("x-app-usage", `{"call_count":10,"total_cputime":0,"total_time":88}`)
+			} else {
+				w.Header().Set("x-app-usage", `{"call_count":12,"total_cputime":0,"total_time":20}`)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"new_photo_%d"}`, uploadCount)))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	catAlbumID := "album_resync_test_123"
+	cat := models.Category{
+		Code:      "TEST_RESYNC_CAT",
+		Name:      "Test Resync Category",
+		FBAlbumID: &catAlbumID,
+		IsActive:  true,
+	}
+	tx.Create(&cat)
+
+	t1 := time.Now().Add(-2 * time.Hour)
+	t2 := time.Now().Add(-1 * time.Hour)
+	pOld := models.Product{
+		Name:      strPtr("TEST_OLD"),
+		Type:      strPtr("TEST_RESYNC_CAT"),
+		Status:    strPtr("AVAILABLE"),
+		PathThumb: strPtr("https://example.com/old.jpg"),
+		CreatedAt: &t1,
+	}
+	pNew := models.Product{
+		Name:      strPtr("TEST_NEW"),
+		Type:      strPtr("TEST_RESYNC_CAT"),
+		Status:    strPtr("AVAILABLE"),
+		PathThumb: strPtr("https://example.com/new.jpg"),
+		CreatedAt: &t2,
+	}
+	tx.Create(&pOld)
+	tx.Create(&pNew)
+
+	fb := &FacebookService{
+		BaseURL:       server.URL + "/",
+		PageToken:     "test_token",
+		MainPageToken: "main_token",
+		Client:        server.Client(),
+		DB:            tx,
+		ThrottleDelay: 1 * time.Millisecond,
+	}
+
+	job, err := fb.StartCategoryAlbumResync("TEST_RESYNC_CAT", "MANUAL")
+	if err != nil {
+		t.Fatalf("StartCategoryAlbumResync failed: %v", err)
+	}
+	if job.TotalDelete != 1 || job.TotalUpload != 2 {
+		t.Fatalf("Expected 1 delete and 2 uploads, got del=%d, up=%d", job.TotalDelete, job.TotalUpload)
+	}
+
+	// First run: deletes old_photo_1, uploads newest (TEST_NEW), then proactively pauses due to 88% usage!
+	fb.ProcessNextAlbumResyncJob()
+
+	var pausedJob models.AlbumResyncJob
+	tx.First(&pausedJob, job.ID)
+	if pausedJob.Status != "PAUSED_LIMIT" {
+		t.Fatalf("Expected job status PAUSED_LIMIT after 88%% usage, got %s", pausedJob.Status)
+	}
+	if pausedJob.DeletedCount != 1 || pausedJob.UploadedCount != 1 {
+		t.Fatalf("Expected DeletedCount=1, UploadedCount=1, got del=%d, up=%d", pausedJob.DeletedCount, pausedJob.UploadedCount)
+	}
+	if !deletedPhotos["old_photo_1"] {
+		t.Errorf("Expected old_photo_1 to be deleted")
+	}
+
+	// Force resume (simulates waiting 45 mins or clicking Resume)
+	if err := fb.ForceResumeAlbumResyncJob(job.ID); err != nil {
+		t.Fatalf("ForceResumeAlbumResyncJob failed: %v", err)
+	}
+
+	// Second run: uploads TEST_OLD and marks COMPLETED
+	fb.ProcessNextAlbumResyncJob()
+
+	var completedJob models.AlbumResyncJob
+	tx.First(&completedJob, job.ID)
+	if completedJob.Status != "COMPLETED" {
+		t.Fatalf("Expected job status COMPLETED, got %s (last_error=%s)", completedJob.Status, completedJob.LastError)
+	}
+	if completedJob.UploadedCount != 2 {
+		t.Fatalf("Expected UploadedCount=2, got %d", completedJob.UploadedCount)
+	}
+	if len(uploadedCaptions) != 2 || !strings.Contains(uploadedCaptions[0], "TEST_NEW") || !strings.Contains(uploadedCaptions[1], "TEST_OLD") {
+		t.Errorf("Expected upload order [TEST_NEW, TEST_OLD], got %v", uploadedCaptions)
 	}
 }

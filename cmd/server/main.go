@@ -10,6 +10,7 @@ import (
 
 	"sale-app/config"
 	"sale-app/handlers"
+	"sale-app/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
@@ -35,6 +36,10 @@ func main() {
 	}
 	db.Exec("SET time_zone = '+07:00'")
 	db.Exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE DEFAULT 0")
+	db.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS needs_album_reorder BOOLEAN DEFAULT FALSE")
+	if err := db.AutoMigrate(&models.AlbumResyncJob{}); err != nil {
+		log.Printf("Warning: AutoMigrate AlbumResyncJob error: %v\n", err)
+	}
 	fmt.Println("Connected to TiDB Cloud successfully (time_zone = +07:00)!")
 
 	r := gin.Default()
@@ -212,6 +217,10 @@ func main() {
 		api.GET("/facebook/albums", v2.FacebookAlbums)
 		api.POST("/facebook/albums/create", v2.CreateFacebookAlbum)
 		api.POST("/facebook/sync-album/:id", v2.ManualSyncProductAlbum)
+		api.POST("/facebook/albums/resync", v2.ResyncCategoryAlbum)
+		api.GET("/facebook/albums/resync-status", v2.AlbumResyncStatus)
+		api.POST("/facebook/albums/resync/:id/cancel", v2.CancelAlbumResync)
+		api.POST("/facebook/albums/resync/:id/resume", v2.ResumeAlbumResync)
 
 		// Facebook Main Page Post & AI Content Routes
 		api.GET("/facebook/post-init", v2.FacebookPostInit)
