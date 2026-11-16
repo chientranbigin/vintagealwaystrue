@@ -235,6 +235,27 @@
         <i class="el-icon-box text-5xl mb-2"></i>
         <p>Không có sản phẩm nào thuộc danh mục này đang ở trạng thái còn hàng.</p>
       </div>
+
+      <!-- Tấm ảnh kết bài (Retro CTA End-Card) -->
+      <div class="mt-6 p-4 bg-amber-50/60 rounded-xl border border-amber-200/80 flex flex-col md:flex-row items-center gap-4">
+        <div class="w-24 h-36 flex-shrink-0 rounded-lg overflow-hidden border border-amber-300 shadow-sm bg-white">
+          <img :src="endCardURL" alt="Retro End Card" class="w-full h-full object-cover">
+        </div>
+        <div class="flex-1 space-y-1 text-center md:text-left">
+          <div class="flex items-center justify-center md:justify-start gap-2">
+            <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-xs font-black">TẤM ẢNH KẾT BÀI (CTA)</span>
+            <span class="text-xs font-bold text-slate-700">Style Retro Vintage</span>
+          </div>
+          <h4 class="font-bold text-slate-800 text-sm">Xem thêm SP & Các mẫu còn hàng tại link trong mô tả</h4>
+          <p class="text-xs text-slate-500">
+            Tấm ảnh này sẽ luôn tự động được đính kèm ở <strong>vị trí cuối cùng</strong> của bài post. Khi người dùng click vào ảnh trên Facebook, mô tả (caption) của ảnh sẽ tự động hiển thị link Album của danh mục này:
+            <span class="text-blue-600 font-mono font-medium block truncate mt-0.5">{{ currentCategory ? currentCategory.album_url : 'Chưa có link album' }}</span>
+          </p>
+        </div>
+        <div class="flex-shrink-0">
+          <el-switch v-model="includeEndCard" active-text="Đính kèm" active-color="#d97706"></el-switch>
+        </div>
+      </div>
     </div>
 
     <!-- Floating Footer Action Bar -->
@@ -340,7 +361,9 @@ export default {
       publishProgress: 0,
       publishTimer: null,
       successDialog: false,
-      publishedPostURL: ''
+      publishedPostURL: '',
+      includeEndCard: true,
+      endCardURL: 'https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg'
     };
   },
   computed: {
@@ -361,6 +384,9 @@ export default {
         this.categories = res.data.categories || [];
         if (res.data.suggested_event) {
           this.eventName = res.data.suggested_event;
+        }
+        if (res.data.end_card_url) {
+          this.endCardURL = res.data.end_card_url;
         }
         // Tự động chọn category đầu tiên có sản phẩm
         if (this.categories.length > 0) {
@@ -519,7 +545,10 @@ export default {
 
         const res = await axios.post('/salev2/api/facebook/publish-main-post', {
           message: this.postMessage,
-          product_ids: selectedIds
+          product_ids: selectedIds,
+          include_end_card: this.includeEndCard,
+          category_code: this.selectedCategoryCode,
+          album_url: this.currentCategory ? this.currentCategory.album_url : ''
         });
 
         this.publishProgress = 100;

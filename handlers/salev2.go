@@ -2688,6 +2688,7 @@ func (h *SaleV2Handler) FacebookPostInit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"categories":      results,
 		"suggested_event": suggestedEvent,
+		"end_card_url":    "https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
 	})
 }
 
@@ -2809,8 +2810,11 @@ func (h *SaleV2Handler) FacebookGenerateContent(c *gin.Context) {
 }
 
 type PublishMainPostInput struct {
-	Message    string `json:"message"`
-	ProductIDs []uint `json:"product_ids"`
+	Message        string `json:"message"`
+	ProductIDs     []uint `json:"product_ids"`
+	IncludeEndCard bool   `json:"include_end_card"`
+	CategoryCode   string `json:"category_code"`
+	AlbumURL       string `json:"album_url"`
 }
 
 func (h *SaleV2Handler) FacebookPublishMainPost(c *gin.Context) {
@@ -2869,17 +2873,39 @@ func (h *SaleV2Handler) FacebookPublishMainPost(c *gin.Context) {
 		return
 	}
 
-	postID, err := h.FB.CreateMainPageFeedPost(input.Message, photoPaths)
+	// Prepare optional end-card photo with album link caption
+	var endCard *services.FeedPhotoItem
+	if input.IncludeEndCard {
+		albumURL := input.AlbumURL
+		if albumURL == "" && input.CategoryCode != "" {
+			var cat models.Category
+			if err := h.DB.Where("code = ?", input.CategoryCode).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
+				albumURL = "https://www.facebook.com/media/set/?set=a." + *cat.FBAlbumID
+			}
+		}
+		caption := "👉 Để xem thêm sp và check sp còn hàng tại:\n" + albumURL
+		endCard = &services.FeedPhotoItem{
+			Path:    "https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
+			Caption: caption,
+		}
+	}
+
+	postID, err := h.FB.CreateMainPageFeedPost(input.Message, photoPaths, endCard)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi khi đăng bài lên Facebook: " + err.Error()})
 		return
+	}
+
+	totalCount := len(photoPaths)
+	if endCard != nil {
+		totalCount++
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":  true,
 		"post_id":  postID,
 		"post_url": "https://www.facebook.com/" + postID,
-		"count":    len(photoPaths),
+		"count":    totalCount,
 	})
 }
 

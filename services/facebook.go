@@ -1073,8 +1073,13 @@ func (s *FacebookService) CreateAlbum(pageID string, name string, description st
 	return res.ID, nil
 }
 
-// UploadMainPagePhoto uploads an unpublished photo to the Main Page for feed post attachment
-func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) {
+type FeedPhotoItem struct {
+	Path    string `json:"path"`
+	Caption string `json:"caption"`
+}
+
+// UploadMainPagePhoto uploads an unpublished photo to the Main Page for feed post attachment with optional caption
+func (s *FacebookService) UploadMainPagePhoto(imagePath string, caption string) (string, error) {
 	pageID := s.MainPageID
 	if pageID == "" {
 		pageID = s.PageID
@@ -1091,6 +1096,9 @@ func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) 
 		data := url.Values{}
 		data.Set("url", imagePath)
 		data.Set("published", "false")
+		if caption != "" {
+			data.Set("caption", caption)
+		}
 		data.Set("access_token", token)
 
 		resp, err := s.Client.PostForm(endpoint, data)
@@ -1116,7 +1124,7 @@ func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) 
 		if dlResp.StatusCode < 200 || dlResp.StatusCode >= 300 {
 			return "", fmt.Errorf("remote image inaccessible (HTTP %d): %s", dlResp.StatusCode, imagePath)
 		}
-		return s.uploadMainPhotoFromReader(pageID, token, dlResp.Body, filepath.Base(imagePath))
+		return s.uploadMainPhotoFromReader(pageID, token, dlResp.Body, filepath.Base(imagePath), caption)
 	}
 
 	// Local file
@@ -1136,7 +1144,7 @@ func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) 
 
 	if f, err := os.Open(localPath); err == nil {
 		defer f.Close()
-		return s.uploadMainPhotoFromReader(pageID, token, f, filepath.Base(localPath))
+		return s.uploadMainPhotoFromReader(pageID, token, f, filepath.Base(localPath), caption)
 	}
 
 	// If not found locally, try CDN
@@ -1146,17 +1154,20 @@ func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) 
 			remoteURL += "/"
 		}
 		remoteURL += strings.TrimPrefix(imagePath, "storage/")
-		return s.UploadMainPagePhoto(remoteURL)
+		return s.UploadMainPagePhoto(remoteURL, caption)
 	}
 
 	return "", fmt.Errorf("image not accessible at path %s", imagePath)
 }
 
-func (s *FacebookService) uploadMainPhotoFromReader(pageID, token string, r io.Reader, filename string) (string, error) {
+func (s *FacebookService) uploadMainPhotoFromReader(pageID, token string, r io.Reader, filename string, caption string) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
 	_ = writer.WriteField("published", "false")
+	if caption != "" {
+		_ = writer.WriteField("caption", caption)
+	}
 	_ = writer.WriteField("access_token", token)
 	part, err := writer.CreateFormFile("source", filename)
 	if err != nil {
@@ -1198,8 +1209,8 @@ func (s *FacebookService) uploadMainPhotoFromReader(pageID, token string, r io.R
 	return res.ID, nil
 }
 
-// CreateMainPageFeedPost creates a multi-photo post on the main page
-func (s *FacebookService) CreateMainPageFeedPost(message string, photoPaths []string) (string, error) {
+// CreateMainPageFeedPost creates a multi-photo post on the main page, appending optional endCard as the final photo
+func (s *FacebookService) CreateMainPageFeedPost(message string, photoPaths []string, endCard *FeedPhotoItem) (string, error) {
 	pageID := s.MainPageID
 	if pageID == "" {
 		pageID = s.PageID
@@ -1215,13 +1226,23 @@ func (s *FacebookService) CreateMainPageFeedPost(message string, photoPaths []st
 	var mediaList []attachedMedia
 
 	for i, path := range photoPaths {
-		mediaID, err := s.UploadMainPagePhoto(path)
+		mediaID, err := s.UploadMainPagePhoto(path, "")
 		if err != nil {
 			log.Printf("Warning: failed to upload photo [%d] (%s): %v\n", i+1, path, err)
 			continue
 		}
 		mediaList = append(mediaList, attachedMedia{MediaFBID: mediaID})
 		time.Sleep(150 * time.Millisecond) // Throttling safe delay
+	}
+
+	// Upload end-card if provided
+	if endCard != nil && endCard.Path != "" {
+		endMediaID, err := s.UploadMainPagePhoto(endCard.Path, endCard.Caption)
+		if err == nil && endMediaID != "" {
+			mediaList = append(mediaList, attachedMedia{MediaFBID: endMediaID})
+		} else {
+			log.Printf("Warning: failed to upload end-card photo (%s): %v\n", endCard.Path, err)
+		}
 	}
 
 	if len(mediaList) == 0 {

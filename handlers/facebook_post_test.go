@@ -34,6 +34,7 @@ func TestFacebookPostInitAndContent(t *testing.T) {
 			AvailableCount int64  `json:"available_count"`
 		} `json:"categories"`
 		SuggestedEvent string `json:"suggested_event"`
+		EndCardURL     string `json:"end_card_url"`
 	}
 	if err := json.Unmarshal(wInit.Body.Bytes(), &initResp); err != nil {
 		t.Fatalf("Failed to parse FacebookPostInit response: %v", err)
@@ -44,6 +45,9 @@ func TestFacebookPostInitAndContent(t *testing.T) {
 	}
 	if initResp.SuggestedEvent == "" {
 		t.Errorf("Expected suggested event to not be empty")
+	}
+	if initResp.EndCardURL == "" {
+		t.Errorf("Expected end card URL to not be empty")
 	}
 
 	// 2. Test FacebookGenerateContent with Holiday ON
