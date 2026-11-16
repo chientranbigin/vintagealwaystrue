@@ -1,5 +1,5 @@
 <template>
-  <div class="px-4 md:px-6 py-6 max-w-7xl mx-auto space-y-6">
+  <div class="px-4 md:px-6 py-6 max-w-7xl mx-auto space-y-6 pb-28 md:pb-24">
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
       <div class="flex items-center gap-3">
@@ -258,31 +258,33 @@
       </div>
     </div>
 
-    <!-- Floating Footer Action Bar -->
-    <div v-if="hasPreviewLoaded" class="sticky bottom-4 z-30 bg-white/95 backdrop-blur border border-slate-200 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-          <i class="el-icon-check text-lg"></i>
-        </div>
-        <div>
-          <div class="font-bold text-slate-800 text-sm">
-            Sẵn sàng đăng: <span class="text-blue-600 font-black text-base">{{ selectedCount }}</span> sản phẩm
+    <!-- Floating Footer Action Bar (Fixed) -->
+    <div v-if="hasPreviewLoaded" class="fixed bottom-20 md:bottom-6 left-0 right-0 px-4 z-40 pointer-events-none flex justify-center">
+      <div class="w-full max-w-5xl bg-white/95 backdrop-blur-md border border-slate-200/90 p-4 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 pointer-events-auto transition-all duration-300">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold shadow-inner flex-shrink-0">
+            <i class="el-icon-check text-lg"></i>
           </div>
-          <div class="text-xs text-slate-400">Thứ tự các ảnh trên bài viết sẽ tuân thủ chính xác vị trí hiển thị ở trên.</div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">
+              Sẵn sàng đăng: <span class="text-blue-600 font-black text-base">{{ selectedCount }}</span> sản phẩm
+            </div>
+            <div class="text-xs text-slate-400">Thứ tự các ảnh trên bài viết sẽ tuân thủ chính xác vị trí hiển thị ở trên.</div>
+          </div>
         </div>
-      </div>
 
-      <div class="flex gap-2 w-full sm:w-auto">
-        <el-button
-          type="primary"
-          size="medium"
-          icon="el-icon-upload2"
-          class="w-full sm:w-auto font-bold px-8 shadow-md"
-          :disabled="selectedCount === 0 || selectedCount > 120"
-          :loading="publishing"
-          @click="confirmPublish">
-          🚀 Đăng bài lên Facebook Page chính
-        </el-button>
+        <div class="flex gap-2 w-full sm:w-auto">
+          <el-button
+            type="primary"
+            size="medium"
+            icon="el-icon-upload2"
+            class="w-full sm:w-auto font-bold px-8 shadow-md"
+            :disabled="selectedCount === 0 || selectedCount > 120"
+            :loading="publishing"
+            @click="confirmPublish">
+            🚀 Đăng bài lên Facebook Page chính
+          </el-button>
+        </div>
       </div>
     </div>
 
