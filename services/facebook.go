@@ -52,6 +52,7 @@ type FacebookService struct {
 	DB            *gorm.DB
 	MediaBase     string
 	Queue         chan FacebookSyncJob
+	ThrottleDelay time.Duration
 }
 
 var TrouserSizeMap = []struct {
@@ -145,6 +146,7 @@ func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase 
 		DB:            db,
 		MediaBase:     mediaBase,
 		Queue:         make(chan FacebookSyncJob, 200),
+		ThrottleDelay: 1 * time.Second,
 	}
 
 	fb.StartWorker()
@@ -161,12 +163,83 @@ func (s *FacebookService) mainToken() string {
 	return ""
 }
 
+func isFBRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "(#4)") || strings.Contains(msg, "request limit reached")
+}
+
 func (s *FacebookService) StartWorker() {
 	go func() {
 		for job := range s.Queue {
 			s.handleJob(job)
 		}
 	}()
+
+	go s.StartReconciler()
+}
+
+func (s *FacebookService) StartReconciler() {
+	// Wait 1 minute after server start before initial reconcile
+	time.Sleep(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	s.ReconcileAlbumPhotos()
+
+	for range ticker.C {
+		s.ReconcileAlbumPhotos()
+	}
+}
+
+func (s *FacebookService) ReconcileAlbumPhotos() {
+	if s == nil || s.DB == nil || (s.PageToken == "" && s.MainPageToken == "") {
+		return
+	}
+
+	var staleProducts []models.Product
+	if err := s.DB.Where("status IN ('SOLD', 'ON_HOLD') AND fb_album_photo_id IS NOT NULL AND fb_album_photo_id != ''").
+		Order("updated_at DESC").
+		Limit(30).
+		Find(&staleProducts).Error; err != nil {
+		log.Printf("ReconcileAlbumPhotos query error: %v\n", err)
+		return
+	}
+
+	if len(staleProducts) == 0 {
+		return
+	}
+
+	log.Printf("ReconcileAlbumPhotos: found %d SOLD/ON_HOLD products with album photos to clean up\n", len(staleProducts))
+	for _, p := range staleProducts {
+		if p.FBAlbumPhotoID == nil || *p.FBAlbumPhotoID == "" {
+			continue
+		}
+		photoID := *p.FBAlbumPhotoID
+		pName := fmt.Sprintf("ID:%d", p.ID)
+		if p.Name != nil && *p.Name != "" {
+			pName = *p.Name
+		}
+
+		err := s.RemoveProductPhotoFromAlbum(photoID)
+		if err != nil {
+			if isFBRateLimitError(err) {
+				log.Printf("ReconcileAlbumPhotos: Facebook rate limit reached (code 4), pausing until next cycle\n")
+				return
+			}
+			log.Printf("ReconcileAlbumPhotos error deleting photo %s for product %s: %v\n", photoID, pName, err)
+		} else {
+			s.DB.Model(&models.Product{}).Where("id = ?", p.ID).Update("fb_album_photo_id", nil)
+			log.Printf("ReconcileAlbumPhotos: successfully cleaned up album photo %s for product %s\n", photoID, pName)
+		}
+		delay := 1 * time.Second
+		if s.ThrottleDelay > 0 {
+			delay = s.ThrottleDelay
+		}
+		time.Sleep(delay)
+	}
 }
 
 func (s *FacebookService) Dispatch(productID uint, action FacebookSyncAction) {
@@ -191,12 +264,19 @@ func (s *FacebookService) handleJob(job FacebookSyncJob) {
 		return
 	}
 
-	// 1s delay between processing jobs to prevent Facebook Rate Limit
-	time.Sleep(1 * time.Second)
+	delay := 1 * time.Second
+	if s.ThrottleDelay > 0 {
+		delay = s.ThrottleDelay
+	}
+	time.Sleep(delay)
 
 	err := s.ExecuteSync(job.ProductID, job.Action)
 	if err != nil {
 		log.Printf("SyncFacebookPost [%s] error for product ID %d: %v\n", job.Action, job.ProductID, err)
+		if isFBRateLimitError(err) {
+			log.Printf("SyncFacebookPost [%s] rate limited by Facebook. Background Reconciler will retry automatically.\n", job.Action)
+			return
+		}
 		if job.Retries < 3 {
 			go func(j FacebookSyncJob) {
 				delay := time.Duration((j.Retries+1)*5) * time.Second
@@ -272,10 +352,12 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 		}
 
 	case FBActionSold:
+		var lastErr error
 		// 1. Mark SOLD on Catalog Page B
 		if product.FBPostID != nil && *product.FBPostID != "" {
 			if err := s.MarkSold(*product.FBPostID, &product); err != nil {
 				log.Printf("FB post MarkSold error for %s: %v\n", *product.FBPostID, err)
+				lastErr = err
 			} else {
 				log.Printf("FB post marked SOLD: %s\n", *product.FBPostID)
 			}
@@ -285,10 +367,14 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
 			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
 				log.Printf("FB album photo remove error (%s): %v\n", *product.FBAlbumPhotoID, err)
+				lastErr = err
 			} else {
 				s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", nil)
 				log.Printf("FB album photo removed: %s for %s\n", *product.FBAlbumPhotoID, pName)
 			}
+		}
+		if lastErr != nil {
+			return lastErr
 		}
 
 	case FBActionHold:
@@ -296,6 +382,7 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
 			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
 				log.Printf("FB album photo remove on HOLD error (%s): %v\n", *product.FBAlbumPhotoID, err)
+				return err
 			} else {
 				s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", nil)
 				log.Printf("FB album photo removed on HOLD: %s for %s\n", *product.FBAlbumPhotoID, pName)
@@ -303,10 +390,12 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 		}
 
 	case FBActionRevert:
+		var lastErr error
 		// 1. Revert AVAILABLE on Catalog Page B
 		if product.FBPostID != nil && *product.FBPostID != "" {
 			if err := s.RevertAvailable(*product.FBPostID, &product); err != nil {
 				log.Printf("FB post RevertAvailable error for %s: %v\n", *product.FBPostID, err)
+				lastErr = err
 			} else {
 				log.Printf("FB post reverted AVAILABLE: %s\n", *product.FBPostID)
 			}
@@ -324,12 +413,18 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 					}
 					caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
 					photoID, albumErr := s.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
-					if albumErr == nil && photoID != "" {
+					if albumErr != nil {
+						log.Printf("FB Album photo re-upload error for %s: %v\n", pName, albumErr)
+						lastErr = albumErr
+					} else if photoID != "" {
 						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
 						log.Printf("FB Album photo re-uploaded: %s in album %s for %s\n", photoID, *cat.FBAlbumID, pName)
 					}
 				}
 			}
+		}
+		if lastErr != nil {
+			return lastErr
 		}
 	}
 

@@ -600,3 +600,92 @@ func TestExecuteSync_AlbumWorkflow(t *testing.T) {
 		t.Fatalf("Expected fb_album_photo_id to be NULL after SOLD, got %v", *soldProd.FBAlbumPhotoID)
 	}
 }
+
+func TestExecuteSync_HoldAndReconcile(t *testing.T) {
+	db, _ := getTestDB(t)
+	if db == nil {
+		t.Skip("Database not available, skipping TestExecuteSync_HoldAndReconcile")
+	}
+
+	deletedPhotoIDs := make(map[string]bool)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" {
+			parts := strings.Split(r.URL.Path, "/")
+			if len(parts) > 1 {
+				photoID := parts[len(parts)-1]
+				deletedPhotoIDs[photoID] = true
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	photoID := "hold_photo_123"
+	holdProd := models.Product{
+		Name:            strPtr("GL_HOLD_TEST"),
+		Status:          strPtr("ON_HOLD"),
+		FBAlbumPhotoID:  &photoID,
+	}
+	tx.Create(&holdProd)
+
+	fb := &FacebookService{
+		BaseURL:       server.URL + "/",
+		PageToken:     "test_token",
+		MainPageToken: "main_token",
+		Client:        server.Client(),
+		DB:            tx,
+		ThrottleDelay: 1 * time.Millisecond,
+	}
+
+	// 1. Test ExecuteSync(FBActionHold)
+	err := fb.ExecuteSync(holdProd.ID, FBActionHold)
+	if err != nil {
+		t.Fatalf("ExecuteSync(FBActionHold) failed: %v", err)
+	}
+	if !deletedPhotoIDs["hold_photo_123"] {
+		t.Errorf("Expected hold_photo_123 to be deleted via DELETE API")
+	}
+
+	var updated models.Product
+	tx.First(&updated, holdProd.ID)
+	if updated.FBAlbumPhotoID != nil {
+		t.Errorf("Expected fb_album_photo_id to be NULL after HOLD, got %v", *updated.FBAlbumPhotoID)
+	}
+
+	// 2. Test ReconcileAlbumPhotos
+	stalePhotoID := "stale_photo_456"
+	staleProd := models.Product{
+		Name:           strPtr("GL_STALE_TEST"),
+		Status:         strPtr("SOLD"),
+		FBAlbumPhotoID: &stalePhotoID,
+	}
+	tx.Create(&staleProd)
+
+	fb.ReconcileAlbumPhotos()
+	if !deletedPhotoIDs["stale_photo_456"] {
+		t.Errorf("Expected stale_photo_456 to be deleted by ReconcileAlbumPhotos")
+	}
+
+	var reconciled models.Product
+	tx.First(&reconciled, staleProd.ID)
+	if reconciled.FBAlbumPhotoID != nil {
+		t.Errorf("Expected stale product fb_album_photo_id to be NULL after reconcile, got %v", *reconciled.FBAlbumPhotoID)
+	}
+
+	// 3. Test isFBRateLimitError
+	rateLimitErr := fmt.Errorf("facebook delete photo error (403): {\"error\":{\"message\":\"(#4) Application request limit reached\"}}")
+	if !isFBRateLimitError(rateLimitErr) {
+		t.Errorf("Expected isFBRateLimitError to be true for (#4) error")
+	}
+	otherErr := fmt.Errorf("network timeout")
+	if isFBRateLimitError(otherErr) {
+		t.Errorf("Expected isFBRateLimitError to be false for timeout error")
+	}
+}
