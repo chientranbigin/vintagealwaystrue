@@ -2654,6 +2654,9 @@ func (h *SaleV2Handler) FacebookPostInit(c *gin.Context) {
 		var count int64
 		h.DB.Model(&models.Product{}).
 			Where("type = ? AND (status = 'AVAILABLE' OR status = '' OR status IS NULL)", cat.Code).
+			Where(`(path_thumb IS NOT NULL AND path_thumb != '') 
+				OR (image_thumb_scale IS NOT NULL AND image_thumb_scale != '') 
+				OR EXISTS (SELECT 1 FROM product_images WHERE product_images.product_id = products.id AND product_images.file_path != '')`).
 			Count(&count)
 
 		albumID := ""
@@ -2703,6 +2706,9 @@ func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
 	var products []models.Product
 	err := h.DB.Preload("Sizes").Preload("Images").
 		Where("type = ? AND (status = 'AVAILABLE' OR status = '' OR status IS NULL)", pType).
+		Where(`(path_thumb IS NOT NULL AND path_thumb != '') 
+			OR (image_thumb_scale IS NOT NULL AND image_thumb_scale != '') 
+			OR EXISTS (SELECT 1 FROM product_images WHERE product_images.product_id = products.id AND product_images.file_path != '')`).
 		Order("id DESC").
 		Limit(limit).
 		Find(&products).Error
@@ -2729,6 +2735,13 @@ func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
 	}
 
 	for _, p := range products {
+		thumb := p.BestQualityThumb()
+		if thumb == "" {
+			continue
+		}
+		if !strings.HasPrefix(thumb, "http://") && !strings.HasPrefix(thumb, "https://") {
+			thumb = mediaBase + strings.TrimPrefix(thumb, "storage/")
+		}
 		name := ""
 		if p.Name != nil {
 			name = *p.Name
@@ -2744,11 +2757,6 @@ func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
 		status := "AVAILABLE"
 		if p.Status != nil && *p.Status != "" {
 			status = *p.Status
-		}
-
-		thumb := p.BestQualityThumb()
-		if thumb != "" && !strings.HasPrefix(thumb, "http://") && !strings.HasPrefix(thumb, "https://") {
-			thumb = mediaBase + strings.TrimPrefix(thumb, "storage/")
 		}
 
 		items = append(items, ProductItem{
