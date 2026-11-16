@@ -329,7 +329,12 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 			if err := s.DB.Where("code = ? AND is_active = true", *product.Type).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
 				// Delete previous album photo if existing
 				if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
-					_ = s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID)
+					if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+						log.Printf("FB album photo remove previous error (%s): %v\n", *product.FBAlbumPhotoID, err)
+						if isFBRateLimitError(err) {
+							return err // Wait for rate limit to clear before uploading new photo, preventing duplicate album photos
+						}
+					}
 				}
 
 				thumb := product.BestQualityThumb()
