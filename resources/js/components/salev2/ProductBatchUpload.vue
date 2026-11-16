@@ -15,6 +15,80 @@
         </div>
     </div>
 
+    <!-- Facebook Album Resync Bar (Mới nhất lên đầu) -->
+    <div v-if="albumCategories.length" class="mb-4 flex-shrink-0 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2.5">
+          <div class="flex items-center gap-1.5 text-slate-700 font-bold text-xs md:text-sm">
+            <i class="el-icon-sort text-amber-500 text-base"></i>
+            <span>Sắp xếp Album FB (Mới nhất lên đầu):</span>
+          </div>
+          <el-select v-model="resyncCategoryCode" placeholder="Chọn loại SP..." size="mini" class="w-48">
+            <el-option
+              v-for="cat in albumCategories"
+              :key="cat.code"
+              :label="cat.name + ' (' + cat.available_count + ' SP)'"
+              :value="cat.code">
+            </el-option>
+          </el-select>
+          <el-button
+            size="mini"
+            type="warning"
+            plain
+            icon="el-icon-refresh"
+            :loading="resyncLoading"
+            :disabled="!resyncCategoryCode || isResyncActiveForCurrent"
+            @click="handleResyncAlbum">
+            Re-sync Album
+          </el-button>
+          <a v-if="currentAlbumCategory && currentAlbumCategory.album_url"
+             :href="currentAlbumCategory.album_url"
+             target="_blank"
+             class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            <i class="el-icon-link"></i> Xem Album
+          </a>
+        </div>
+        <span class="text-[11px] text-slate-400 italic">Tự động chạy ngầm lúc 01:00 sáng (GMT+7) nếu có hàng mới</span>
+      </div>
+
+      <!-- Live Resync Status Card -->
+      <div v-if="currentResyncJob" class="p-2.5 rounded-lg border text-xs space-y-1.5"
+        :class="{
+          'bg-blue-50/70 border-blue-200 text-blue-900': ['PENDING','DELETING','UPLOADING'].includes(currentResyncJob.status),
+          'bg-amber-50/80 border-amber-200 text-amber-900': currentResyncJob.status === 'PAUSED_LIMIT',
+          'bg-emerald-50/70 border-emerald-200 text-emerald-900': currentResyncJob.status === 'COMPLETED',
+          'bg-slate-50 border-slate-200 text-slate-600': ['CANCELLED','FAILED'].includes(currentResyncJob.status)
+        }">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="font-bold flex items-center gap-1.5">
+            <i v-if="['PENDING','DELETING','UPLOADING'].includes(currentResyncJob.status)" class="el-icon-loading"></i>
+            <i v-else-if="currentResyncJob.status === 'PAUSED_LIMIT'" class="el-icon-time"></i>
+            <i v-else-if="currentResyncJob.status === 'COMPLETED'" class="el-icon-circle-check"></i>
+            <i v-else class="el-icon-info"></i>
+            <span v-if="currentResyncJob.status === 'PENDING'">Đang chuẩn bị danh sách ảnh ({{ currentResyncJob.category_name }})...</span>
+            <span v-else-if="currentResyncJob.status === 'DELETING'">Bước 1/2: Đang xóa ảnh cũ ({{ currentResyncJob.deleted_count }}/{{ currentResyncJob.total_delete }})</span>
+            <span v-else-if="currentResyncJob.status === 'UPLOADING'">Bước 2/2: Đang tải lên Mới → Cũ ({{ currentResyncJob.uploaded_count }}/{{ currentResyncJob.total_upload }})</span>
+            <span v-else-if="currentResyncJob.status === 'PAUSED_LIMIT'">Tạm nghỉ tránh giới hạn Facebook (Tự động chạy tiếp lúc {{ formatResyncTime(currentResyncJob.resume_at) }})</span>
+            <span v-else-if="currentResyncJob.status === 'COMPLETED'">Hoàn tất sắp xếp {{ currentResyncJob.uploaded_count }} sản phẩm cho {{ currentResyncJob.category_name }}!</span>
+            <span v-else>{{ currentResyncJob.status }}</span>
+          </div>
+          <div class="flex items-center gap-1.5" v-if="['PENDING','DELETING','UPLOADING','PAUSED_LIMIT'].includes(currentResyncJob.status)">
+            <el-button v-if="currentResyncJob.status === 'PAUSED_LIMIT'" size="mini" type="primary" plain @click="handleResumeResync(currentResyncJob.id)">Chạy tiếp ngay</el-button>
+            <el-button size="mini" type="danger" plain @click="handleCancelResync(currentResyncJob.id)">Hủy</el-button>
+          </div>
+        </div>
+        <el-progress
+          v-if="['DELETING','UPLOADING','PAUSED_LIMIT'].includes(currentResyncJob.status)"
+          :percentage="resyncProgressPct"
+          :status="currentResyncJob.status === 'PAUSED_LIMIT' ? 'warning' : undefined"
+          :stroke-width="6">
+        </el-progress>
+        <div v-if="currentResyncJob.last_error" class="text-[11px] opacity-80">
+          {{ currentResyncJob.last_error }}
+        </div>
+      </div>
+    </div>
+
     <div class="flex-1 flex gap-6 overflow-hidden min-h-0">
         <!-- Staging Area (Left) -->
         <div class="w-1/2 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200">
@@ -148,10 +222,39 @@ export default {
             batchType: '',
             lastSelectedId: null,
             renderLimit: 48,
-            pollInterval: null
+            pollInterval: null,
+            albumCategories: [],
+            resyncCategoryCode: '',
+            resyncJobs: [],
+            resyncLoading: false,
+            resyncPollTimer: null
         }
     },
     computed: {
+        currentAlbumCategory() {
+            return this.albumCategories.find(c => c.code === this.resyncCategoryCode) || null;
+        },
+        currentResyncJob() {
+            if (!this.resyncJobs.length) return null;
+            if (this.resyncCategoryCode) {
+                const match = this.resyncJobs.find(j => j.category_code === this.resyncCategoryCode);
+                if (match) return match;
+            }
+            return this.resyncJobs.find(j => ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(j.status)) || null;
+        },
+        isResyncActiveForCurrent() {
+            return this.currentResyncJob &&
+                this.currentResyncJob.category_code === this.resyncCategoryCode &&
+                ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(this.currentResyncJob.status);
+        },
+        resyncProgressPct() {
+            const job = this.currentResyncJob;
+            if (!job) return 0;
+            const total = (job.total_delete || 0) + (job.total_upload || 0);
+            if (total === 0) return 0;
+            const done = (job.deleted_count || 0) + (job.uploaded_count || 0);
+            return Math.min(100, Math.round((done / total) * 100));
+        },
         visibleStagingFiles() {
             return this.stagingFiles.slice(0, this.renderLimit);
         },
@@ -169,10 +272,91 @@ export default {
             return this.groups.filter(g => g.status === 'ERROR').length;
         }
     },
+    mounted() {
+        this.fetchAlbumCategories();
+        this.fetchResyncStatus();
+    },
     beforeDestroy() {
         if (this.pollInterval) clearInterval(this.pollInterval);
+        if (this.resyncPollTimer) {
+            clearInterval(this.resyncPollTimer);
+            this.resyncPollTimer = null;
+        }
     },
     methods: {
+        async fetchAlbumCategories() {
+            try {
+                const res = await axios.get('/salev2/api/facebook/post-init');
+                this.albumCategories = (res.data.categories || []).filter(c => c.fb_album_id);
+                if (this.albumCategories.length > 0 && !this.resyncCategoryCode) {
+                    this.resyncCategoryCode = this.albumCategories[0].code;
+                }
+            } catch (e) {
+                // silent fail
+            }
+        },
+        async fetchResyncStatus() {
+            try {
+                const res = await axios.get('/salev2/api/facebook/albums/resync-status');
+                this.resyncJobs = res.data.jobs || [];
+                const hasActive = this.resyncJobs.some(j => ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(j.status));
+                if (hasActive && !this.resyncPollTimer) {
+                    this.resyncPollTimer = setInterval(() => this.fetchResyncStatus(), 5000);
+                } else if (!hasActive && this.resyncPollTimer) {
+                    clearInterval(this.resyncPollTimer);
+                    this.resyncPollTimer = null;
+                }
+            } catch (e) {
+                // silent fail
+            }
+        },
+        async handleResyncAlbum() {
+            if (!this.resyncCategoryCode) return;
+            try {
+                await this.$confirm(
+                    `Hệ thống sẽ xóa toàn bộ ảnh hiện tại trong Album "${this.currentAlbumCategory?.name}" và tải lại theo thứ tự Mới nhất → Cũ nhất.\n\nNếu chạm giới hạn API của Facebook, tiến trình sẽ tự động tạm nghỉ 45 phút rồi chạy tiếp cho tới khi hoàn tất.`,
+                    'Xác nhận Sắp xếp lại Album',
+                    { confirmButtonText: 'Bắt đầu chạy', cancelButtonText: 'Đóng', type: 'warning' }
+                );
+            } catch (e) {
+                return;
+            }
+            this.resyncLoading = true;
+            try {
+                await axios.post('/salev2/api/facebook/albums/resync', {
+                    category_code: this.resyncCategoryCode
+                });
+                this.$message.success('Đã kích hoạt tiến trình sắp xếp lại Album!');
+                await this.fetchResyncStatus();
+            } catch (err) {
+                this.$message.error('Lỗi kích hoạt: ' + (err.response?.data?.error || err.message));
+            } finally {
+                this.resyncLoading = false;
+            }
+        },
+        async handleCancelResync(jobId) {
+            try {
+                await axios.post(`/salev2/api/facebook/albums/resync/${jobId}/cancel`);
+                this.$message.info('Đã hủy tiến trình sắp xếp Album');
+                await this.fetchResyncStatus();
+            } catch (err) {
+                this.$message.error('Lỗi khi hủy: ' + (err.response?.data?.error || err.message));
+            }
+        },
+        async handleResumeResync(jobId) {
+            try {
+                await axios.post(`/salev2/api/facebook/albums/resync/${jobId}/resume`);
+                this.$message.success('Đã kích hoạt chạy tiếp ngay!');
+                await this.fetchResyncStatus();
+            } catch (err) {
+                this.$message.error('Lỗi khi chạy tiếp: ' + (err.response?.data?.error || err.message));
+            }
+        },
+        formatResyncTime(iso) {
+            if (!iso) return '...';
+            const d = new Date(iso);
+            return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        },
         loadMore() {
             this.renderLimit += 48;
         },
