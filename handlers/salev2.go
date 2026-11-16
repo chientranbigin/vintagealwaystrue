@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,8 @@ func NewSaleV2Handler(db *gorm.DB, cfg *config.Config) *SaleV2Handler {
 		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase, fbMainPageID, fbMainPageToken),
 		UploadQueue: make(chan SmartUploadJob, 100),
 	}
-	h.StartWorkers(3)
+	// Run 1 background worker to serialize heavy image processing and prevent OOM
+	h.StartWorkers(1)
 	return h
 }
 
@@ -2071,6 +2073,9 @@ func (h *SaleV2Handler) deleteOldProductImages(product *models.Product, newMainP
 
 // processSmartUploadJob processes OCR recognition and product image attachment in background
 func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
+	// Reclaim memory immediately after heavy OCR and image manipulation
+	defer debug.FreeOSMemory()
+
 	// 1. Init Log (Step 1 start)
 	logRecord := models.ProductUploadLog{
 		SessionID: job.SessionID,

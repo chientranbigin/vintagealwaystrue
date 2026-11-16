@@ -73,10 +73,15 @@
                  <el-button type="text" class="text-red-500" @click="clearGroups" v-if="groups.length">Clear All</el-button>
              </div>
 
-             <div v-if="batchComplete" class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-3 text-sm font-bold">
-                 <span class="text-slate-600">Kết quả:</span>
-                 <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} success</span>
-                 <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} error</span>
+             <div v-if="batchComplete" class="px-4 py-2 bg-white border-b border-slate-200 flex items-center justify-between text-sm font-bold">
+                 <div class="flex items-center gap-3">
+                     <span class="text-slate-600">Kết quả:</span>
+                     <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} success</span>
+                     <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} error</span>
+                 </div>
+                 <el-button v-if="errorGroupCount > 0" type="danger" size="mini" :loading="uploading" @click="retryErrors">
+                     Tải lại {{ errorGroupCount }} lỗi
+                 </el-button>
              </div>
 
              <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
@@ -361,8 +366,13 @@ export default {
                          this.$set(this.groups[i], 'status', 'PROCESSING');
                      } catch (e) {
                          this.groups[i].status = 'ERROR';
-                         this.groups[i].error = 'Network Error';
+                         this.groups[i].error = e.response && e.response.data && e.response.data.message 
+                             ? e.response.data.message 
+                             : (e.message || 'Network Error');
                      }
+
+                     // Small pause between sequential uploads to avoid overwhelming memory and network
+                     await new Promise(r => setTimeout(r, 400));
                 }
                 this.startPolling();
             } catch (e) {
@@ -370,6 +380,16 @@ export default {
             } finally {
                 this.uploading = false; 
             }
+        },
+        retryErrors() {
+            this.groups.forEach(g => {
+                if (g.status === 'ERROR') {
+                    g.status = 'PENDING';
+                    g.error = null;
+                    g.sessionId = null;
+                }
+            });
+            this.uploadAll();
         }
     }
 }

@@ -24,6 +24,8 @@ COPY --from=builder /app/public /app/public
 COPY --from=builder /app/templates /app/templates
 
 ENV PORT=8080
+ENV GOMEMLIMIT=380MiB
+ENV GOGC=50
 EXPOSE 8080
 
 CMD ["/app/server"]

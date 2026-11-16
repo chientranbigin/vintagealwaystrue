@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -110,6 +111,7 @@ func (s *StorageService) UploadBytes(data []byte, filename string) (string, erro
 
 // CreateScaledThumbnail resizes image to maxWidth 400px and saves as _scaled.jpg
 func (s *StorageService) CreateScaledThumbnail(sourceData []byte, sourceFilenameOrPath string) (string, error) {
+	defer debug.FreeOSMemory()
 	if len(sourceData) == 0 {
 		return "", fmt.Errorf("sourceData is empty")
 	}
