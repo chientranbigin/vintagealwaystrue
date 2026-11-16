@@ -6,6 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -15,6 +19,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 )
 
 type StorageService struct {
@@ -99,6 +106,118 @@ func (s *StorageService) UploadBytes(data []byte, filename string) (string, erro
 
 	// Return path format matching Laravel: "storage/sale/filename.jpg"
 	return "storage/sale/" + storedFilename, nil
+}
+
+// CreateScaledThumbnail resizes image to maxWidth 400px and saves as _scaled.jpg
+func (s *StorageService) CreateScaledThumbnail(sourceData []byte, sourceFilenameOrPath string) (string, error) {
+	if len(sourceData) == 0 {
+		return "", fmt.Errorf("sourceData is empty")
+	}
+
+	src, _, err := image.Decode(bytes.NewReader(sourceData))
+	if err != nil {
+		return "", fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	bounds := src.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	maxWidth := 400
+	newWidth := width
+	newHeight := height
+
+	if width > maxWidth {
+		newWidth = maxWidth
+		newHeight = int(float64(height) * (float64(maxWidth) / float64(width)))
+		if newHeight < 1 {
+			newHeight = 1
+		}
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	draw.BiLinear.Scale(dst, dst.Rect, src, bounds, draw.Over, nil)
+
+	buf := &bytes.Buffer{}
+	if err := jpeg.Encode(buf, dst, &jpeg.Options{Quality: 75}); err != nil {
+		return "", fmt.Errorf("failed to encode scaled jpeg: %w", err)
+	}
+
+	scaledBytes := buf.Bytes()
+
+	// Extract base name to name the scaled file
+	base := filepath.Base(sourceFilenameOrPath)
+	ext := filepath.Ext(base)
+	baseWithoutExt := strings.TrimSuffix(base, ext)
+	baseWithoutExt = strings.TrimSuffix(baseWithoutExt, "_scaled")
+	scaledFilename := baseWithoutExt + "_scaled.jpg"
+
+	// Upload to Cloudinary with public_id "sale/xxx_scaled"
+	if s.CloudName != "" {
+		_, err := s.uploadToCloudinary(scaledBytes, scaledFilename)
+		if err == nil {
+			return "sale/" + scaledFilename, nil
+		}
+	}
+
+	// Local fallback
+	localPath := filepath.Join(s.UploadDir, scaledFilename)
+	_ = os.WriteFile(localPath, scaledBytes, 0644)
+
+	return "sale/" + scaledFilename, nil
+}
+
+// CreateScaledThumbnailFromPath downloads or reads image and creates scaled thumbnail
+func (s *StorageService) CreateScaledThumbnailFromPath(imagePath string) (string, error) {
+	if imagePath == "" {
+		return "", fmt.Errorf("imagePath is empty")
+	}
+
+	var data []byte
+	var err error
+
+	// If remote URL
+	if strings.HasPrefix(imagePath, "http://") || strings.HasPrefix(imagePath, "https://") {
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, gErr := client.Get(imagePath)
+		if gErr != nil {
+			return "", gErr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return "", fmt.Errorf("remote image returned HTTP %d", resp.StatusCode)
+		}
+		data, err = io.ReadAll(resp.Body)
+	} else {
+		// Local file path
+		cleanPath := imagePath
+		if !filepath.IsAbs(cleanPath) {
+			if _, sErr := os.Stat(cleanPath); os.IsNotExist(sErr) {
+				clean := strings.TrimPrefix(cleanPath, "/")
+				if _, sErr2 := os.Stat(clean); sErr2 == nil {
+					cleanPath = clean
+				} else if _, sErr3 := os.Stat("storage/sale/" + filepath.Base(clean)); sErr3 == nil {
+					cleanPath = "storage/sale/" + filepath.Base(clean)
+				}
+			}
+		}
+		data, err = os.ReadFile(cleanPath)
+		if err != nil && s.BaseURL != "" {
+			// Try download from CDN
+			cdnURL := s.BaseURL
+			if !strings.HasSuffix(cdnURL, "/") {
+				cdnURL += "/"
+			}
+			cdnURL += strings.TrimPrefix(imagePath, "storage/")
+			return s.CreateScaledThumbnailFromPath(cdnURL)
+		}
+	}
+
+	if err != nil || len(data) == 0 {
+		return "", fmt.Errorf("failed to read image data from %s: %v", imagePath, err)
+	}
+
+	return s.CreateScaledThumbnail(data, imagePath)
 }
 
 func (s *StorageService) uploadToCloudinary(fileData []byte, filename string) (string, error) {

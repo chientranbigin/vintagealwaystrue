@@ -34,14 +34,23 @@ type FacebookSyncJob struct {
 	Retries   int
 }
 
+type FacebookAlbum struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Count       int    `json:"count,omitempty"`
+	CreatedTime string `json:"created_time,omitempty"`
+}
+
 type FacebookService struct {
-	PageID    string
-	PageToken string
-	BaseURL   string
-	Client    *http.Client
-	DB        *gorm.DB
-	MediaBase string
-	Queue     chan FacebookSyncJob
+	PageID        string
+	PageToken     string
+	MainPageID    string
+	MainPageToken string
+	BaseURL       string
+	Client        *http.Client
+	DB            *gorm.DB
+	MediaBase     string
+	Queue         chan FacebookSyncJob
 }
 
 var TrouserSizeMap = []struct {
@@ -96,13 +105,28 @@ func FormatVNDPrice(amount int64) string {
 	return strings.Join(res, ".") + "đ"
 }
 
-func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase string) *FacebookService {
+func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase string, mainPageArgs ...string) *FacebookService {
 	if pageID == "" {
 		pageID = os.Getenv("FB_PAGE_ID")
 	}
 	if pageToken == "" {
 		pageToken = os.Getenv("FB_PAGE_TOKEN")
 	}
+	mainPageID := ""
+	mainPageToken := ""
+	if len(mainPageArgs) > 0 {
+		mainPageID = mainPageArgs[0]
+	}
+	if len(mainPageArgs) > 1 {
+		mainPageToken = mainPageArgs[1]
+	}
+	if mainPageID == "" {
+		mainPageID = os.Getenv("FB_MAIN_PAGE_ID")
+	}
+	if mainPageToken == "" {
+		mainPageToken = os.Getenv("FB_MAIN_PAGE_TOKEN")
+	}
+
 	if mediaBase == "" {
 		mediaBase = os.Getenv("MEDIA_BASE_URL")
 		if mediaBase == "" {
@@ -111,17 +135,29 @@ func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase 
 	}
 
 	fb := &FacebookService{
-		PageID:    pageID,
-		PageToken: pageToken,
-		BaseURL:   "https://graph.facebook.com/v19.0/",
-		Client:    &http.Client{Timeout: 30 * time.Second},
-		DB:        db,
-		MediaBase: mediaBase,
-		Queue:     make(chan FacebookSyncJob, 200),
+		PageID:        pageID,
+		PageToken:     pageToken,
+		MainPageID:    mainPageID,
+		MainPageToken: mainPageToken,
+		BaseURL:       "https://graph.facebook.com/v19.0/",
+		Client:        &http.Client{Timeout: 30 * time.Second},
+		DB:            db,
+		MediaBase:     mediaBase,
+		Queue:         make(chan FacebookSyncJob, 200),
 	}
 
 	fb.StartWorker()
 	return fb
+}
+
+func (s *FacebookService) mainToken() string {
+	if s != nil && s.MainPageToken != "" {
+		return s.MainPageToken
+	}
+	if s != nil {
+		return s.PageToken
+	}
+	return ""
 }
 
 func (s *FacebookService) StartWorker() {
@@ -149,17 +185,21 @@ func (s *FacebookService) Dispatch(productID uint, action FacebookSyncAction) {
 }
 
 func (s *FacebookService) handleJob(job FacebookSyncJob) {
-	if s.PageToken == "" {
-		log.Println("SyncFacebookPost: no FB token configured, skipping.")
+	if s.PageToken == "" && s.MainPageToken == "" {
+		log.Println("SyncFacebookPost: no FB tokens configured, skipping.")
 		return
 	}
+
+	// 1s delay between processing jobs to prevent Facebook Rate Limit
+	time.Sleep(1 * time.Second)
 
 	err := s.ExecuteSync(job.ProductID, job.Action)
 	if err != nil {
 		log.Printf("SyncFacebookPost [%s] error for product ID %d: %v\n", job.Action, job.ProductID, err)
 		if job.Retries < 3 {
 			go func(j FacebookSyncJob) {
-				time.Sleep(5 * time.Second)
+				delay := time.Duration((j.Retries+1)*5) * time.Second
+				time.Sleep(delay)
 				j.Retries++
 				select {
 				case s.Queue <- j:
@@ -195,30 +235,90 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 
 		postID, err := s.CreatePost(&product)
 		if err != nil {
-			return err
-		}
-		if postID != "" {
+			log.Printf("CreatePost error on Catalog Page for product %d: %v\n", product.ID, err)
+		} else if postID != "" {
 			s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_post_id", postID)
+			product.FBPostID = &postID
 			log.Printf("FB post created: %s for %s\n", postID, pName)
 		}
 
+		// Sync thumbnail photo into Category Album on Main Page (no_story=true)
+		if product.Type != nil {
+			var cat models.Category
+			if err := s.DB.Where("code = ? AND is_active = true", *product.Type).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
+				// Delete previous album photo if existing
+				if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
+					_ = s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID)
+				}
+
+				thumb := product.BestQualityThumb()
+				if thumb != "" {
+					catalogPostID := ""
+					if product.FBPostID != nil {
+						catalogPostID = *product.FBPostID
+					}
+					caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
+					photoID, albumErr := s.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
+					if albumErr == nil && photoID != "" {
+						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
+						product.FBAlbumPhotoID = &photoID
+						log.Printf("FB Album photo uploaded: %s in album %s for %s\n", photoID, *cat.FBAlbumID, pName)
+					} else {
+						log.Printf("FB Album photo upload error for %s in album %s: %v\n", pName, *cat.FBAlbumID, albumErr)
+					}
+				}
+			}
+		}
+
 	case FBActionSold:
-		if product.FBPostID == nil || *product.FBPostID == "" {
-			return nil
+		// 1. Mark SOLD on Catalog Page B
+		if product.FBPostID != nil && *product.FBPostID != "" {
+			if err := s.MarkSold(*product.FBPostID, &product); err != nil {
+				log.Printf("FB post MarkSold error for %s: %v\n", *product.FBPostID, err)
+			} else {
+				log.Printf("FB post marked SOLD: %s\n", *product.FBPostID)
+			}
 		}
-		if err := s.MarkSold(*product.FBPostID, &product); err != nil {
-			return err
+
+		// 2. Remove photo from Main Page Album A
+		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
+			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+				log.Printf("FB album photo remove error (%s): %v\n", *product.FBAlbumPhotoID, err)
+			} else {
+				s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", nil)
+				log.Printf("FB album photo removed: %s for %s\n", *product.FBAlbumPhotoID, pName)
+			}
 		}
-		log.Printf("FB post marked SOLD: %s\n", *product.FBPostID)
 
 	case FBActionRevert:
-		if product.FBPostID == nil || *product.FBPostID == "" {
-			return nil
+		// 1. Revert AVAILABLE on Catalog Page B
+		if product.FBPostID != nil && *product.FBPostID != "" {
+			if err := s.RevertAvailable(*product.FBPostID, &product); err != nil {
+				log.Printf("FB post RevertAvailable error for %s: %v\n", *product.FBPostID, err)
+			} else {
+				log.Printf("FB post reverted AVAILABLE: %s\n", *product.FBPostID)
+			}
 		}
-		if err := s.RevertAvailable(*product.FBPostID, &product); err != nil {
-			return err
+
+		// 2. Re-upload photo to Main Page Album A if missing
+		if (product.FBAlbumPhotoID == nil || *product.FBAlbumPhotoID == "") && product.Type != nil {
+			var cat models.Category
+			if err := s.DB.Where("code = ? AND is_active = true", *product.Type).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
+				thumb := product.BestQualityThumb()
+				if thumb != "" {
+					catalogPostID := ""
+					if product.FBPostID != nil {
+						catalogPostID = *product.FBPostID
+					}
+					caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
+					photoID, albumErr := s.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
+					if albumErr == nil && photoID != "" {
+						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
+						log.Printf("FB Album photo re-uploaded: %s in album %s for %s\n", photoID, *cat.FBAlbumID, pName)
+					}
+				}
+			}
 		}
-		log.Printf("FB post reverted AVAILABLE: %s\n", *product.FBPostID)
 	}
 
 	return nil
@@ -575,4 +675,288 @@ func (s *FacebookService) BuildMessage(product *models.Product, status string) s
 	lines = append(lines, "", s.BuildHashtags(product, status))
 
 	return strings.Join(lines, "\n")
+}
+
+func (s *FacebookService) BuildAlbumPhotoCaption(product *models.Product, catalogPostID string) string {
+	pName := ""
+	if product.Name != nil {
+		pName = *product.Name
+	}
+	pType := ""
+	if product.Type != nil {
+		pType = *product.Type
+	}
+
+	var priceVal int64
+	if product.Price != nil {
+		priceVal = *product.Price
+	}
+	priceFormatted := FormatVNDPrice(priceVal)
+
+	lines := []string{
+		fmt.Sprintf("✅ CÒN HÀNG — %s", pName),
+		fmt.Sprintf("👔 %s | Giá: %s", pType, priceFormatted),
+	}
+
+	if len(product.Sizes) > 0 {
+		var sizeParts []string
+		for _, sz := range product.Sizes {
+			if sz.Name != nil && sz.Value != nil && *sz.Value > 0 {
+				sizeParts = append(sizeParts, fmt.Sprintf("%s: %.0f", *sz.Name, *sz.Value))
+			}
+		}
+		if len(sizeParts) > 0 {
+			lines = append(lines, fmt.Sprintf("📐 Số đo: %s", strings.Join(sizeParts, ", ")))
+		}
+	}
+
+	if catalogPostID != "" {
+		cleanPostID := strings.TrimPrefix(catalogPostID, s.PageID+"_")
+		catalogURL := fmt.Sprintf("https://www.facebook.com/%s/posts/%s", s.PageID, cleanPostID)
+		lines = append(lines, "")
+		lines = append(lines, "👉 Xem ảnh chi tiết tại:")
+		lines = append(lines, catalogURL)
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, s.BuildHashtags(product, "AVAILABLE"))
+
+	return strings.Join(lines, "\n")
+}
+
+func (s *FacebookService) UploadProductPhotoToAlbum(albumID string, imagePath string, caption string) (string, error) {
+	if albumID == "" {
+		return "", fmt.Errorf("albumID is empty")
+	}
+	token := s.mainToken()
+	if token == "" {
+		return "", fmt.Errorf("facebook main page token is empty")
+	}
+
+	endpoint := fmt.Sprintf("%s%s/photos", s.apiURL(), url.PathEscape(albumID))
+
+	// If remote URL
+	if strings.HasPrefix(imagePath, "http://") || strings.HasPrefix(imagePath, "https://") {
+		data := url.Values{}
+		data.Set("url", imagePath)
+		data.Set("caption", caption)
+		data.Set("no_story", "true")
+		data.Set("access_token", token)
+
+		resp, err := s.Client.PostForm(endpoint, data)
+		if err == nil {
+			defer resp.Body.Close()
+			respBytes, rErr := io.ReadAll(resp.Body)
+			if rErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				var res struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(respBytes, &res) == nil && res.ID != "" {
+					return res.ID, nil
+				}
+			}
+		}
+
+		// Fallback: download bytes and upload via multipart source
+		dlResp, dlErr := s.Client.Get(imagePath)
+		if dlErr != nil {
+			return "", dlErr
+		}
+		defer dlResp.Body.Close()
+		if dlResp.StatusCode < 200 || dlResp.StatusCode >= 300 {
+			return "", fmt.Errorf("remote image not found or inaccessible (HTTP %d): %s", dlResp.StatusCode, imagePath)
+		}
+		return s.uploadAlbumPhotoFromReader(albumID, dlResp.Body, filepath.Base(imagePath), caption)
+	}
+
+	// Local file
+	localPath := imagePath
+	if !filepath.IsAbs(localPath) {
+		if _, err := os.Stat(localPath); os.IsNotExist(err) {
+			clean := strings.TrimPrefix(localPath, "/")
+			if _, err2 := os.Stat(clean); err2 == nil {
+				localPath = clean
+			} else if _, err3 := os.Stat("storage/app/public/" + strings.TrimPrefix(clean, "storage/")); err3 == nil {
+				localPath = "storage/app/public/" + strings.TrimPrefix(clean, "storage/")
+			} else if _, err4 := os.Stat("./storage/" + strings.TrimPrefix(clean, "storage/")); err4 == nil {
+				localPath = "./storage/" + strings.TrimPrefix(clean, "storage/")
+			}
+		}
+	}
+
+	if f, err := os.Open(localPath); err == nil {
+		defer f.Close()
+		return s.uploadAlbumPhotoFromReader(albumID, f, filepath.Base(localPath), caption)
+	}
+
+	// If not found locally, try CDN with MediaBase
+	if s.MediaBase != "" {
+		remoteURL := s.MediaBase
+		if !strings.HasSuffix(remoteURL, "/") {
+			remoteURL += "/"
+		}
+		remoteURL += strings.TrimPrefix(imagePath, "storage/")
+		return s.UploadProductPhotoToAlbum(albumID, remoteURL, caption)
+	}
+
+	return "", fmt.Errorf("image not accessible at path %s", imagePath)
+}
+
+func (s *FacebookService) uploadAlbumPhotoFromReader(albumID string, r io.Reader, filename string, caption string) (string, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	_ = writer.WriteField("no_story", "true")
+	_ = writer.WriteField("caption", caption)
+	_ = writer.WriteField("access_token", s.mainToken())
+	part, err := writer.CreateFormFile("source", filename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, r); err != nil {
+		return "", err
+	}
+	_ = writer.Close()
+
+	endpoint := fmt.Sprintf("%s%s/photos", s.apiURL(), url.PathEscape(albumID))
+	req, err := http.NewRequest("POST", endpoint, body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("facebook album photo upload error (%d): %s", resp.StatusCode, string(respBytes))
+	}
+
+	var res struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return "", err
+	}
+	return res.ID, nil
+}
+
+func (s *FacebookService) RemoveProductPhotoFromAlbum(photoID string) error {
+	if photoID == "" {
+		return nil
+	}
+	token := s.mainToken()
+	endpoint := fmt.Sprintf("%s%s?access_token=%s", s.apiURL(), url.PathEscape(photoID), url.QueryEscape(token))
+	req, err := http.NewRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	// Handle case where object is already deleted or not found on Facebook
+	var errResp struct {
+		Error struct {
+			Message      string `json:"message"`
+			Type         string `json:"type"`
+			Code         int    `json:"code"`
+			ErrorSubcode int    `json:"error_subcode"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(respBytes, &errResp) == nil {
+		if errResp.Error.Code == 100 || errResp.Error.ErrorSubcode == 33 || strings.Contains(strings.ToLower(errResp.Error.Message), "does not exist") {
+			log.Printf("FB album photo %s already deleted or does not exist on Facebook\n", photoID)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("facebook delete photo error (%d): %s", resp.StatusCode, string(respBytes))
+}
+
+func (s *FacebookService) GetPageAlbums(pageID string) ([]FacebookAlbum, error) {
+	if pageID == "" {
+		pageID = s.MainPageID
+		if pageID == "" {
+			pageID = s.PageID
+		}
+	}
+	token := s.mainToken()
+	endpoint := fmt.Sprintf("%s%s/albums?fields=id,name,count,created_time&limit=100&access_token=%s", s.apiURL(), url.PathEscape(pageID), url.QueryEscape(token))
+
+	resp, err := s.Client.Get(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var res struct {
+		Data []FacebookAlbum `json:"data"`
+	}
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return res.Data, nil
+}
+
+func (s *FacebookService) CreateAlbum(pageID string, name string, description string) (string, error) {
+	if pageID == "" {
+		pageID = s.MainPageID
+	}
+	token := s.mainToken()
+	endpoint := fmt.Sprintf("%s%s/albums", s.apiURL(), url.PathEscape(pageID))
+
+	data := url.Values{}
+	data.Set("name", name)
+	if description != "" {
+		data.Set("message", description)
+	}
+	data.Set("access_token", token)
+
+	resp, err := s.Client.PostForm(endpoint, data)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("facebook create album error (%d): %s", resp.StatusCode, string(respBytes))
+	}
+
+	var res struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return "", err
+	}
+	return res.ID, nil
 }

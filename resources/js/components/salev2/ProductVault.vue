@@ -383,14 +383,14 @@ export default {
         if (idx > -1) {
             this.selectedProducts.splice(idx, 1);
         } else {
-            this.selectedProducts.push({ id: product.id, img: product.path_thumb });
+            this.selectedProducts.push({ id: product.id, img: product.image_thumb_scale_url || product.path_thumb });
         }
         localStorage.setItem('selectedProducts', JSON.stringify(this.selectedProducts));
     },
     selectAllPage() {
         this.products.forEach(p => {
             if (!this.isSelected(p.id)) {
-                this.selectedProducts.push({ id: p.id, img: p.path_thumb });
+                this.selectedProducts.push({ id: p.id, img: p.image_thumb_scale_url || p.path_thumb });
             }
         });
         localStorage.setItem('selectedProducts', JSON.stringify(this.selectedProducts));

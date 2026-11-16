@@ -240,17 +240,21 @@ func NewSaleV1Handler(db *gorm.DB, cfg *config.Config) *SaleV1Handler {
 	fbPageID := ""
 	fbPageToken := ""
 	mediaBase := ""
+	fbMainPageID := ""
+	fbMainPageToken := ""
 	if cfg != nil {
 		fbPageID = cfg.FBPageID
 		fbPageToken = cfg.FBPageToken
 		mediaBase = cfg.MediaBaseURL
+		fbMainPageID = cfg.FBMainPageID
+		fbMainPageToken = cfg.FBMainPageToken
 	}
 
 	return &SaleV1Handler{
 		DB:          db,
 		Cfg:         cfg,
 		Storage:     services.NewStorageService(),
-		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase),
+		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase, fbMainPageID, fbMainPageToken),
 		templateSet: ts,
 	}
 }
@@ -671,7 +675,7 @@ func (h *SaleV1Handler) AvailableProducts(c *gin.Context) {
 			ID:            p.ID,
 			Name:          strVal(p.Name),
 			Price:         int64Val(p.Price),
-			DisplayThumb:  strVal(p.PathThumb),
+			DisplayThumb:  getDisplayThumb(&p),
 			PathThumb:     strVal(p.PathThumb),
 			FBPostID:      strVal(p.FBPostID),
 			SizeFormatted: sizeStr,
@@ -739,6 +743,9 @@ func (h *SaleV1Handler) ProductDetail(c *gin.Context) {
 		if file, err := c.FormFile("banner"); err == nil && file != nil {
 			if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
 				p.PathThumb = strPtr(uploadedPath)
+				if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+					p.ImageThumbScale = strPtr(scaledPath)
+				}
 			}
 		}
 
@@ -875,6 +882,9 @@ func (h *SaleV1Handler) ProductCreate(c *gin.Context) {
 		if file, err := c.FormFile("banner"); err == nil && file != nil {
 			if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
 				p.PathThumb = strPtr(uploadedPath)
+				if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+					p.ImageThumbScale = strPtr(scaledPath)
+				}
 			}
 		}
 
@@ -1140,6 +1150,9 @@ func (h *SaleV1Handler) ProductUpload(c *gin.Context) {
 					var prod models.Product
 					if err := h.DB.Where("name = ? AND type = ?", cleanName, pType).First(&prod).Error; err == nil {
 						prod.PathThumb = strPtr(uploadedPath)
+						if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+							prod.ImageThumbScale = strPtr(scaledPath)
+						}
 						h.DB.Save(&prod)
 					}
 				}
@@ -1185,7 +1198,11 @@ func (h *SaleV1Handler) ProductBatchUploadSingle(c *gin.Context) {
 	matched := false
 	if err := h.DB.Where("name = ?", baseName).First(&prod).Error; err == nil {
 		prod.PathThumb = strPtr(uploadedPath)
-		prod.ImageThumbScale = strPtr(uploadedPath)
+		if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+			prod.ImageThumbScale = strPtr(scaledPath)
+		} else {
+			prod.ImageThumbScale = strPtr(uploadedPath)
+		}
 		if pType != "" {
 			prod.Type = strPtr(pType)
 		}

@@ -89,10 +89,21 @@ Hệ thống sử dụng Cloudinary để lưu trữ và phân phối hình ản
 - **Master Admin Password**: `vintage2026` (Ngoài ra chấp nhận các mật khẩu mặc định của các tài khoản có sẵn trong DB: `admin`, `123456`, `vintagealwaystrue`).
 - **Auth Token Secret**: `vintage-always-true-secret-key-2026` (HMAC SHA-256).
 
-### 2.6. Tích hợp Facebook Graph API (Auto-post & Cập nhật SOLD)
-- **FB Page ID**: `1132727476600909`
-- **FB Page Token**: `EAATKmSkHta0BR50o5b5kYpy7Yd71qm101h70sktZACFuCahua9n6AHrWZCmvqAlWFa2LVUJAKZBRBzZC841azGfgtHkRtGBbvCb3A3gnwf0A57QO4yQalUDTpfgHiQwaqc8vXW0GrtJIrEwitf9ACBOQQEZBChmzRZCoKlY0mNao5ta2tBrNClpBd8DrtY5XEvV2PD`
+### 2.6. Tích hợp Facebook Graph API (Auto-post Page Catalog & Đồng bộ Album Page Chính)
+Hệ thống quản lý tích hợp 2 Fanpage:
+- **Page B (Page Catalog - Đăng bài viết chi tiết sản phẩm)**:
+  - **Tên Page**: `Vintage Always True Catalog`
+  - **FB Page ID**: `1132727476600909`
+  - **FB Page Token**: `EAATKmSkHta0BR50o5b5kYpy7Yd71qm101h70sktZACFuCahua9n6AHrWZCmvqAlWFa2LVUJAKZBRBzZC841azGfgtHkRtGBbvCb3A3gnwf0A57QO4yQalUDTpfgHiQwaqc8vXW0GrtJIrEwitf9ACBOQQEZBChmzRZCoKlY0mNao5ta2tBrNClpBd8DrtY5XEvV2PD`
+- **Page A (Page Chính - Đồng bộ Album theo danh mục & Gỡ khi SOLD)**:
+  - **Tên Page**: `Vintage Always True House`
+  - **FB Main Page ID**: `236648362875702`
+  - **FB Main Page Token**: `EAATKmSkHta0BS5jJNyb5q7JXm1X9etMJVZAsCRk0kZA7Iqr8RKZAuulVH6wWEq6awz1BRLfcBIGDCaMBmy7FWNQxtIAudZCpaEj2vHpLGHZBnfwA63wOxZBW2BbgYBmftH8FdhjApcXxnZCxTG8TWIZChrrltqKjsuTAOG9ZCxfScdRCjviLESt69aYuMVHHG4xhIgxmao2FDugmZAupIOq3MbuYRIwhyMqGAIUe7VGh8ZD`
 - **Graph API Base URL**: `https://graph.facebook.com/v19.0/`
+- **Cơ chế hoạt động**:
+  - Khi tạo/upload SP mới: Đăng bài chi tiết lên Page B (`fb_post_id`), đồng thời upload ảnh đại diện vào Album tương ứng trên Page A với `no_story=true` (không tạo feed story làm rối Page Chính) kèm link trỏ sang bài viết Page B, lưu `fb_album_photo_id`.
+  - Khi sản phẩm SOLD OUT: Đổi status post Page B thành `⛔ ĐÃ BÁN`, đồng thời gọi Graph API `DELETE /{fb_album_photo_id}` gỡ hẳn ảnh khỏi Album Page A để khách chỉ thấy sản phẩm còn hàng.
+  - Quản lý danh mục & Album: Bảng `categories` mapping `code` (`TROUSERS`, `BLAZER`,...) với `fb_album_id`. API hỗ trợ: `GET /salev2/api/categories`, `PUT /salev2/api/categories/:id`, `GET /salev2/api/facebook/albums`.
 
 ---
 
@@ -197,6 +208,16 @@ expect {
 11. **Công cụ Backfill đồng bộ Facebook (`cmd/backfill_fb`)**:
    - Chạy lệnh CLI: `go run cmd/backfill_fb/main.go [flags]`
    - Hỗ trợ: `-session <ID>` (hoặc `-latest-session`), `-product <Code>`, `-type <Type>`, `-dry-run` (xem trước), `-delay <Sec>` (giãn cách tránh rate limit).
+12. **Công cụ Backfill Facebook Album theo Danh mục (`cmd/backfill_album`)**:
+   - Đưa sản phẩm AVAILABLE vào Album danh mục trên Page Chính (`no_story=true`, ảnh gốc full resolution `BestQualityThumb`).
+   - Tự động sắp xếp sản phẩm mới nhất nằm trên cùng Album.
+   - Chạy: `go run cmd/backfill_album/main.go -type TROUSERS -delay 4`
+13. **Công cụ Backfill Thumbnail Scale (`cmd/generate_thumbs`)**:
+   - Tự động resize ảnh 400px chất lượng 75% lưu `_scaled.jpg` đẩy lên Cloudinary để Web lướt siêu nhẹ.
+   - Hỗ trợ đa luồng worker: `go run cmd/generate_thumbs/main.go -status AVAILABLE -workers 5`
+14. **Công cụ Dọn dẹp ảnh sản phẩm đã bán (`cmd/clean_sold_images`)**:
+   - Tự động xóa cả ảnh gốc (`path_thumb`) lẫn thumbnail scale (`image_thumb_scale`) trên Cloudinary & Storage cho các đơn đã bán > 60 ngày hoặc COMPLETED.
+   - Chạy: `go run cmd/clean_sold_images/main.go -days 60` (kèm `--dry-run` để xem trước).
 
 ---
 

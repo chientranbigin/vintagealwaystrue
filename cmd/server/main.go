@@ -204,6 +204,14 @@ func main() {
 		api.GET("/expenses", v2.Expenses)
 		api.POST("/expenses", v2.StoreExpense)
 		api.DELETE("/expenses/:id", v2.DestroyExpense)
+
+		// Category & Facebook Album Routes
+		api.GET("/categories", v2.Categories)
+		api.POST("/categories", v2.StoreCategory)
+		api.PUT("/categories/:id", v2.UpdateCategory)
+		api.GET("/facebook/albums", v2.FacebookAlbums)
+		api.POST("/facebook/albums/create", v2.CreateFacebookAlbum)
+		api.POST("/facebook/sync-album/:id", v2.ManualSyncProductAlbum)
 	}
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)

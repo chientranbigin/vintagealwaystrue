@@ -14,6 +14,7 @@ type Product struct {
 	PathThumb          *string        `json:"path_thumb"`
 	ImageThumbScale    *string        `json:"image_thumb_scale"`
 	FBPostID           *string        `gorm:"column:fb_post_id" json:"fb_post_id"`
+	FBAlbumPhotoID     *string        `gorm:"column:fb_album_photo_id" json:"fb_album_photo_id"`
 	Status             *string        `json:"status"`
 	CreatedAt          *time.Time     `json:"created_at"`
 	UpdatedAt          *time.Time     `json:"updated_at"`
@@ -26,6 +27,7 @@ type Product struct {
 	Sizes              []Size         `gorm:"foreignKey:ProductID" json:"sizes"`
 	LatestUpload       *string        `gorm:"->;-:migration" json:"latest_upload,omitempty"`
 	ImageThumbScaleURL *string        `gorm:"-" json:"image_thumb_scale_url"`
+	DisplayThumbURL    *string        `gorm:"-" json:"display_thumb"`
 }
 
 // DisplayThumb returns ImageThumbScale if present, otherwise PathThumb
@@ -35,6 +37,27 @@ func (p Product) DisplayThumb() string {
 	}
 	if p.PathThumb != nil {
 		return *p.PathThumb
+	}
+	return ""
+}
+
+// BestQualityThumb returns the original full-resolution image (PathThumb) for Facebook uploads instead of low-res thumbnail
+func (p Product) BestQualityThumb() string {
+	if p.PathThumb != nil && *p.PathThumb != "" {
+		return *p.PathThumb
+	}
+	if len(p.Images) > 0 {
+		for _, img := range p.Images {
+			if img.IsMain && img.FilePath != "" {
+				return img.FilePath
+			}
+		}
+		if p.Images[0].FilePath != "" {
+			return p.Images[0].FilePath
+		}
+	}
+	if p.ImageThumbScale != nil && *p.ImageThumbScale != "" {
+		return *p.ImageThumbScale
 	}
 	return ""
 }
@@ -130,6 +153,16 @@ type User struct {
 	Name      string     `json:"name"`
 	Email     string     `json:"email"`
 	Password  *string    `json:"-"`
+	CreatedAt *time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+}
+
+type Category struct {
+	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code      string     `gorm:"type:varchar(50);uniqueIndex" json:"code"`
+	Name      string     `gorm:"type:varchar(100)" json:"name"`
+	FBAlbumID *string    `gorm:"column:fb_album_id;type:varchar(100)" json:"fb_album_id"`
+	IsActive  bool       `gorm:"default:true" json:"is_active"`
 	CreatedAt *time.Time `json:"created_at"`
 	UpdatedAt *time.Time `json:"updated_at"`
 }

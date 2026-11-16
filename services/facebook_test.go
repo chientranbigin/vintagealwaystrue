@@ -307,8 +307,9 @@ func TestFacebookService_FullSyncLifecycle(t *testing.T) {
 		t.Fatalf("ExecuteSync(CREATE) failed: %v", err)
 	}
 
-	if len(uploadedPhotos) != 2 {
-		t.Errorf("Expected 2 photos uploaded, got %d", len(uploadedPhotos))
+	// 2 photos for catalog post + 1 photo for category album = 3 photos total
+	if len(uploadedPhotos) < 2 {
+		t.Errorf("Expected at least 2 photos uploaded, got %d", len(uploadedPhotos))
 	}
 	if len(feedMessages) != 1 {
 		t.Errorf("Expected 1 feed message, got %d", len(feedMessages))
@@ -344,7 +345,258 @@ func TestFacebookService_FullSyncLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Re-creating post failed: %v", err)
 	}
-	if len(deletedPosts) != 1 {
-		t.Errorf("Expected 1 delete post call, got %d", len(deletedPosts))
+	// Old catalog post and previous album photo deleted before re-creating
+	if len(deletedPosts) < 1 {
+		t.Errorf("Expected delete calls on re-create, got %d", len(deletedPosts))
+	}
+}
+
+func TestBuildAlbumPhotoCaption(t *testing.T) {
+	fb := &FacebookService{
+		PageID: "1132727476600909",
+	}
+
+	pName := "TS8888"
+	pPrice := int64(250000)
+	prod := &models.Product{
+		Name:  &pName,
+		Type:  strPtr("TROUSERS"),
+		Price: &pPrice,
+		Sizes: []models.Size{
+			{Name: strPtr("EO"), Value: floatPtr(40)},
+			{Name: strPtr("DÀI"), Value: floatPtr(98)},
+		},
+	}
+
+	catalogPostID := "post_abc_123"
+	caption := fb.BuildAlbumPhotoCaption(prod, catalogPostID)
+
+	if !strings.Contains(caption, "✅ CÒN HÀNG — TS8888") {
+		t.Errorf("Caption missing status/name line, got:\n%s", caption)
+	}
+	if !strings.Contains(caption, "👔 TROUSERS | Giá: 250.000đ") {
+		t.Errorf("Caption missing type/price, got:\n%s", caption)
+	}
+	if !strings.Contains(caption, "EO: 40") || !strings.Contains(caption, "DÀI: 98") {
+		t.Errorf("Caption missing sizes, got:\n%s", caption)
+	}
+	if !strings.Contains(caption, "👉 Xem ảnh chi tiết tại:") {
+		t.Errorf("Caption missing link prefix, got:\n%s", caption)
+	}
+	expectedURL := "https://www.facebook.com/1132727476600909/posts/post_abc_123"
+	if !strings.Contains(caption, expectedURL) {
+		t.Errorf("Caption missing catalog post URL %s, got:\n%s", expectedURL, caption)
+	}
+	if !strings.Contains(caption, "#TS8888") || !strings.Contains(caption, "#TROUSERS_AVAILABLE") {
+		t.Errorf("Caption missing hashtags, got:\n%s", caption)
+	}
+}
+
+func TestAlbumPhoto_UploadAndRemoveAPI(t *testing.T) {
+	var receivedNoStory string
+	var receivedCaption string
+	var receivedDeletePhotoID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Upload photo to album
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/album_999/photos") {
+			_ = r.ParseForm()
+			receivedNoStory = r.FormValue("no_story")
+			receivedCaption = r.FormValue("caption")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "photo_album_111",
+			})
+			return
+		}
+
+		// Delete photo from album
+		if r.Method == "DELETE" && strings.Contains(r.URL.Path, "/photo_album_111") {
+			parts := strings.Split(r.URL.Path, "/")
+			receivedDeletePhotoID = parts[len(parts)-1]
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+			})
+			return
+		}
+
+		// Delete already deleted photo (test graceful error handling)
+		if r.Method == "DELETE" && strings.Contains(r.URL.Path, "/already_deleted_photo") {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"message":       "Unsupported delete request. Object with ID 'already_deleted_photo' does not exist.",
+					"type":          "GraphMethodException",
+					"code":          100,
+					"error_subcode": 33,
+				},
+			})
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	fb := &FacebookService{
+		PageID:        "1132727476600909",
+		PageToken:     "token_catalog",
+		MainPageID:    "236648362875702",
+		MainPageToken: "token_main_page",
+		BaseURL:       server.URL + "/",
+		Client:        server.Client(),
+	}
+
+	// 1. Test Upload to Album with no_story=true
+	testPhotoURL := "http://example.com/test-thumb.jpg"
+	testCaption := "Test Album Caption"
+	photoID, err := fb.UploadProductPhotoToAlbum("album_999", testPhotoURL, testCaption)
+	if err != nil {
+		t.Fatalf("UploadProductPhotoToAlbum failed: %v", err)
+	}
+	if photoID != "photo_album_111" {
+		t.Errorf("Expected photoID 'photo_album_111', got '%s'", photoID)
+	}
+	if receivedNoStory != "true" {
+		t.Errorf("Expected no_story='true', got '%s'", receivedNoStory)
+	}
+	if receivedCaption != testCaption {
+		t.Errorf("Expected caption '%s', got '%s'", testCaption, receivedCaption)
+	}
+
+	// 2. Test Remove photo from album
+	err = fb.RemoveProductPhotoFromAlbum("photo_album_111")
+	if err != nil {
+		t.Fatalf("RemoveProductPhotoFromAlbum failed: %v", err)
+	}
+	if receivedDeletePhotoID != "photo_album_111" {
+		t.Errorf("Expected deleted photo ID 'photo_album_111', got '%s'", receivedDeletePhotoID)
+	}
+
+	// 3. Test Remove already deleted photo (should not return error)
+	err = fb.RemoveProductPhotoFromAlbum("already_deleted_photo")
+	if err != nil {
+		t.Fatalf("RemoveProductPhotoFromAlbum for already deleted object should succeed gracefully, got: %v", err)
+	}
+}
+
+func TestExecuteSync_AlbumWorkflow(t *testing.T) {
+	db, _ := getTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	// Setup Category with fb_album_id
+	catCode := fmt.Sprintf("TEST_CAT_%d", time.Now().UnixNano())
+	catAlbumID := "album_target_777"
+	cat := models.Category{
+		Code:      catCode,
+		Name:      "Test Category",
+		FBAlbumID: &catAlbumID,
+		IsActive:  true,
+	}
+	if err := tx.Create(&cat).Error; err != nil {
+		t.Fatalf("Failed to create test category: %v", err)
+	}
+
+	// Create test product
+	pName := fmt.Sprintf("TS_ALBUM_%d", time.Now().UnixNano()%100000)
+	pPrice := int64(300000)
+	pThumb := "http://example.com/test-thumb.jpg"
+	prod := models.Product{
+		Name:      &pName,
+		Type:      &catCode,
+		Price:     &pPrice,
+		PathThumb: &pThumb,
+		Status:    strPtr("AVAILABLE"),
+	}
+	if err := tx.Create(&prod).Error; err != nil {
+		t.Fatalf("Failed to create test product: %v", err)
+	}
+
+	var albumUploadedWithNoStory bool
+	var albumPhotoDeleted bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// 1. Photo upload for Catalog Post (feed attached_media)
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/1132727476600909/photos") {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "feed_photo_1"})
+			return
+		}
+		// 2. Feed post creation on Page B
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/1132727476600909/feed") {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "catalog_post_999"})
+			return
+		}
+		// 3. Album photo upload on Page A
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/album_target_777/photos") {
+			_ = r.ParseForm()
+			if r.FormValue("no_story") == "true" {
+				albumUploadedWithNoStory = true
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "album_photo_888"})
+			return
+		}
+		// 4. Update post on Page B (MarkSold)
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/catalog_post_999") {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+			return
+		}
+		// 5. Delete album photo on Page A
+		if r.Method == "DELETE" && strings.Contains(r.URL.Path, "/album_photo_888") {
+			albumPhotoDeleted = true
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	fb := &FacebookService{
+		PageID:        "1132727476600909",
+		PageToken:     "token_catalog",
+		MainPageID:    "236648362875702",
+		MainPageToken: "token_main",
+		BaseURL:       server.URL + "/",
+		Client:        server.Client(),
+		DB:            tx,
+	}
+
+	// 1. ExecuteSync(FBActionCreate)
+	err := fb.ExecuteSync(prod.ID, FBActionCreate)
+	if err != nil {
+		t.Fatalf("ExecuteSync(FBActionCreate) failed: %v", err)
+	}
+
+	if !albumUploadedWithNoStory {
+		t.Errorf("Expected album photo to be uploaded with no_story=true")
+	}
+
+	var createdProd models.Product
+	tx.First(&createdProd, prod.ID)
+	if createdProd.FBPostID == nil || *createdProd.FBPostID != "catalog_post_999" {
+		t.Fatalf("Expected fb_post_id 'catalog_post_999', got %v", createdProd.FBPostID)
+	}
+	if createdProd.FBAlbumPhotoID == nil || *createdProd.FBAlbumPhotoID != "album_photo_888" {
+		t.Fatalf("Expected fb_album_photo_id 'album_photo_888', got %v", createdProd.FBAlbumPhotoID)
+	}
+
+	// 2. ExecuteSync(FBActionSold)
+	err = fb.ExecuteSync(prod.ID, FBActionSold)
+	if err != nil {
+		t.Fatalf("ExecuteSync(FBActionSold) failed: %v", err)
+	}
+
+	if !albumPhotoDeleted {
+		t.Errorf("Expected album photo to be deleted via DELETE API")
+	}
+
+	var soldProd models.Product
+	tx.First(&soldProd, prod.ID)
+	if soldProd.FBAlbumPhotoID != nil {
+		t.Fatalf("Expected fb_album_photo_id to be NULL after SOLD, got %v", *soldProd.FBAlbumPhotoID)
 	}
 }

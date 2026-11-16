@@ -40,17 +40,21 @@ func NewSaleV2Handler(db *gorm.DB, cfg *config.Config) *SaleV2Handler {
 	fbPageID := ""
 	fbPageToken := ""
 	mediaBase := ""
+	fbMainPageID := ""
+	fbMainPageToken := ""
 	if cfg != nil {
 		fbPageID = cfg.FBPageID
 		fbPageToken = cfg.FBPageToken
 		mediaBase = cfg.MediaBaseURL
+		fbMainPageID = cfg.FBMainPageID
+		fbMainPageToken = cfg.FBMainPageToken
 	}
 	h := &SaleV2Handler{
 		DB:          db,
 		Cfg:         cfg,
 		Storage:     services.NewStorageService(),
 		Vision:      services.NewVisionService(),
-		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase),
+		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase, fbMainPageID, fbMainPageToken),
 		UploadQueue: make(chan SmartUploadJob, 100),
 	}
 	h.StartWorkers(3)
@@ -95,7 +99,13 @@ func (h *SaleV2Handler) formatProduct(p *models.Product) {
 	}
 	if p.ImageThumbScale != nil && *p.ImageThumbScale != "" {
 		formatted := h.FormatImagePath(*p.ImageThumbScale)
+		p.ImageThumbScale = &formatted
 		p.ImageThumbScaleURL = &formatted
+	}
+	if p.ImageThumbScaleURL != nil && *p.ImageThumbScaleURL != "" {
+		p.DisplayThumbURL = p.ImageThumbScaleURL
+	} else if p.PathThumb != nil && *p.PathThumb != "" {
+		p.DisplayThumbURL = p.PathThumb
 	}
 	for i := range p.Images {
 		p.Images[i].FilePath = h.FormatImagePath(p.Images[i].FilePath)
@@ -965,6 +975,9 @@ func (h *SaleV2Handler) StoreProduct(c *gin.Context) {
 	if file, err := c.FormFile("banner"); err == nil && file != nil {
 		if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
 			product.PathThumb = &uploadedPath
+			if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+				product.ImageThumbScale = &scaledPath
+			}
 		}
 	}
 
@@ -1115,6 +1128,10 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 		if uploadedPath, err := h.Storage.Upload(file); err == nil && uploadedPath != "" {
 			product.PathThumb = &uploadedPath
 			h.DB.Model(&product).Update("path_thumb", uploadedPath)
+			if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(uploadedPath); sErr == nil && scaledPath != "" {
+				product.ImageThumbScale = &scaledPath
+				h.DB.Model(&product).Update("image_thumb_scale", scaledPath)
+			}
 		}
 	}
 
@@ -1129,6 +1146,9 @@ func (h *SaleV2Handler) DestroyProduct(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		return
 	}
+
+	// Delete both original (path_thumb) and scaled thumbnail (image_thumb_scale) along with detail images
+	h.deleteOldProductImages(&product, "", nil)
 
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		tx.Where("product_id = ?", product.ID).Delete(&models.ProductImage{})
@@ -2107,7 +2127,11 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 		existing.Price = &price
 	}
 	existing.PathThumb = &job.MainImagePath
-	existing.ImageThumbScale = nil
+	if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(job.MainImagePath); sErr == nil && scaledPath != "" {
+		existing.ImageThumbScale = &scaledPath
+	} else {
+		existing.ImageThumbScale = nil
+	}
 	h.DB.Save(&existing)
 
 	// Step 2: Attaching images
@@ -2381,6 +2405,194 @@ func (h *SaleV2Handler) DestroyExpense(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ==========================================
+// Category & Facebook Album Management APIs
+// ==========================================
+
+func (h *SaleV2Handler) Categories(c *gin.Context) {
+	var categories []models.Category
+	if err := h.DB.Order("id ASC").Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch categories"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": categories})
+}
+
+type UpdateCategoryInput struct {
+	Name      *string `json:"name"`
+	FBAlbumID *string `json:"fb_album_id"`
+	IsActive  *bool   `json:"is_active"`
+}
+
+func (h *SaleV2Handler) UpdateCategory(c *gin.Context) {
+	id := c.Param("id")
+	var cat models.Category
+	if err := h.DB.First(&cat, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+		return
+	}
+
+	var input UpdateCategoryInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if input.Name != nil {
+		cat.Name = strings.TrimSpace(*input.Name)
+	}
+	if input.FBAlbumID != nil {
+		cleanAlbumID := strings.TrimSpace(*input.FBAlbumID)
+		if cleanAlbumID == "" {
+			cat.FBAlbumID = nil
+		} else {
+			cat.FBAlbumID = &cleanAlbumID
+		}
+	}
+	if input.IsActive != nil {
+		cat.IsActive = *input.IsActive
+	}
+
+	if err := h.DB.Save(&cat).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category"})
+		return
+	}
+
+	c.JSON(http.StatusOK, cat)
+}
+
+type StoreCategoryInput struct {
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	FBAlbumID *string `json:"fb_album_id"`
+}
+
+func (h *SaleV2Handler) StoreCategory(c *gin.Context) {
+	var input StoreCategoryInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	code := strings.ToUpper(strings.TrimSpace(input.Code))
+	name := strings.TrimSpace(input.Name)
+	if code == "" || name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Code and Name are required"})
+		return
+	}
+
+	cat := models.Category{
+		Code:     code,
+		Name:     name,
+		IsActive: true,
+	}
+	if input.FBAlbumID != nil && strings.TrimSpace(*input.FBAlbumID) != "" {
+		alb := strings.TrimSpace(*input.FBAlbumID)
+		cat.FBAlbumID = &alb
+	}
+
+	if err := h.DB.Create(&cat).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create category: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, cat)
+}
+
+func (h *SaleV2Handler) FacebookAlbums(c *gin.Context) {
+	if h.FB == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Facebook service not configured"})
+		return
+	}
+	pageID := c.Query("page_id")
+	albums, err := h.FB.GetPageAlbums(pageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": albums})
+}
+
+type CreateAlbumInput struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+func (h *SaleV2Handler) CreateFacebookAlbum(c *gin.Context) {
+	if h.FB == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Facebook service not configured"})
+		return
+	}
+	var input CreateAlbumInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Album name is required"})
+		return
+	}
+
+	albumID, err := h.FB.CreateAlbum(h.FB.MainPageID, name, input.Description)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"id": albumID, "name": name})
+}
+
+func (h *SaleV2Handler) ManualSyncProductAlbum(c *gin.Context) {
+	id := c.Param("id")
+	var product models.Product
+	if err := h.DB.Preload("Sizes").Preload("Images").First(&product, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		return
+	}
+
+	if product.Type == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Product has no category/type"})
+		return
+	}
+
+	var cat models.Category
+	if err := h.DB.Where("code = ? AND is_active = true", *product.Type).First(&cat).Error; err != nil || cat.FBAlbumID == nil || *cat.FBAlbumID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No FB Album mapped for category " + *product.Type})
+		return
+	}
+
+	thumb := product.BestQualityThumb()
+	if thumb == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Product has no thumbnail image"})
+		return
+	}
+
+	// Delete previous album photo if existing
+	if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
+		_ = h.FB.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID)
+	}
+
+	catalogPostID := ""
+	if product.FBPostID != nil {
+		catalogPostID = *product.FBPostID
+	}
+	caption := h.FB.BuildAlbumPhotoCaption(&product, catalogPostID)
+
+	photoID, err := h.FB.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload photo: " + err.Error()})
+		return
+	}
+
+	h.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
+	c.JSON(http.StatusOK, gin.H{
+		"success":            true,
+		"fb_album_photo_id":  photoID,
+		"album_id":           *cat.FBAlbumID,
+	})
 }
 
 
