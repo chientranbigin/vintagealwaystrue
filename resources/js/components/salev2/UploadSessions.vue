@@ -220,6 +220,9 @@
         <el-button type="warning" size="small" icon="el-icon-time" :disabled="!latestSelected.length" :loading="settingOnHold" @click="bulkSetOnHold">
           Set ON_HOLD <span v-if="latestSelected.length">({{ latestSelected.length }})</span>
         </el-button>
+        <el-button type="success" size="small" icon="el-icon-check" :disabled="!latestSelected.length" :loading="settingAvailable" @click="bulkSetAvailable">
+          Set AVAILABLE <span v-if="latestSelected.length">({{ latestSelected.length }})</span>
+        </el-button>
         <el-button size="small" type="danger" plain icon="el-icon-delete" v-if="latestSelected.length" @click="latestSelected = []">Clear</el-button>
       </div>
 
@@ -300,6 +303,7 @@ export default {
       onlyAvailable: true,
       latestSelected: [],
       settingOnHold: false,
+      settingAvailable: false,
       latestFilterType: '',
       soldDates: [],
       loadingSold: false,
@@ -423,6 +427,20 @@ export default {
         this.$message.error('Failed to update status');
       } finally {
         this.settingOnHold = false;
+      }
+    },
+    async bulkSetAvailable() {
+      if (!this.latestSelected.length) return;
+      this.settingAvailable = true;
+      try {
+        await Promise.all(this.latestSelected.map(p => axios.post(`/salev2/api/product/${p.id}/update`, { status: 'AVAILABLE' })));
+        this.$message.success(`${this.latestSelected.length} product(s) set to AVAILABLE`);
+        this.latestSelected = [];
+        this.fetchLatestProducts(this.latestPage);
+      } catch (err) {
+        this.$message.error('Failed to update status');
+      } finally {
+        this.settingAvailable = false;
       }
     },
 

@@ -1048,6 +1048,7 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 		Price       *int64  `json:"price" form:"price"`
 		Description *string `json:"description" form:"description"`
 		Type        *string `json:"type" form:"type"`
+		Status      *string `json:"status" form:"status"`
 		Sizes       []struct {
 			Name  string   `json:"name"`
 			Value *float64 `json:"value"`
@@ -1059,6 +1060,8 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	var statusAction services.FacebookSyncAction
+
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if req.Price != nil {
 			product.Price = req.Price
@@ -1068,6 +1071,30 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 		}
 		if req.Type != nil && *req.Type != "" {
 			product.Type = req.Type
+		}
+		if req.Status != nil && *req.Status != "" {
+			normalized := strings.ToUpper(strings.TrimSpace(*req.Status))
+			if normalized == "AVAILABLE" || normalized == "ON_HOLD" || normalized == "SOLD" {
+				currentStatus := ""
+				if product.Status != nil {
+					currentStatus = *product.Status
+				}
+				if currentStatus != normalized {
+					statusCopy := normalized
+					product.Status = &statusCopy
+					if normalized == "ON_HOLD" {
+						statusAction = services.FBActionHold
+					} else if normalized == "AVAILABLE" {
+						statusAction = services.FBActionRevert
+					} else if normalized == "SOLD" {
+						statusAction = services.FBActionSold
+					}
+				} else if normalized == "ON_HOLD" && product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
+					statusAction = services.FBActionHold
+				} else if normalized == "AVAILABLE" && (product.FBAlbumPhotoID == nil || *product.FBAlbumPhotoID == "") {
+					statusAction = services.FBActionRevert
+				}
+			}
 		}
 
 		if err := tx.Save(&product).Error; err != nil {
@@ -1122,6 +1149,10 @@ func (h *SaleV2Handler) UpdateProduct(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if statusAction != "" && h.FB != nil {
+		h.FB.Dispatch(product.ID, statusAction)
 	}
 
 	if file, err := c.FormFile("banner"); err == nil && file != nil {

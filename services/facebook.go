@@ -26,6 +26,7 @@ const (
 	FBActionCreate FacebookSyncAction = "create"
 	FBActionSold   FacebookSyncAction = "sold"
 	FBActionRevert FacebookSyncAction = "revert"
+	FBActionHold   FacebookSyncAction = "hold"
 )
 
 type FacebookSyncJob struct {
@@ -287,6 +288,17 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 			} else {
 				s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", nil)
 				log.Printf("FB album photo removed: %s for %s\n", *product.FBAlbumPhotoID, pName)
+			}
+		}
+
+	case FBActionHold:
+		// Remove photo from Main Page Album A
+		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
+			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+				log.Printf("FB album photo remove on HOLD error (%s): %v\n", *product.FBAlbumPhotoID, err)
+			} else {
+				s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", nil)
+				log.Printf("FB album photo removed on HOLD: %s for %s\n", *product.FBAlbumPhotoID, pName)
 			}
 		}
 
