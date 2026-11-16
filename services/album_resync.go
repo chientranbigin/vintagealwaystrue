@@ -267,6 +267,16 @@ func (s *FacebookService) ProcessNextAlbumResyncJob() {
 
 	var job models.AlbumResyncJob
 	now := time.Now()
+
+	// Respect app-level Meta rate-limit cooldown: do not start any other job while cooling down
+	var coolingCount int64
+	s.DB.Model(&models.AlbumResyncJob{}).
+		Where("status = 'PAUSED_LIMIT' AND resume_at > ?", now).
+		Count(&coolingCount)
+	if coolingCount > 0 {
+		return
+	}
+
 	err := s.DB.Where("status IN ('PENDING', 'DELETING', 'UPLOADING') OR (status = 'PAUSED_LIMIT' AND resume_at <= ?)", now).
 		Order("id ASC").
 		First(&job).Error

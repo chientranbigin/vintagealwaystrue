@@ -171,6 +171,9 @@ func TestBuildMessage(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
+	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+
 	pName := fmt.Sprintf("TS_%d", time.Now().UnixNano()%100000)
 	product := models.Product{
 		Name:  strPtr(pName),
@@ -269,6 +272,9 @@ func TestFacebookService_FullSyncLifecycle(t *testing.T) {
 	db, _ := getTestDB(t)
 	tx := db.Begin()
 	defer tx.Rollback()
+
+	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
 
 	tmpDir := t.TempDir()
 	img1 := filepath.Join(tmpDir, "thumb.jpg")
@@ -487,6 +493,9 @@ func TestExecuteSync_AlbumWorkflow(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
+	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+
 	// Setup Category with fb_album_id
 	catCode := fmt.Sprintf("TEST_CAT_%d", time.Now().UnixNano())
 	catAlbumID := "album_target_777"
@@ -628,6 +637,9 @@ func TestExecuteSync_HoldAndReconcile(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
+	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+
 	photoID := "hold_photo_123"
 	holdProd := models.Product{
 		Name:            strPtr("GL_HOLD_TEST"),
@@ -735,6 +747,9 @@ func TestAlbumResync_RunPauseRun(t *testing.T) {
 
 	tx := db.Begin()
 	defer tx.Rollback()
+
+	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
 
 	catAlbumID := "album_resync_test_123"
 	cat := models.Category{
