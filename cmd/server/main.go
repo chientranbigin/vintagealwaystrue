@@ -212,6 +212,12 @@ func main() {
 		api.GET("/facebook/albums", v2.FacebookAlbums)
 		api.POST("/facebook/albums/create", v2.CreateFacebookAlbum)
 		api.POST("/facebook/sync-album/:id", v2.ManualSyncProductAlbum)
+
+		// Facebook Main Page Post & AI Content Routes
+		api.GET("/facebook/post-init", v2.FacebookPostInit)
+		api.GET("/facebook/category-products", v2.FacebookCategoryProducts)
+		api.POST("/facebook/generate-content", v2.FacebookGenerateContent)
+		api.POST("/facebook/publish-main-post", v2.FacebookPublishMainPost)
 	}
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)

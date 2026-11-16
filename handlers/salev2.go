@@ -34,6 +34,7 @@ type SaleV2Handler struct {
 	Storage     *services.StorageService
 	Vision      *services.VisionService
 	FB          *services.FacebookService
+	AIContent   *services.AIContentService
 	UploadQueue chan SmartUploadJob
 }
 
@@ -56,6 +57,7 @@ func NewSaleV2Handler(db *gorm.DB, cfg *config.Config) *SaleV2Handler {
 		Storage:     services.NewStorageService(),
 		Vision:      services.NewVisionService(),
 		FB:          services.NewFacebookService(db, fbPageID, fbPageToken, mediaBase, fbMainPageID, fbMainPageToken),
+		AIContent:   services.NewAIContentService(),
 		UploadQueue: make(chan SmartUploadJob, 100),
 	}
 	// Run 1 background worker to serialize heavy image processing and prevent OOM
@@ -2628,6 +2630,256 @@ func (h *SaleV2Handler) ManualSyncProductAlbum(c *gin.Context) {
 		"success":            true,
 		"fb_album_photo_id":  photoID,
 		"album_id":           *cat.FBAlbumID,
+	})
+}
+
+type CategoryPostInfo struct {
+	ID             uint   `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	FBAlbumID      string `json:"fb_album_id"`
+	AlbumURL       string `json:"album_url"`
+	AvailableCount int64  `json:"available_count"`
+}
+
+func (h *SaleV2Handler) FacebookPostInit(c *gin.Context) {
+	var categories []models.Category
+	if err := h.DB.Where("is_active = true").Order("id ASC").Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch categories"})
+		return
+	}
+
+	var results []CategoryPostInfo
+	for _, cat := range categories {
+		var count int64
+		h.DB.Model(&models.Product{}).
+			Where("type = ? AND (status = 'AVAILABLE' OR status = '' OR status IS NULL)", cat.Code).
+			Count(&count)
+
+		albumID := ""
+		albumURL := ""
+		if cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
+			albumID = *cat.FBAlbumID
+			albumURL = "https://www.facebook.com/media/set/?set=a." + albumID
+		}
+
+		results = append(results, CategoryPostInfo{
+			ID:             cat.ID,
+			Code:           cat.Code,
+			Name:           cat.Name,
+			FBAlbumID:      albumID,
+			AlbumURL:       albumURL,
+			AvailableCount: count,
+		})
+	}
+
+	// Suggest current season / upcoming holiday
+	now := time.Now()
+	month := now.Month()
+	suggestedEvent := "Mùa Thu Đông – Se lạnh cuối năm"
+	if month == 11 || month == 12 {
+		suggestedEvent = "Giáng Sinh (Noel) & Mùa đông cuối năm"
+	} else if month == 1 || month == 2 {
+		suggestedEvent = "Tết Nguyên Đán & Du xuân đầu năm"
+	} else if month >= 4 && month <= 7 {
+		suggestedEvent = "Mùa Hè Thu năng động"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"categories":      results,
+		"suggested_event": suggestedEvent,
+	})
+}
+
+func (h *SaleV2Handler) FacebookCategoryProducts(c *gin.Context) {
+	pType := strings.TrimSpace(c.Query("type"))
+	if pType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Type parameter is required"})
+		return
+	}
+
+	limit := 120
+	var products []models.Product
+	err := h.DB.Preload("Sizes").Preload("Images").
+		Where("type = ? AND (status = 'AVAILABLE' OR status = '' OR status IS NULL)", pType).
+		Order("id DESC").
+		Limit(limit).
+		Find(&products).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
+		return
+	}
+
+	type ProductItem struct {
+		ID       uint          `json:"id"`
+		Name     string        `json:"name"`
+		Type     string        `json:"type"`
+		Price    int64         `json:"price"`
+		ThumbURL string        `json:"thumb_url"`
+		Sizes    []models.Size `json:"sizes"`
+		Status   string        `json:"status"`
+	}
+
+	var items []ProductItem
+	mediaBase := h.Cfg.MediaBaseURL
+	if !strings.HasSuffix(mediaBase, "/") {
+		mediaBase += "/"
+	}
+
+	for _, p := range products {
+		name := ""
+		if p.Name != nil {
+			name = *p.Name
+		}
+		typ := ""
+		if p.Type != nil {
+			typ = *p.Type
+		}
+		price := int64(0)
+		if p.Price != nil {
+			price = *p.Price
+		}
+		status := "AVAILABLE"
+		if p.Status != nil && *p.Status != "" {
+			status = *p.Status
+		}
+
+		thumb := p.BestQualityThumb()
+		if thumb != "" && !strings.HasPrefix(thumb, "http://") && !strings.HasPrefix(thumb, "https://") {
+			thumb = mediaBase + strings.TrimPrefix(thumb, "storage/")
+		}
+
+		items = append(items, ProductItem{
+			ID:       p.ID,
+			Name:     name,
+			Type:     typ,
+			Price:    price,
+			ThumbURL: thumb,
+			Sizes:    p.Sizes,
+			Status:   status,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  items,
+		"count": len(items),
+	})
+}
+
+type GenerateContentInput struct {
+	CategoryCode string `json:"category_code"`
+	CategoryName string `json:"category_name"`
+	AlbumURL     string `json:"album_url"`
+	IncludeEvent bool   `json:"include_event"`
+	EventName    string `json:"event_name"`
+}
+
+func (h *SaleV2Handler) FacebookGenerateContent(c *gin.Context) {
+	var input GenerateContentInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if input.AlbumURL == "" && input.CategoryCode != "" {
+		var cat models.Category
+		if err := h.DB.Where("code = ?", input.CategoryCode).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
+			input.AlbumURL = "https://www.facebook.com/media/set/?set=a." + *cat.FBAlbumID
+		}
+	}
+
+	req := services.ContentGenerationRequest{
+		CategoryCode: input.CategoryCode,
+		CategoryName: input.CategoryName,
+		AlbumURL:     input.AlbumURL,
+		IncludeEvent: input.IncludeEvent,
+		EventName:    input.EventName,
+	}
+
+	content, err := h.AIContent.GeneratePostContent(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate content: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content": content,
+	})
+}
+
+type PublishMainPostInput struct {
+	Message    string `json:"message"`
+	ProductIDs []uint `json:"product_ids"`
+}
+
+func (h *SaleV2Handler) FacebookPublishMainPost(c *gin.Context) {
+	var input PublishMainPostInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if strings.TrimSpace(input.Message) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nội dung bài viết không được để trống"})
+		return
+	}
+
+	if len(input.ProductIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng chọn ít nhất 1 sản phẩm để đăng"})
+		return
+	}
+
+	if len(input.ProductIDs) > 120 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Số lượng ảnh vượt quá giới hạn tối đa 120 ảnh"})
+		return
+	}
+
+	// Fetch products and preserve exact order of ProductIDs
+	var products []models.Product
+	h.DB.Preload("Images").Where("id IN ?", input.ProductIDs).Find(&products)
+	prodMap := make(map[uint]models.Product)
+	for _, p := range products {
+		prodMap[p.ID] = p
+	}
+
+	var photoPaths []string
+	mediaBase := h.Cfg.MediaBaseURL
+	if !strings.HasSuffix(mediaBase, "/") {
+		mediaBase += "/"
+	}
+
+	for _, id := range input.ProductIDs {
+		p, exists := prodMap[id]
+		if !exists {
+			continue
+		}
+		thumb := p.BestQualityThumb()
+		if thumb == "" {
+			continue
+		}
+		if !strings.HasPrefix(thumb, "http://") && !strings.HasPrefix(thumb, "https://") {
+			thumb = mediaBase + strings.TrimPrefix(thumb, "storage/")
+		}
+		photoPaths = append(photoPaths, thumb)
+	}
+
+	if len(photoPaths) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Không tìm thấy ảnh hợp lệ cho các sản phẩm đã chọn"})
+		return
+	}
+
+	postID, err := h.FB.CreateMainPageFeedPost(input.Message, photoPaths)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi khi đăng bài lên Facebook: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"post_id":  postID,
+		"post_url": "https://www.facebook.com/" + postID,
+		"count":    len(photoPaths),
 	})
 }
 

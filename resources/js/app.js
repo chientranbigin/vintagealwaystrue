@@ -18,6 +18,7 @@ import SmartUpload from './components/salev2/SmartUpload.vue';
 import CustomerManager from './components/salev2/CustomerManager.vue';
 import OrderCreate from './components/salev2/OrderCreate.vue';
 import ProductCreate from './components/salev2/ProductCreate.vue';
+import FacebookPostCreator from './components/salev2/FacebookPostCreator.vue';
 const ProductEdit = require('./components/salev2/ProductEdit.vue').default;
 const OrderEdit = require('./components/salev2/OrderEdit.vue').default;
 const ExpenseManager = require('./components/salev2/ExpenseManager.vue').default;
@@ -30,6 +31,7 @@ const routes = [
     { path: '/salev2/orders', component: OrderManager, name: 'order-manager' },
     { path: '/salev2/upload', component: ProductBatchUpload, name: 'smart-upload' },
     { path: '/salev2/upload-sessions', component: UploadSessions, name: 'upload-sessions' },
+    { path: '/salev2/facebook-post', component: FacebookPostCreator, name: 'facebook-post' },
     { path: '/salev2/customers', component: CustomerManager, name: 'customer-manager' },
     { path: '/salev2/order/create', name: 'order-create', component: OrderCreate },
     { path: '/salev2/order/:id/edit', name: 'order-edit', component: OrderEdit },

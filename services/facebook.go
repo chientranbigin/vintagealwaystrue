@@ -1072,3 +1072,194 @@ func (s *FacebookService) CreateAlbum(pageID string, name string, description st
 	}
 	return res.ID, nil
 }
+
+// UploadMainPagePhoto uploads an unpublished photo to the Main Page for feed post attachment
+func (s *FacebookService) UploadMainPagePhoto(imagePath string) (string, error) {
+	pageID := s.MainPageID
+	if pageID == "" {
+		pageID = s.PageID
+	}
+	token := s.mainToken()
+	if token == "" {
+		return "", fmt.Errorf("facebook main page token is empty")
+	}
+
+	endpoint := fmt.Sprintf("%s%s/photos", s.apiURL(), url.PathEscape(pageID))
+
+	// If remote URL
+	if strings.HasPrefix(imagePath, "http://") || strings.HasPrefix(imagePath, "https://") {
+		data := url.Values{}
+		data.Set("url", imagePath)
+		data.Set("published", "false")
+		data.Set("access_token", token)
+
+		resp, err := s.Client.PostForm(endpoint, data)
+		if err == nil {
+			defer resp.Body.Close()
+			respBytes, rErr := io.ReadAll(resp.Body)
+			if rErr == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				var res struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(respBytes, &res) == nil && res.ID != "" {
+					return res.ID, nil
+				}
+			}
+		}
+
+		// Fallback: download bytes and upload via multipart source
+		dlResp, dlErr := s.Client.Get(imagePath)
+		if dlErr != nil {
+			return "", dlErr
+		}
+		defer dlResp.Body.Close()
+		if dlResp.StatusCode < 200 || dlResp.StatusCode >= 300 {
+			return "", fmt.Errorf("remote image inaccessible (HTTP %d): %s", dlResp.StatusCode, imagePath)
+		}
+		return s.uploadMainPhotoFromReader(pageID, token, dlResp.Body, filepath.Base(imagePath))
+	}
+
+	// Local file
+	localPath := imagePath
+	if !filepath.IsAbs(localPath) {
+		if _, err := os.Stat(localPath); os.IsNotExist(err) {
+			clean := strings.TrimPrefix(localPath, "/")
+			if _, err2 := os.Stat(clean); err2 == nil {
+				localPath = clean
+			} else if _, err3 := os.Stat("storage/app/public/" + strings.TrimPrefix(clean, "storage/")); err3 == nil {
+				localPath = "storage/app/public/" + strings.TrimPrefix(clean, "storage/")
+			} else if _, err4 := os.Stat("./storage/" + strings.TrimPrefix(clean, "storage/")); err4 == nil {
+				localPath = "./storage/" + strings.TrimPrefix(clean, "storage/")
+			}
+		}
+	}
+
+	if f, err := os.Open(localPath); err == nil {
+		defer f.Close()
+		return s.uploadMainPhotoFromReader(pageID, token, f, filepath.Base(localPath))
+	}
+
+	// If not found locally, try CDN
+	if s.MediaBase != "" {
+		remoteURL := s.MediaBase
+		if !strings.HasSuffix(remoteURL, "/") {
+			remoteURL += "/"
+		}
+		remoteURL += strings.TrimPrefix(imagePath, "storage/")
+		return s.UploadMainPagePhoto(remoteURL)
+	}
+
+	return "", fmt.Errorf("image not accessible at path %s", imagePath)
+}
+
+func (s *FacebookService) uploadMainPhotoFromReader(pageID, token string, r io.Reader, filename string) (string, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	_ = writer.WriteField("published", "false")
+	_ = writer.WriteField("access_token", token)
+	part, err := writer.CreateFormFile("source", filename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, r); err != nil {
+		return "", err
+	}
+	_ = writer.Close()
+
+	endpoint := fmt.Sprintf("%s%s/photos", s.apiURL(), url.PathEscape(pageID))
+	req, err := http.NewRequest("POST", endpoint, body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("facebook main photo upload error (%d): %s", resp.StatusCode, string(respBytes))
+	}
+
+	var res struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return "", err
+	}
+	return res.ID, nil
+}
+
+// CreateMainPageFeedPost creates a multi-photo post on the main page
+func (s *FacebookService) CreateMainPageFeedPost(message string, photoPaths []string) (string, error) {
+	pageID := s.MainPageID
+	if pageID == "" {
+		pageID = s.PageID
+	}
+	token := s.mainToken()
+	if token == "" {
+		return "", fmt.Errorf("facebook main page token is empty")
+	}
+
+	type attachedMedia struct {
+		MediaFBID string `json:"media_fbid"`
+	}
+	var mediaList []attachedMedia
+
+	for i, path := range photoPaths {
+		mediaID, err := s.UploadMainPagePhoto(path)
+		if err != nil {
+			log.Printf("Warning: failed to upload photo [%d] (%s): %v\n", i+1, path, err)
+			continue
+		}
+		mediaList = append(mediaList, attachedMedia{MediaFBID: mediaID})
+		time.Sleep(150 * time.Millisecond) // Throttling safe delay
+	}
+
+	if len(mediaList) == 0 {
+		return "", fmt.Errorf("no photos uploaded successfully for feed post")
+	}
+
+	mediaJSON, err := json.Marshal(mediaList)
+	if err != nil {
+		return "", err
+	}
+
+	endpoint := fmt.Sprintf("%s%s/feed", s.apiURL(), url.PathEscape(pageID))
+	data := url.Values{}
+	data.Set("message", message)
+	data.Set("attached_media", string(mediaJSON))
+	data.Set("access_token", token)
+
+	resp, err := s.Client.PostForm(endpoint, data)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("facebook feed post error (%d): %s", resp.StatusCode, string(respBytes))
+	}
+
+	var res struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return "", err
+	}
+
+	return res.ID, nil
+}

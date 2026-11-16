@@ -23,6 +23,7 @@
         <p class="text-slate-500 mt-1">Browse and share available inventory</p>
       </div>
       <div class="flex gap-3">
+        <el-button type="primary" plain icon="el-icon-s-promotion" @click="$router.push('/salev2/facebook-post')">Đăng FB Page chính</el-button>
         <el-button @click="$router.push('/salev2/product/create')" icon="el-icon-plus" plain>Create</el-button>
         <el-button type="primary" icon="el-icon-upload" @click="$router.push('/salev2/upload')">Bulk Upload</el-button>
       </div>
