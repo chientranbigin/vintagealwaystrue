@@ -323,6 +323,7 @@ export default {
         },
         batchComplete() {
             return this.groups.length > 0 && !this.pollInterval &&
+                this.groups.some(g => Boolean(g.sessionId)) &&
                 this.groups.every(g => !g.sessionId || g.status === 'SUCCESS' || g.status === 'ERROR');
         },
         successGroups() {
