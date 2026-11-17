@@ -365,7 +365,7 @@ export default {
       successDialog: false,
       publishedPostURL: '',
       includeEndCard: true,
-      endCardURL: 'https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg'
+      endCardURL: 'https://res.cloudinary.com/leq5n17r/image/upload/fl_strip_profile,q_auto:good,f_jpg/v1794836672/sale/1794836670476969000_ummmmmmm.jpg'
     };
   },
   computed: {

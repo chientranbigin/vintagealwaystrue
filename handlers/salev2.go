@@ -2696,7 +2696,7 @@ func (h *SaleV2Handler) FacebookPostInit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"categories":      results,
 		"suggested_event": suggestedEvent,
-		"end_card_url":    "https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
+		"end_card_url":    "https://res.cloudinary.com/leq5n17r/image/upload/fl_strip_profile,q_auto:good,f_jpg/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
 	})
 }
 
@@ -2907,7 +2907,7 @@ func (h *SaleV2Handler) FacebookPublishMainPost(c *gin.Context) {
 		}
 		caption := "👉 Để xem thêm sp và check sp còn hàng tại:\n" + albumURL
 		endCard = &services.FeedPhotoItem{
-			Path:    "https://res.cloudinary.com/leq5n17r/image/upload/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
+			Path:    "https://res.cloudinary.com/leq5n17r/image/upload/fl_strip_profile,q_auto:good,f_jpg/v1794836672/sale/1794836670476969000_ummmmmmm.jpg",
 			Caption: caption,
 		}
 	}
