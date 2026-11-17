@@ -182,6 +182,14 @@ func isFBRateLimitError(err error) bool {
 	return strings.Contains(msg, "(#4)") || strings.Contains(msg, "request limit reached")
 }
 
+func isFBTokenExpiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, `"code":190`) || strings.Contains(msg, "Error validating access token") || strings.Contains(msg, "Session has expired")
+}
+
 var backgroundWorkersOnce sync.Once
 
 func (s *FacebookService) StartWorker() {
@@ -953,12 +961,33 @@ func (s *FacebookService) UploadAlbumPhotoWithFailover(albumID string, imagePath
 	}
 
 	photoID, usagePct, err := s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.tokenForApp(appIdx))
+	if err != nil && isFBTokenExpiredError(err) && appIdx == 2 {
+		log.Printf("⚠️ App 2 token đã hết hạn (Error 190), tự động tắt App 2 và quay về App 1!\n")
+		s.appMu.Lock()
+		s.MainPageToken2 = ""
+		s.appMu.Unlock()
+		if fallbackIdx := s.pickAvailableUploadApp(2); fallbackIdx == 1 {
+			pID, uPct, e := s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.tokenForApp(1))
+			if e != nil && isFBRateLimitError(e) {
+				s.markAppRateLimited(1)
+			}
+			return pID, 1, uPct, e
+		}
+		return "", 1, 100, fmt.Errorf("facebook album photo upload error (403): (#4) Application request limit reached (App 2 expired, App 1 in cooldown)")
+	}
 	if err != nil && isFBRateLimitError(err) {
 		s.markAppRateLimited(appIdx)
 		otherIdx := s.pickAvailableUploadApp(appIdx)
 		if otherIdx != 0 {
 			log.Printf("🔄 App %d chạm rate limit (#4), tự động chuyển sang App %d ngay lập tức!\n", appIdx, otherIdx)
 			photoID2, usagePct2, err2 := s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.tokenForApp(otherIdx))
+			if err2 != nil && isFBTokenExpiredError(err2) && otherIdx == 2 {
+				log.Printf("⚠️ App 2 token đã hết hạn (Error 190), tự động tắt App 2 và tạm nghỉ theo App 1!\n")
+				s.appMu.Lock()
+				s.MainPageToken2 = ""
+				s.appMu.Unlock()
+				return "", appIdx, usagePct, err // Return original #4 rate-limit error so job pauses instead of failing
+			}
 			if err2 != nil && isFBRateLimitError(err2) {
 				s.markAppRateLimited(otherIdx)
 			}
@@ -1008,9 +1037,11 @@ func (s *FacebookService) uploadAlbumPhotoWithToken(albumID string, imagePath st
 					return res.ID, usagePct, nil
 				}
 			}
-			// Do not fall back to multipart upload if Facebook rate-limited us
-			if resp.StatusCode == 403 || strings.Contains(string(respBytes), "(#4)") || strings.Contains(string(respBytes), "request limit reached") {
-				return "", usagePct, fmt.Errorf("facebook album photo upload error (%d): %s", resp.StatusCode, string(respBytes))
+			// Do not fall back to multipart upload if Facebook rate-limited or rejected our token
+			respStr := string(respBytes)
+			if resp.StatusCode == 403 || strings.Contains(respStr, "(#4)") || strings.Contains(respStr, "request limit reached") ||
+				strings.Contains(respStr, `"code":190`) || strings.Contains(respStr, "OAuthException") {
+				return "", usagePct, fmt.Errorf("facebook album photo upload error (%d): %s", resp.StatusCode, respStr)
 			}
 		}
 

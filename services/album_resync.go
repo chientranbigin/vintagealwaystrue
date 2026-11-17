@@ -390,6 +390,12 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 					s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Cả 2 App đều chạm rate limit (#4) khi tải ảnh lên. Tự động chạy tiếp sau 45 phút.")
 					return
 				}
+				if isFBTokenExpiredError(err) {
+					job.Status = "FAILED"
+					job.LastError = "Token Facebook đã hết hạn (Error 190). Vui lòng cập nhật lại token."
+					s.saveResyncProgress(job, deleteIDs, uploadIDs)
+					return
+				}
 				log.Printf("AlbumResync [%s] error uploading product %d: %v\n", job.CategoryCode, prodID, err)
 				job.LastError = err.Error()
 				uploadIDs = uploadIDs[1:]
@@ -413,12 +419,16 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 	}
 
 	now := time.Now()
-	job.Status = "COMPLETED"
-	job.LastError = ""
+	if job.TotalUpload > 0 && job.UploadedCount == 0 && job.LastError != "" {
+		job.Status = "FAILED"
+	} else {
+		job.Status = "COMPLETED"
+		job.LastError = ""
+	}
 	job.ResumeAt = nil
 	job.CompletedAt = &now
 	s.saveResyncProgress(job, deleteIDs, uploadIDs)
-	log.Printf("AlbumResync [%s] COMPLETED: deleted=%d, uploaded=%d\n", job.CategoryCode, job.DeletedCount, job.UploadedCount)
+	log.Printf("AlbumResync [%s] %s: deleted=%d, uploaded=%d\n", job.CategoryCode, job.Status, job.DeletedCount, job.UploadedCount)
 }
 
 func (s *FacebookService) isResyncJobCancelled(jobID uint) bool {
