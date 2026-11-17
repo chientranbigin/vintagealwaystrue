@@ -14,7 +14,17 @@ import (
 )
 
 const resyncPauseDuration = 45 * time.Minute
-const resyncUsageThresholdPct = 85
+
+func optimizeCloudinaryURLForFB(rawURL string) string {
+	if strings.Contains(rawURL, "res.cloudinary.com") && strings.Contains(rawURL, "/image/upload/") {
+		// Only inject resize transform if no transformation is already present right after /upload/
+		parts := strings.SplitN(rawURL, "/image/upload/", 2)
+		if len(parts) == 2 && !strings.HasPrefix(parts[1], "w_") && !strings.HasPrefix(parts[1], "c_") {
+			return parts[0] + "/image/upload/w_1200,q_auto:good,f_jpg/" + parts[1]
+		}
+	}
+	return rawURL
+}
 
 // FetchAlbumPhotoIDs retrieves all existing photo IDs in a Facebook album.
 func (s *FacebookService) FetchAlbumPhotoIDs(albumID string) ([]string, error) {
@@ -297,9 +307,11 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 		_ = json.Unmarshal([]byte(job.RemainingUploadIDs), &uploadIDs)
 	}
 
-	throttle := 1 * time.Second
-	if s.ThrottleDelay > 0 {
-		throttle = s.ThrottleDelay
+	deleteDelay := 300 * time.Millisecond
+	uploadDelay := 500 * time.Millisecond
+	if s.ThrottleDelay > 0 && s.ThrottleDelay < deleteDelay {
+		deleteDelay = s.ThrottleDelay
+		uploadDelay = s.ThrottleDelay
 	}
 
 	// Phase 1: DELETE existing photos from album
@@ -315,9 +327,9 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 				return
 			}
 			photoID := deleteIDs[0]
-			usagePct, err := s.RemoveProductPhotoFromAlbumWithUsage(photoID)
+			_, err := s.RemoveProductPhotoFromAlbumWithUsage(photoID)
 			if err != nil && isFBRateLimitError(err) {
-				s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, fmt.Sprintf("Facebook rate limit (#4) khi đang xóa ảnh. Tự động chạy tiếp sau 45 phút."))
+				s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Facebook rate limit (#4) khi đang xóa ảnh. Tự động chạy tiếp sau 45 phút.")
 				return
 			}
 
@@ -328,12 +340,7 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 			if job.DeletedCount%5 == 0 || len(deleteIDs) == 0 {
 				s.saveResyncProgress(job, deleteIDs, uploadIDs)
 			}
-
-			if usagePct >= resyncUsageThresholdPct && len(deleteIDs) > 0 {
-				s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, fmt.Sprintf("Tạm nghỉ chủ động: Meta API đạt %d%% giới hạn. Tự động chạy tiếp sau 45 phút.", usagePct))
-				return
-			}
-			time.Sleep(throttle)
+			time.Sleep(deleteDelay)
 		}
 	}
 
@@ -359,7 +366,7 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 				uploadIDs = uploadIDs[1:]
 				continue
 			}
-			thumb := product.BestQualityThumb()
+			thumb := optimizeCloudinaryURLForFB(product.BestQualityThumb())
 			if thumb == "" {
 				uploadIDs = uploadIDs[1:]
 				continue
@@ -370,7 +377,7 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 				catalogPostID = *product.FBPostID
 			}
 			caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
-			photoID, usagePct, err := s.UploadProductPhotoToAlbumWithUsage(job.AlbumID, thumb, caption)
+			photoID, _, err := s.UploadProductPhotoToAlbumWithUsage(job.AlbumID, thumb, caption)
 			if err != nil {
 				if isFBRateLimitError(err) {
 					s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Facebook rate limit (#4) khi đang tải ảnh lên. Tự động chạy tiếp sau 45 phút.")
@@ -391,12 +398,7 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 			if job.UploadedCount%3 == 0 || len(uploadIDs) == 0 {
 				s.saveResyncProgress(job, deleteIDs, uploadIDs)
 			}
-
-			if usagePct >= resyncUsageThresholdPct && len(uploadIDs) > 0 {
-				s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, fmt.Sprintf("Tạm nghỉ chủ động: Meta API đạt %d%% giới hạn. Tự động chạy tiếp sau 45 phút.", usagePct))
-				return
-			}
-			time.Sleep(throttle * 2)
+			time.Sleep(uploadDelay)
 		}
 	}
 

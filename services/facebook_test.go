@@ -171,8 +171,8 @@ func TestBuildMessage(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
-	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+	// Isolate test transaction from any live active/paused jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status IN ('PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT')").Update("status", "CANCELLED")
 
 	pName := fmt.Sprintf("TS_%d", time.Now().UnixNano()%100000)
 	product := models.Product{
@@ -273,8 +273,8 @@ func TestFacebookService_FullSyncLifecycle(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
-	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+	// Isolate test transaction from any live active/paused jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status IN ('PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT')").Update("status", "CANCELLED")
 
 	tmpDir := t.TempDir()
 	img1 := filepath.Join(tmpDir, "thumb.jpg")
@@ -493,8 +493,8 @@ func TestExecuteSync_AlbumWorkflow(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
-	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+	// Isolate test transaction from any live active/paused jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status IN ('PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT')").Update("status", "CANCELLED")
 
 	// Setup Category with fb_album_id
 	catCode := fmt.Sprintf("TEST_CAT_%d", time.Now().UnixNano())
@@ -637,8 +637,8 @@ func TestExecuteSync_HoldAndReconcile(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
-	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+	// Isolate test transaction from any live active/paused jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status IN ('PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT')").Update("status", "CANCELLED")
 
 	photoID := "hold_photo_123"
 	holdProd := models.Product{
@@ -709,7 +709,8 @@ func TestAlbumResync_RunPauseRun(t *testing.T) {
 		t.Skip("Database not available")
 	}
 
-	uploadCount := 0
+	uploadAttempt := 0
+	uploadSuccessCount := 0
 	var uploadedCaptions []string
 	deletedPhotos := make(map[string]bool)
 
@@ -729,16 +730,17 @@ func TestAlbumResync_RunPauseRun(t *testing.T) {
 		}
 		if r.Method == "POST" && strings.Contains(r.URL.Path, "/photos") {
 			_ = r.ParseForm()
-			uploadCount++
-			uploadedCaptions = append(uploadedCaptions, r.FormValue("caption"))
-			// First upload triggers proactive pause via 88% usage header!
-			if uploadCount == 1 {
-				w.Header().Set("x-app-usage", `{"call_count":10,"total_cputime":0,"total_time":88}`)
-			} else {
-				w.Header().Set("x-app-usage", `{"call_count":12,"total_cputime":0,"total_time":20}`)
+			uploadAttempt++
+			// Second upload triggers actual Facebook 403 (#4) rate limit error!
+			if uploadAttempt == 2 {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"message":"(#4) Application request limit reached","type":"OAuthException","code":4}}`))
+				return
 			}
+			uploadSuccessCount++
+			uploadedCaptions = append(uploadedCaptions, r.FormValue("caption"))
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"new_photo_%d"}`, uploadCount)))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"new_photo_%d"}`, uploadSuccessCount)))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -748,8 +750,8 @@ func TestAlbumResync_RunPauseRun(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	// Isolate test transaction from any live PAUSED_LIMIT jobs in shared DB
-	tx.Model(&models.AlbumResyncJob{}).Where("status = 'PAUSED_LIMIT'").Update("status", "CANCELLED")
+	// Isolate test transaction from any live active/paused jobs in shared DB
+	tx.Model(&models.AlbumResyncJob{}).Where("status IN ('PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT')").Update("status", "CANCELLED")
 
 	catAlbumID := "album_resync_test_123"
 	cat := models.Category{
