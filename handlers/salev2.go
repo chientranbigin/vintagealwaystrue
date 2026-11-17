@@ -2164,6 +2164,11 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 	if price > 0 {
 		existing.Price = &price
 	}
+	// If product was ON_HOLD, uploading fresh photos via Smart Upload automatically makes it AVAILABLE again
+	if existing.Status != nil && *existing.Status == "ON_HOLD" {
+		avail := "AVAILABLE"
+		existing.Status = &avail
+	}
 	existing.PathThumb = &job.MainImagePath
 	if scaledPath, sErr := h.Storage.CreateScaledThumbnailFromPath(job.MainImagePath); sErr == nil && scaledPath != "" {
 		existing.ImageThumbScale = &scaledPath
