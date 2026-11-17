@@ -51,40 +51,44 @@
         <span class="text-[11px] text-slate-400 italic">Tự động chạy ngầm lúc 01:00 sáng (GMT+7) nếu có hàng mới</span>
       </div>
 
-      <!-- Live Resync Status Card -->
-      <div v-if="currentResyncJob" class="p-2.5 rounded-lg border text-xs space-y-1.5"
-        :class="{
-          'bg-blue-50/70 border-blue-200 text-blue-900': ['PENDING','DELETING','UPLOADING'].includes(currentResyncJob.status),
-          'bg-amber-50/80 border-amber-200 text-amber-900': currentResyncJob.status === 'PAUSED_LIMIT',
-          'bg-emerald-50/70 border-emerald-200 text-emerald-900': currentResyncJob.status === 'COMPLETED',
-          'bg-slate-50 border-slate-200 text-slate-600': ['CANCELLED','FAILED'].includes(currentResyncJob.status)
-        }">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="font-bold flex items-center gap-1.5">
-            <i v-if="['PENDING','DELETING','UPLOADING'].includes(currentResyncJob.status)" class="el-icon-loading"></i>
-            <i v-else-if="currentResyncJob.status === 'PAUSED_LIMIT'" class="el-icon-time"></i>
-            <i v-else-if="currentResyncJob.status === 'COMPLETED'" class="el-icon-circle-check"></i>
-            <i v-else class="el-icon-info"></i>
-            <span v-if="currentResyncJob.status === 'PENDING'">Đang chuẩn bị danh sách ảnh ({{ currentResyncJob.category_name }})...</span>
-            <span v-else-if="currentResyncJob.status === 'DELETING'">Bước 1/2: Đang xóa ảnh cũ ({{ currentResyncJob.deleted_count }}/{{ currentResyncJob.total_delete }})</span>
-            <span v-else-if="currentResyncJob.status === 'UPLOADING'">Bước 2/2: Đang tải lên Mới → Cũ ({{ currentResyncJob.uploaded_count }}/{{ currentResyncJob.total_upload }})</span>
-            <span v-else-if="currentResyncJob.status === 'PAUSED_LIMIT'">Tạm nghỉ tránh giới hạn Facebook (Tự động chạy tiếp lúc {{ formatResyncTime(currentResyncJob.resume_at) }})</span>
-            <span v-else-if="currentResyncJob.status === 'COMPLETED'">Hoàn tất sắp xếp {{ currentResyncJob.uploaded_count }} sản phẩm cho {{ currentResyncJob.category_name }}!</span>
-            <span v-else>{{ currentResyncJob.status }}</span>
+      <!-- Live Resync Queue List -->
+      <div v-if="visibleResyncJobs.length" class="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+        <div v-for="job in visibleResyncJobs" :key="job.id" class="p-2.5 rounded-lg border text-xs space-y-1.5"
+          :class="{
+            'bg-blue-50/70 border-blue-200 text-blue-900': ['PENDING','DELETING','UPLOADING'].includes(job.status),
+            'bg-amber-50/80 border-amber-200 text-amber-900': job.status === 'PAUSED_LIMIT',
+            'bg-emerald-50/70 border-emerald-200 text-emerald-900': job.status === 'COMPLETED',
+            'bg-slate-50 border-slate-200 text-slate-600': ['CANCELLED','FAILED'].includes(job.status)
+          }">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="font-bold flex items-center gap-1.5">
+              <i v-if="['DELETING','UPLOADING'].includes(job.status)" class="el-icon-loading"></i>
+              <i v-else-if="job.status === 'PENDING'" class="el-icon-more-outline"></i>
+              <i v-else-if="job.status === 'PAUSED_LIMIT'" class="el-icon-time"></i>
+              <i v-else-if="job.status === 'COMPLETED'" class="el-icon-circle-check"></i>
+              <i v-else class="el-icon-info"></i>
+              <span class="px-1.5 py-0.5 rounded bg-white/80 text-[10px] font-black uppercase tracking-wide border border-black/5">#{{ job.id }} {{ job.category_name || job.category_code }}</span>
+              <span v-if="job.status === 'PENDING'">Đang chờ chạy (Xóa: {{ job.total_delete }}, Tải: {{ job.total_upload }})</span>
+              <span v-else-if="job.status === 'DELETING'">Đang xóa ảnh cũ ({{ job.deleted_count }}/{{ job.total_delete }})</span>
+              <span v-else-if="job.status === 'UPLOADING'">Đang tải lên Mới → Cũ ({{ job.uploaded_count }}/{{ job.total_upload }})</span>
+              <span v-else-if="job.status === 'PAUSED_LIMIT'">Tạm nghỉ tránh giới hạn FB (Chạy tiếp lúc {{ formatResyncTime(job.resume_at) }})</span>
+              <span v-else-if="job.status === 'COMPLETED'">Hoàn tất (Xóa {{ job.deleted_count }}/{{ job.total_delete }}, Tải {{ job.uploaded_count }}/{{ job.total_upload }})</span>
+              <span v-else>{{ job.status }}</span>
+            </div>
+            <div class="flex items-center gap-1.5" v-if="['PENDING','DELETING','UPLOADING','PAUSED_LIMIT'].includes(job.status)">
+              <el-button v-if="job.status === 'PAUSED_LIMIT'" size="mini" type="primary" plain @click="handleResumeResync(job.id)">Chạy tiếp ngay</el-button>
+              <el-button size="mini" type="danger" plain @click="handleCancelResync(job.id)">Hủy</el-button>
+            </div>
           </div>
-          <div class="flex items-center gap-1.5" v-if="['PENDING','DELETING','UPLOADING','PAUSED_LIMIT'].includes(currentResyncJob.status)">
-            <el-button v-if="currentResyncJob.status === 'PAUSED_LIMIT'" size="mini" type="primary" plain @click="handleResumeResync(currentResyncJob.id)">Chạy tiếp ngay</el-button>
-            <el-button size="mini" type="danger" plain @click="handleCancelResync(currentResyncJob.id)">Hủy</el-button>
+          <el-progress
+            v-if="['DELETING','UPLOADING','PAUSED_LIMIT'].includes(job.status)"
+            :percentage="getJobProgressPct(job)"
+            :status="job.status === 'PAUSED_LIMIT' ? 'warning' : undefined"
+            :stroke-width="5">
+          </el-progress>
+          <div v-if="job.last_error" class="text-[11px] opacity-80">
+            {{ job.last_error }}
           </div>
-        </div>
-        <el-progress
-          v-if="['DELETING','UPLOADING','PAUSED_LIMIT'].includes(currentResyncJob.status)"
-          :percentage="resyncProgressPct"
-          :status="currentResyncJob.status === 'PAUSED_LIMIT' ? 'warning' : undefined"
-          :stroke-width="6">
-        </el-progress>
-        <div v-if="currentResyncJob.last_error" class="text-[11px] opacity-80">
-          {{ currentResyncJob.last_error }}
         </div>
       </div>
     </div>
@@ -234,26 +238,24 @@ export default {
         currentAlbumCategory() {
             return this.albumCategories.find(c => c.code === this.resyncCategoryCode) || null;
         },
-        currentResyncJob() {
-            if (!this.resyncJobs.length) return null;
-            if (this.resyncCategoryCode) {
-                const match = this.resyncJobs.find(j => j.category_code === this.resyncCategoryCode);
-                if (match) return match;
-            }
-            return this.resyncJobs.find(j => ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(j.status)) || null;
+        visibleResyncJobs() {
+            if (!this.resyncJobs.length) return [];
+            const active = this.resyncJobs
+                .filter(j => ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(j.status))
+                .slice()
+                .sort((a, b) => a.id - b.id);
+            if (active.length > 0) return active;
+            // If no active jobs, show the latest completed/cancelled job for selected category (or most recent overall)
+            const selected = this.resyncCategoryCode
+                ? this.resyncJobs.find(j => j.category_code === this.resyncCategoryCode)
+                : null;
+            return selected ? [selected] : [this.resyncJobs[0]];
         },
         isResyncActiveForCurrent() {
-            return this.currentResyncJob &&
-                this.currentResyncJob.category_code === this.resyncCategoryCode &&
-                ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(this.currentResyncJob.status);
-        },
-        resyncProgressPct() {
-            const job = this.currentResyncJob;
-            if (!job) return 0;
-            const total = (job.total_delete || 0) + (job.total_upload || 0);
-            if (total === 0) return 0;
-            const done = (job.deleted_count || 0) + (job.uploaded_count || 0);
-            return Math.min(100, Math.round((done / total) * 100));
+            return this.resyncJobs.some(j =>
+                j.category_code === this.resyncCategoryCode &&
+                ['PENDING', 'DELETING', 'UPLOADING', 'PAUSED_LIMIT'].includes(j.status)
+            );
         },
         visibleStagingFiles() {
             return this.stagingFiles.slice(0, this.renderLimit);
@@ -351,6 +353,13 @@ export default {
             } catch (err) {
                 this.$message.error('Lỗi khi chạy tiếp: ' + (err.response?.data?.error || err.message));
             }
+        },
+        getJobProgressPct(job) {
+            if (!job) return 0;
+            const total = (job.total_delete || 0) + (job.total_upload || 0);
+            if (total === 0) return 0;
+            const done = (job.deleted_count || 0) + (job.uploaded_count || 0);
+            return Math.min(100, Math.round((done / total) * 100));
         },
         formatResyncTime(iso) {
             if (!iso) return '...';
