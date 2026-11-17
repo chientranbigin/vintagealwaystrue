@@ -175,6 +175,8 @@ func isFBRateLimitError(err error) bool {
 	return strings.Contains(msg, "(#4)") || strings.Contains(msg, "request limit reached")
 }
 
+var backgroundWorkersOnce sync.Once
+
 func (s *FacebookService) StartWorker() {
 	go func() {
 		for job := range s.Queue {
@@ -182,8 +184,10 @@ func (s *FacebookService) StartWorker() {
 		}
 	}()
 
-	go s.StartReconciler()
-	go s.StartAlbumResyncWorker()
+	backgroundWorkersOnce.Do(func() {
+		go s.StartReconciler()
+		go s.StartAlbumResyncWorker()
+	})
 }
 
 func (s *FacebookService) StartReconciler() {

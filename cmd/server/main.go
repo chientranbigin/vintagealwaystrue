@@ -168,6 +168,7 @@ func main() {
 	// Sale V2 API Handler (REST API for Vue SPA)
 	// ==========================================
 	v2 := handlers.NewSaleV2Handler(db, cfg)
+	v2.FB = v1.FB // Share singleton FacebookService across V1 & V2 handlers
 	api := r.Group("/salev2/api")
 	{
 		api.GET("/products", v2.Products)
