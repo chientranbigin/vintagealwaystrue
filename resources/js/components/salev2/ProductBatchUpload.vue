@@ -48,7 +48,7 @@
             <i class="el-icon-link"></i> Xem Album
           </a>
         </div>
-        <span class="text-[11px] text-slate-400 italic">Tự động chạy ngầm lúc 01:00 sáng (GMT+7) nếu có hàng mới</span>
+        <span class="text-[11px] text-slate-400 italic">Cơ chế Chạy – Nghỉ 45p – Chạy tiếp khi chạm giới hạn Facebook</span>
       </div>
 
       <!-- Live Resync Queue List -->

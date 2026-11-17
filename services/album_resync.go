@@ -223,50 +223,18 @@ func (s *FacebookService) StartAlbumResyncWorker() {
 	if s == nil {
 		return
 	}
-	// Wait briefly on startup before resuming any interrupted jobs
+	// Wait briefly on startup before resuming any interrupted manual jobs
 	time.Sleep(15 * time.Second)
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	gmt7 := time.FixedZone("GMT+7", 7*3600)
-	lastNightlyDate := ""
-
 	for {
-		// 1. Check 1:00 AM GMT+7 Nightly Trigger
-		nowGMT7 := time.Now().In(gmt7)
-		todayStr := nowGMT7.Format("2006-01-02")
-		if nowGMT7.Hour() == 1 && nowGMT7.Minute() < 10 && lastNightlyDate != todayStr {
-			lastNightlyDate = todayStr
-			s.triggerNightlyResyncs()
-		}
-
-		// 2. Process any pending or ready-to-resume resync job
+		// Process any pending or ready-to-resume manual resync job
 		s.ProcessNextAlbumResyncJob()
 
 		select {
 		case <-ticker.C:
 		case <-s.resyncWakeup:
-		}
-	}
-}
-
-func (s *FacebookService) triggerNightlyResyncs() {
-	if s == nil || s.DB == nil || (s.PageToken == "" && s.MainPageToken == "") {
-		return
-	}
-	var cats []models.Category
-	if err := s.DB.Where("is_active = true AND fb_album_id IS NOT NULL AND fb_album_id != '' AND needs_album_reorder = true").
-		Order("id ASC").Find(&cats).Error; err != nil {
-		log.Printf("NightlyResync query error: %v\n", err)
-		return
-	}
-	if len(cats) == 0 {
-		return
-	}
-	log.Printf("NightlyResync (01:00 GMT+7): queueing %d categories with needs_album_reorder=true\n", len(cats))
-	for _, cat := range cats {
-		if _, err := s.StartCategoryAlbumResync(cat.Code, "NIGHTLY"); err != nil {
-			log.Printf("NightlyResync error queueing %s: %v\n", cat.Code, err)
 		}
 	}
 }
