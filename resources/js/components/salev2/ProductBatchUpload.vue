@@ -151,18 +151,76 @@
                  <el-button type="text" class="text-red-500" @click="clearGroups" v-if="groups.length">Clear All</el-button>
              </div>
 
-             <div v-if="batchComplete" class="px-4 py-2 bg-white border-b border-slate-200 flex items-center justify-between text-sm font-bold">
+             <div v-if="batchComplete" class="px-4 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
                  <div class="flex items-center gap-3">
                      <span class="text-slate-600">Kết quả:</span>
-                     <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} success</span>
-                     <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} error</span>
+                     <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} thành công</span>
+                     <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} lỗi</span>
                  </div>
-                 <el-button v-if="errorGroupCount > 0" type="danger" size="mini" :loading="uploading" @click="retryErrors">
-                     Tải lại {{ errorGroupCount }} lỗi
-                 </el-button>
+                 <div class="flex items-center gap-2">
+                     <el-button v-if="errorGroupCount > 0" type="danger" size="mini" :loading="uploading" @click="retryErrors">
+                         Tải lại {{ errorGroupCount }} lỗi
+                     </el-button>
+                     <el-button
+                         v-if="successGroupCount > 0 && canResyncBatchType"
+                         type="warning"
+                         size="mini"
+                         icon="el-icon-sort"
+                         :loading="resyncLoading"
+                         @click="handleResyncBatchType">
+                         Re-sync Album {{ batchType || resyncCategoryCode }}
+                     </el-button>
+                 </div>
              </div>
 
-             <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+             <!-- Summary Grid View when batchComplete -->
+             <div v-if="batchComplete" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                 <!-- Failed Products Grid -->
+                 <div v-if="errorGroups.length" class="space-y-2">
+                     <div class="text-xs font-black uppercase tracking-wider text-red-600 flex items-center gap-1.5">
+                         <i class="el-icon-warning"></i> Sản phẩm lỗi ({{ errorGroups.length }})
+                     </div>
+                     <div class="grid grid-cols-3 md:grid-cols-4 gap-2.5">
+                         <div v-for="(group, idx) in errorGroups" :key="'err-' + idx"
+                              class="bg-white rounded-lg border-2 border-red-200 overflow-hidden shadow-sm flex flex-col">
+                             <div class="aspect-square relative bg-slate-100">
+                                 <img :src="group.main.url" class="w-full h-full object-cover">
+                                 <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">LỖI</span>
+                             </div>
+                             <div class="p-2 space-y-0.5">
+                                 <div class="font-bold text-xs text-slate-800 truncate">{{ group.productName || 'Chưa rõ mã' }}</div>
+                                 <div class="text-[10px] text-red-600 leading-tight line-clamp-2" :title="group.error">{{ group.error }}</div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+
+                 <!-- Successful Products Grid -->
+                 <div v-if="successGroups.length" class="space-y-2">
+                     <div class="text-xs font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
+                         <i class="el-icon-circle-check"></i> Đã tạo thành công ({{ successGroups.length }})
+                     </div>
+                     <div class="grid grid-cols-3 md:grid-cols-4 gap-2.5">
+                         <div v-for="(group, idx) in successGroups" :key="'ok-' + idx"
+                              class="bg-white rounded-lg border border-emerald-200 overflow-hidden shadow-sm flex flex-col">
+                             <div class="aspect-square relative bg-slate-100">
+                                 <img :src="group.main.url" class="w-full h-full object-cover">
+                                 <span class="absolute top-1 right-1 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shadow">
+                                     <i class="el-icon-check"></i>
+                                 </span>
+                                 <span v-if="group.details.length" class="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-bold">
+                                     +{{ group.details.length }} ảnh
+                                 </span>
+                             </div>
+                             <div class="p-2">
+                                 <div class="font-bold text-xs text-slate-800 truncate text-center">{{ group.productName || 'Đã lưu' }}</div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+
+             <div v-else class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                  <div v-for="(group, idx) in groups" :key="idx" class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 relative group-card">
                      <!-- Main Image Header -->
                      <div class="flex gap-3 mb-3">
@@ -267,11 +325,21 @@ export default {
             return this.groups.length > 0 && !this.pollInterval &&
                 this.groups.every(g => !g.sessionId || g.status === 'SUCCESS' || g.status === 'ERROR');
         },
+        successGroups() {
+            return this.groups.filter(g => g.status === 'SUCCESS');
+        },
+        errorGroups() {
+            return this.groups.filter(g => g.status === 'ERROR');
+        },
         successGroupCount() {
-            return this.groups.filter(g => g.status === 'SUCCESS').length;
+            return this.successGroups.length;
         },
         errorGroupCount() {
-            return this.groups.filter(g => g.status === 'ERROR').length;
+            return this.errorGroups.length;
+        },
+        canResyncBatchType() {
+            const target = this.batchType || this.resyncCategoryCode;
+            return this.albumCategories.some(c => c.code === target);
         }
     },
     mounted() {
@@ -311,6 +379,13 @@ export default {
             } catch (e) {
                 // silent fail
             }
+        },
+        async handleResyncBatchType() {
+            const target = this.batchType || this.resyncCategoryCode;
+            if (!target) return;
+            this.resyncCategoryCode = target;
+            await this.$nextTick();
+            await this.handleResyncAlbum();
         },
         async handleResyncAlbum() {
             if (!this.resyncCategoryCode) return;

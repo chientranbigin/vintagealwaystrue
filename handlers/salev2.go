@@ -2211,9 +2211,9 @@ func (h *SaleV2Handler) processSmartUploadJob(job SmartUploadJob) {
 			"message": "Xử lý thành công (2 bước)",
 		})
 
-	// Sync to Facebook page
+	// Sync to Catalog Page only (Main Page Album A is updated via explicit Re-sync or 1 AM nightly reorder)
 	if h.FB != nil {
-		h.FB.Dispatch(existing.ID, services.FBActionCreate)
+		h.FB.Dispatch(existing.ID, services.FBActionCreateCatalogOnly)
 	}
 }
 

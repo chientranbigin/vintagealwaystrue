@@ -24,10 +24,11 @@ import (
 type FacebookSyncAction string
 
 const (
-	FBActionCreate FacebookSyncAction = "create"
-	FBActionSold   FacebookSyncAction = "sold"
-	FBActionRevert FacebookSyncAction = "revert"
-	FBActionHold   FacebookSyncAction = "hold"
+	FBActionCreate            FacebookSyncAction = "create"
+	FBActionCreateCatalogOnly FacebookSyncAction = "create_catalog_only"
+	FBActionSold              FacebookSyncAction = "sold"
+	FBActionRevert            FacebookSyncAction = "revert"
+	FBActionHold              FacebookSyncAction = "hold"
 )
 
 type FacebookSyncJob struct {
@@ -323,6 +324,26 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 	}
 
 	switch action {
+	case FBActionCreateCatalogOnly:
+		if product.FBPostID != nil && *product.FBPostID != "" {
+			_ = s.DeletePost(*product.FBPostID)
+			log.Printf("FB post deleted before re-create: %s for %s\n", *product.FBPostID, pName)
+		}
+
+		postID, err := s.CreatePost(&product)
+		if err != nil {
+			log.Printf("CreatePost error on Catalog Page for product %d: %v\n", product.ID, err)
+		} else if postID != "" {
+			s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_post_id", postID)
+			product.FBPostID = &postID
+			log.Printf("FB post created (Catalog only, skipping Album A): %s for %s\n", postID, pName)
+		}
+
+		// Mark category as needing album reorder (user can trigger Re-sync from UI or let 1 AM nightly job handle it)
+		if product.Type != nil && *product.Type != "" {
+			s.DB.Model(&models.Category{}).Where("code = ? AND is_active = true", *product.Type).Update("needs_album_reorder", true)
+		}
+
 	case FBActionCreate:
 		if product.FBPostID != nil && *product.FBPostID != "" {
 			_ = s.DeletePost(*product.FBPostID)
