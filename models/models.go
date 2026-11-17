@@ -15,6 +15,7 @@ type Product struct {
 	ImageThumbScale    *string        `json:"image_thumb_scale"`
 	FBPostID           *string        `gorm:"column:fb_post_id" json:"fb_post_id"`
 	FBAlbumPhotoID     *string        `gorm:"column:fb_album_photo_id" json:"fb_album_photo_id"`
+	FBAlbumApp         int            `gorm:"column:fb_album_app;default:1" json:"fb_album_app"`
 	Status             *string        `json:"status"`
 	CreatedAt          *time.Time     `json:"created_at"`
 	UpdatedAt          *time.Time     `json:"updated_at"`

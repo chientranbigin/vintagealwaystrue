@@ -44,18 +44,21 @@ type FacebookAlbum struct {
 }
 
 type FacebookService struct {
-	PageID        string
-	PageToken     string
-	MainPageID    string
-	MainPageToken string
-	BaseURL       string
-	Client        *http.Client
-	DB            *gorm.DB
-	MediaBase     string
-	Queue         chan FacebookSyncJob
-	ThrottleDelay time.Duration
-	resyncWakeup  chan struct{}
-	resyncMu      sync.Mutex
+	PageID           string
+	PageToken        string
+	MainPageID       string
+	MainPageToken    string
+	MainPageToken2   string
+	BaseURL          string
+	Client           *http.Client
+	DB               *gorm.DB
+	MediaBase        string
+	Queue            chan FacebookSyncJob
+	ThrottleDelay    time.Duration
+	resyncWakeup     chan struct{}
+	resyncMu         sync.Mutex
+	appMu            sync.Mutex
+	appCooldownUntil [3]time.Time
 }
 
 var TrouserSizeMap = []struct {
@@ -132,6 +135,8 @@ func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase 
 		mainPageToken = os.Getenv("FB_MAIN_PAGE_TOKEN")
 	}
 
+	mainPageToken2 := os.Getenv("FB_MAIN_PAGE_TOKEN_2")
+
 	if mediaBase == "" {
 		mediaBase = os.Getenv("MEDIA_BASE_URL")
 		if mediaBase == "" {
@@ -140,10 +145,11 @@ func NewFacebookService(db *gorm.DB, pageID string, pageToken string, mediaBase 
 	}
 
 	fb := &FacebookService{
-		PageID:        pageID,
-		PageToken:     pageToken,
-		MainPageID:    mainPageID,
-		MainPageToken: mainPageToken,
+		PageID:         pageID,
+		PageToken:      pageToken,
+		MainPageID:     mainPageID,
+		MainPageToken:  mainPageToken,
+		MainPageToken2: mainPageToken2,
 		BaseURL:       "https://graph.facebook.com/v19.0/",
 		Client:        &http.Client{Timeout: 30 * time.Second},
 		DB:            db,
@@ -232,7 +238,7 @@ func (s *FacebookService) ReconcileAlbumPhotos() {
 			pName = *p.Name
 		}
 
-		err := s.RemoveProductPhotoFromAlbum(photoID)
+		_, err := s.RemoveAlbumPhotoWithFallback(photoID, p.FBAlbumApp)
 		if err != nil {
 			if isFBRateLimitError(err) {
 				log.Printf("ReconcileAlbumPhotos: Facebook rate limit reached (code 4), pausing until next cycle\n")
@@ -338,7 +344,7 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 			if err := s.DB.Where("code = ? AND is_active = true", *product.Type).First(&cat).Error; err == nil && cat.FBAlbumID != nil && *cat.FBAlbumID != "" {
 				// Delete previous album photo if existing
 				if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
-					if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+					if _, err := s.RemoveAlbumPhotoWithFallback(*product.FBAlbumPhotoID, product.FBAlbumApp); err != nil {
 						log.Printf("FB album photo remove previous error (%s): %v\n", *product.FBAlbumPhotoID, err)
 						if isFBRateLimitError(err) {
 							return err // Wait for rate limit to clear before uploading new photo, preventing duplicate album photos
@@ -353,12 +359,16 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 						catalogPostID = *product.FBPostID
 					}
 					caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
-					photoID, albumErr := s.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
+					photoID, usedApp, _, albumErr := s.UploadAlbumPhotoWithFailover(*cat.FBAlbumID, thumb, caption)
 					if albumErr == nil && photoID != "" {
-						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
+						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Updates(map[string]interface{}{
+							"fb_album_photo_id": photoID,
+							"fb_album_app":      usedApp,
+						})
 						s.DB.Model(&models.Category{}).Where("id = ?", cat.ID).Update("needs_album_reorder", true)
 						product.FBAlbumPhotoID = &photoID
-						log.Printf("FB Album photo uploaded: %s in album %s for %s\n", photoID, *cat.FBAlbumID, pName)
+						product.FBAlbumApp = usedApp
+						log.Printf("FB Album photo uploaded (App %d): %s in album %s for %s\n", usedApp, photoID, *cat.FBAlbumID, pName)
 					} else {
 						log.Printf("FB Album photo upload error for %s in album %s: %v\n", pName, *cat.FBAlbumID, albumErr)
 					}
@@ -380,7 +390,7 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 
 		// 2. Remove photo from Main Page Album A
 		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
-			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+			if _, err := s.RemoveAlbumPhotoWithFallback(*product.FBAlbumPhotoID, product.FBAlbumApp); err != nil {
 				log.Printf("FB album photo remove error (%s): %v\n", *product.FBAlbumPhotoID, err)
 				lastErr = err
 			} else {
@@ -395,7 +405,7 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 	case FBActionHold:
 		// Remove photo from Main Page Album A
 		if product.FBAlbumPhotoID != nil && *product.FBAlbumPhotoID != "" {
-			if err := s.RemoveProductPhotoFromAlbum(*product.FBAlbumPhotoID); err != nil {
+			if _, err := s.RemoveAlbumPhotoWithFallback(*product.FBAlbumPhotoID, product.FBAlbumApp); err != nil {
 				log.Printf("FB album photo remove on HOLD error (%s): %v\n", *product.FBAlbumPhotoID, err)
 				return err
 			} else {
@@ -427,14 +437,17 @@ func (s *FacebookService) ExecuteSync(productID uint, action FacebookSyncAction)
 						catalogPostID = *product.FBPostID
 					}
 					caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
-					photoID, albumErr := s.UploadProductPhotoToAlbum(*cat.FBAlbumID, thumb, caption)
+					photoID, usedApp, _, albumErr := s.UploadAlbumPhotoWithFailover(*cat.FBAlbumID, thumb, caption)
 					if albumErr != nil {
 						log.Printf("FB Album photo re-upload error for %s: %v\n", pName, albumErr)
 						lastErr = albumErr
 					} else if photoID != "" {
-						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Update("fb_album_photo_id", photoID)
+						s.DB.Model(&models.Product{}).Where("id = ?", product.ID).Updates(map[string]interface{}{
+							"fb_album_photo_id": photoID,
+							"fb_album_app":      usedApp,
+						})
 						s.DB.Model(&models.Category{}).Where("id = ?", cat.ID).Update("needs_album_reorder", true)
-						log.Printf("FB Album photo re-uploaded: %s in album %s for %s\n", photoID, *cat.FBAlbumID, pName)
+						log.Printf("FB Album photo re-uploaded (App %d): %s in album %s for %s\n", usedApp, photoID, *cat.FBAlbumID, pName)
 					}
 				}
 			}
@@ -869,16 +882,84 @@ func parseAppUsageMaxPct(header string) int {
 	return maxPct
 }
 
+func (s *FacebookService) tokenForApp(appIdx int) string {
+	if appIdx == 2 && s.MainPageToken2 != "" {
+		return s.MainPageToken2
+	}
+	return s.mainToken()
+}
+
+func (s *FacebookService) markAppRateLimited(appIdx int) {
+	if appIdx != 1 && appIdx != 2 {
+		return
+	}
+	s.appMu.Lock()
+	defer s.appMu.Unlock()
+	s.appCooldownUntil[appIdx] = time.Now().Add(resyncPauseDuration)
+}
+
+func (s *FacebookService) pickAvailableUploadApp(excludeIdx int) int {
+	s.appMu.Lock()
+	defer s.appMu.Unlock()
+	now := time.Now()
+	if excludeIdx != 1 && s.mainToken() != "" && !s.appCooldownUntil[1].After(now) {
+		return 1
+	}
+	if excludeIdx != 2 && s.MainPageToken2 != "" && !s.appCooldownUntil[2].After(now) {
+		return 2
+	}
+	return 0
+}
+
+func (s *FacebookService) NextAvailableAppResumeTime() time.Time {
+	s.appMu.Lock()
+	defer s.appMu.Unlock()
+	earliest := s.appCooldownUntil[1]
+	if s.MainPageToken2 != "" && (earliest.IsZero() || s.appCooldownUntil[2].Before(earliest)) {
+		earliest = s.appCooldownUntil[2]
+	}
+	if earliest.IsZero() || !earliest.After(time.Now()) {
+		return time.Now().Add(resyncPauseDuration)
+	}
+	return earliest
+}
+
+// UploadAlbumPhotoWithFailover uploads an album photo using App 1, and immediately fails over to App 2 if App 1 hits #4 rate limit (or vice-versa).
+func (s *FacebookService) UploadAlbumPhotoWithFailover(albumID string, imagePath string, caption string) (string, int, int, error) {
+	appIdx := s.pickAvailableUploadApp(0)
+	if appIdx == 0 {
+		return "", 0, 100, fmt.Errorf("facebook album photo upload error (403): (#4) Application request limit reached (all apps in cooldown)")
+	}
+
+	photoID, usagePct, err := s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.tokenForApp(appIdx))
+	if err != nil && isFBRateLimitError(err) {
+		s.markAppRateLimited(appIdx)
+		otherIdx := s.pickAvailableUploadApp(appIdx)
+		if otherIdx != 0 {
+			log.Printf("🔄 App %d chạm rate limit (#4), tự động chuyển sang App %d ngay lập tức!\n", appIdx, otherIdx)
+			photoID2, usagePct2, err2 := s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.tokenForApp(otherIdx))
+			if err2 != nil && isFBRateLimitError(err2) {
+				s.markAppRateLimited(otherIdx)
+			}
+			return photoID2, otherIdx, usagePct2, err2
+		}
+	}
+	return photoID, appIdx, usagePct, err
+}
+
 func (s *FacebookService) UploadProductPhotoToAlbum(albumID string, imagePath string, caption string) (string, error) {
 	photoID, _, err := s.UploadProductPhotoToAlbumWithUsage(albumID, imagePath, caption)
 	return photoID, err
 }
 
 func (s *FacebookService) UploadProductPhotoToAlbumWithUsage(albumID string, imagePath string, caption string) (string, int, error) {
+	return s.uploadAlbumPhotoWithToken(albumID, imagePath, caption, s.mainToken())
+}
+
+func (s *FacebookService) uploadAlbumPhotoWithToken(albumID string, imagePath string, caption string, token string) (string, int, error) {
 	if albumID == "" {
 		return "", 0, fmt.Errorf("albumID is empty")
 	}
-	token := s.mainToken()
 	if token == "" {
 		return "", 0, fmt.Errorf("facebook main page token is empty")
 	}
@@ -921,7 +1002,7 @@ func (s *FacebookService) UploadProductPhotoToAlbumWithUsage(albumID string, ima
 		if dlResp.StatusCode < 200 || dlResp.StatusCode >= 300 {
 			return "", 0, fmt.Errorf("remote image not found or inaccessible (HTTP %d): %s", dlResp.StatusCode, imagePath)
 		}
-		return s.uploadAlbumPhotoFromReaderWithUsage(albumID, dlResp.Body, filepath.Base(imagePath), caption)
+		return s.uploadAlbumPhotoFromReaderWithToken(albumID, dlResp.Body, filepath.Base(imagePath), caption, token)
 	}
 
 	// Local file
@@ -941,7 +1022,7 @@ func (s *FacebookService) UploadProductPhotoToAlbumWithUsage(albumID string, ima
 
 	if f, err := os.Open(localPath); err == nil {
 		defer f.Close()
-		return s.uploadAlbumPhotoFromReaderWithUsage(albumID, f, filepath.Base(localPath), caption)
+		return s.uploadAlbumPhotoFromReaderWithToken(albumID, f, filepath.Base(localPath), caption, token)
 	}
 
 	// If not found locally, try CDN with MediaBase
@@ -951,19 +1032,19 @@ func (s *FacebookService) UploadProductPhotoToAlbumWithUsage(albumID string, ima
 			remoteURL += "/"
 		}
 		remoteURL += strings.TrimPrefix(imagePath, "storage/")
-		return s.UploadProductPhotoToAlbumWithUsage(albumID, remoteURL, caption)
+		return s.uploadAlbumPhotoWithToken(albumID, remoteURL, caption, token)
 	}
 
 	return "", 0, fmt.Errorf("image not accessible at path %s", imagePath)
 }
 
-func (s *FacebookService) uploadAlbumPhotoFromReaderWithUsage(albumID string, r io.Reader, filename string, caption string) (string, int, error) {
+func (s *FacebookService) uploadAlbumPhotoFromReaderWithToken(albumID string, r io.Reader, filename string, caption string, token string) (string, int, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
 	_ = writer.WriteField("no_story", "true")
 	_ = writer.WriteField("caption", caption)
-	_ = writer.WriteField("access_token", s.mainToken())
+	_ = writer.WriteField("access_token", token)
 	part, err := writer.CreateFormFile("source", filename)
 	if err != nil {
 		return "", 0, err
@@ -1006,15 +1087,49 @@ func (s *FacebookService) uploadAlbumPhotoFromReaderWithUsage(albumID string, r 
 }
 
 func (s *FacebookService) RemoveProductPhotoFromAlbum(photoID string) error {
-	_, err := s.RemoveProductPhotoFromAlbumWithUsage(photoID)
+	_, err := s.RemoveAlbumPhotoWithFallback(photoID, 1)
 	return err
 }
 
 func (s *FacebookService) RemoveProductPhotoFromAlbumWithUsage(photoID string) (int, error) {
+	return s.RemoveAlbumPhotoWithFallback(photoID, 1)
+}
+
+func (s *FacebookService) RemoveAlbumPhotoWithFallback(photoID string, appIdx int) (int, error) {
 	if photoID == "" {
 		return 0, nil
 	}
-	token := s.mainToken()
+	primaryIdx := 1
+	if appIdx == 2 && s.MainPageToken2 != "" {
+		primaryIdx = 2
+	}
+	usagePct, err := s.removeAlbumPhotoWithToken(photoID, s.tokenForApp(primaryIdx))
+	if err != nil {
+		if isFBRateLimitError(err) {
+			s.markAppRateLimited(primaryIdx)
+		}
+		// If Meta says "App can only delete photos created by the same app" (#200), try the other app token
+		if strings.Contains(err.Error(), "(#200)") || strings.Contains(err.Error(), "same app") {
+			otherIdx := 2
+			if primaryIdx == 2 {
+				otherIdx = 1
+			}
+			if otherTok := s.tokenForApp(otherIdx); otherTok != "" && otherTok != s.tokenForApp(primaryIdx) {
+				usage2, err2 := s.removeAlbumPhotoWithToken(photoID, otherTok)
+				if err2 != nil && isFBRateLimitError(err2) {
+					s.markAppRateLimited(otherIdx)
+				}
+				return usage2, err2
+			}
+		}
+	}
+	return usagePct, err
+}
+
+func (s *FacebookService) removeAlbumPhotoWithToken(photoID string, token string) (int, error) {
+	if photoID == "" {
+		return 0, nil
+	}
 	endpoint := fmt.Sprintf("%s%s?access_token=%s", s.apiURL(), url.PathEscape(photoID), url.QueryEscape(token))
 	req, err := http.NewRequest("DELETE", endpoint, nil)
 	if err != nil {

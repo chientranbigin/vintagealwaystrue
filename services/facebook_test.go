@@ -833,3 +833,56 @@ func TestAlbumResync_RunPauseRun(t *testing.T) {
 		t.Errorf("Expected upload order [TEST_NEW, TEST_OLD], got %v", uploadedCaptions)
 	}
 }
+
+func TestDualAppFailover(t *testing.T) {
+	var usedDeleteToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" {
+			_ = r.ParseForm()
+			tok := r.FormValue("access_token")
+			if tok == "app1_token" {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"message":"(#4) Application request limit reached","type":"OAuthException","code":4}}`))
+				return
+			}
+			if tok == "app2_token" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"id":"app2_photo_999"}`))
+				return
+			}
+		}
+		if r.Method == "DELETE" {
+			usedDeleteToken = r.URL.Query().Get("access_token")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	fb := &FacebookService{
+		BaseURL:        server.URL + "/",
+		MainPageToken:  "app1_token",
+		MainPageToken2: "app2_token",
+		Client:         server.Client(),
+	}
+
+	// 1. App 1 hits #4 -> should immediately fail over to App 2 and succeed
+	photoID, usedApp, _, err := fb.UploadAlbumPhotoWithFailover("album_1", "https://example.com/test.jpg", "Test Caption")
+	if err != nil {
+		t.Fatalf("Expected failover to App 2 to succeed, got error: %v", err)
+	}
+	if photoID != "app2_photo_999" || usedApp != 2 {
+		t.Fatalf("Expected photoID=app2_photo_999 and usedApp=2, got photoID=%s usedApp=%d", photoID, usedApp)
+	}
+
+	// 2. Deleting a photo created by App 2 should use App 2's token
+	if _, err := fb.RemoveAlbumPhotoWithFallback(photoID, usedApp); err != nil {
+		t.Fatalf("RemoveAlbumPhotoWithFallback failed: %v", err)
+	}
+	if usedDeleteToken != "app2_token" {
+		t.Fatalf("Expected DELETE to use app2_token, got %s", usedDeleteToken)
+	}
+}

@@ -13,8 +13,9 @@ type Config struct {
 	MediaBaseURL    string
 	FBPageID        string
 	FBPageToken     string
-	FBMainPageID    string
-	FBMainPageToken string
+	FBMainPageID     string
+	FBMainPageToken  string
+	FBMainPageToken2 string
 }
 
 func LoadConfig() *Config {
@@ -50,14 +51,16 @@ func LoadConfig() *Config {
 	fbPageToken := os.Getenv("FB_PAGE_TOKEN")
 	fbMainPageID := os.Getenv("FB_MAIN_PAGE_ID")
 	fbMainPageToken := os.Getenv("FB_MAIN_PAGE_TOKEN")
+	fbMainPageToken2 := os.Getenv("FB_MAIN_PAGE_TOKEN_2")
 
 	return &Config{
-		Port:            port,
-		DatabaseDSN:     dsn,
-		MediaBaseURL:    mediaBase,
-		FBPageID:        fbPageID,
-		FBPageToken:     fbPageToken,
-		FBMainPageID:    fbMainPageID,
-		FBMainPageToken: fbMainPageToken,
+		Port:             port,
+		DatabaseDSN:      dsn,
+		MediaBaseURL:     mediaBase,
+		FBPageID:         fbPageID,
+		FBPageToken:      fbPageToken,
+		FBMainPageID:     fbMainPageID,
+		FBMainPageToken:  fbMainPageToken,
+		FBMainPageToken2: fbMainPageToken2,
 	}
 }

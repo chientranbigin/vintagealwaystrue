@@ -37,6 +37,7 @@ func main() {
 	db.Exec("SET time_zone = '+07:00'")
 	db.Exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE DEFAULT 0")
 	db.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS needs_album_reorder BOOLEAN DEFAULT FALSE")
+	db.Exec("ALTER TABLE products ADD COLUMN IF NOT EXISTS fb_album_app INT DEFAULT 1")
 	if err := db.AutoMigrate(&models.AlbumResyncJob{}); err != nil {
 		log.Printf("Warning: AutoMigrate AlbumResyncJob error: %v\n", err)
 	}

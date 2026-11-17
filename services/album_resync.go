@@ -207,6 +207,9 @@ func (s *FacebookService) ForceResumeAlbumResyncJob(jobID uint) error {
 	if res.Error != nil {
 		return res.Error
 	}
+	s.appMu.Lock()
+	s.appCooldownUntil = [3]time.Time{}
+	s.appMu.Unlock()
 	if s.resyncWakeup != nil {
 		select {
 		case s.resyncWakeup <- struct{}{}:
@@ -278,13 +281,15 @@ func (s *FacebookService) ProcessNextAlbumResyncJob() {
 	var job models.AlbumResyncJob
 	now := time.Now()
 
-	// Respect app-level Meta rate-limit cooldown: do not start any other job while cooling down
-	var coolingCount int64
-	s.DB.Model(&models.AlbumResyncJob{}).
-		Where("status = 'PAUSED_LIMIT' AND resume_at > ?", now).
-		Count(&coolingCount)
-	if coolingCount > 0 {
-		return
+	// If only 1 app is configured, or all apps are in cooldown, wait for PAUSED_LIMIT jobs
+	if s.MainPageToken2 == "" || s.pickAvailableUploadApp(0) == 0 {
+		var coolingCount int64
+		s.DB.Model(&models.AlbumResyncJob{}).
+			Where("status = 'PAUSED_LIMIT' AND resume_at > ?", now).
+			Count(&coolingCount)
+		if coolingCount > 0 {
+			return
+		}
 	}
 
 	err := s.DB.Where("status IN ('PENDING', 'DELETING', 'UPLOADING') OR (status = 'PAUSED_LIMIT' AND resume_at <= ?)", now).
@@ -327,7 +332,9 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 				return
 			}
 			photoID := deleteIDs[0]
-			_, err := s.RemoveProductPhotoFromAlbumWithUsage(photoID)
+			var ownerApp int
+			_ = s.DB.Model(&models.Product{}).Where("fb_album_photo_id = ?", photoID).Pluck("fb_album_app", &ownerApp).Error
+			_, err := s.RemoveAlbumPhotoWithFallback(photoID, ownerApp)
 			if err != nil && isFBRateLimitError(err) {
 				s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Facebook rate limit (#4) khi đang xóa ảnh. Tự động chạy tiếp sau 45 phút.")
 				return
@@ -377,10 +384,10 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 				catalogPostID = *product.FBPostID
 			}
 			caption := s.BuildAlbumPhotoCaption(&product, catalogPostID)
-			photoID, _, err := s.UploadProductPhotoToAlbumWithUsage(job.AlbumID, thumb, caption)
+			photoID, usedApp, _, err := s.UploadAlbumPhotoWithFailover(job.AlbumID, thumb, caption)
 			if err != nil {
 				if isFBRateLimitError(err) {
-					s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Facebook rate limit (#4) khi đang tải ảnh lên. Tự động chạy tiếp sau 45 phút.")
+					s.pauseAlbumResyncJob(job, deleteIDs, uploadIDs, "Cả 2 App đều chạm rate limit (#4) khi tải ảnh lên. Tự động chạy tiếp sau 45 phút.")
 					return
 				}
 				log.Printf("AlbumResync [%s] error uploading product %d: %v\n", job.CategoryCode, prodID, err)
@@ -390,7 +397,10 @@ func (s *FacebookService) processAlbumResyncJob(job *models.AlbumResyncJob) {
 			}
 
 			if photoID != "" {
-				s.DB.Model(&models.Product{}).Where("id = ?", prodID).Update("fb_album_photo_id", photoID)
+				s.DB.Model(&models.Product{}).Where("id = ?", prodID).Updates(map[string]interface{}{
+					"fb_album_photo_id": photoID,
+					"fb_album_app":      usedApp,
+				})
 			}
 			uploadIDs = uploadIDs[1:]
 			job.UploadedCount++
