@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"sale-app/models"
+
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -51,6 +53,7 @@ func (s *CopilotService) initStore() {
 		if sess == nil {
 			continue
 		}
+		s.refreshMessagesFromRecords(sess)
 		s.sessions[sess.ThreadID] = sess
 		s.sessionList = append(s.sessionList, sess.ThreadID)
 	}
@@ -99,14 +102,21 @@ func (s *CopilotService) persistSession(sess *CopilotSession) {
 		log.Printf("[copilot] marshal session %s error: %v", sess.ThreadID, err)
 		return
 	}
+	now := time.Now()
 	rec := CopilotSessionRecord{
 		ThreadID:     sess.ThreadID,
 		CustomerName: sess.CustomerName,
 		Data:         string(b),
-		UpdatedAt:    time.Now(),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-	// Save = INSERT ... or UPDATE by primary key.
-	if err := s.DB.Save(&rec).Error; err != nil {
+	// Upsert that never rewrites created_at: DB.Save() updated every column including a zero
+	// created_at, which TiDB rejects, so only the first snapshot of a thread was ever stored.
+	err = s.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "thread_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"customer_name", "data", "updated_at"}),
+	}).Create(&rec).Error
+	if err != nil {
 		log.Printf("[copilot] save session %s error: %v", sess.ThreadID, err)
 	}
 }
@@ -272,5 +282,65 @@ func (s *CopilotService) purgeLegacyExtensionSessions() {
 	}
 	if res.RowsAffected > 0 {
 		log.Printf("[copilot] purged %d legacy extension sessions", res.RowsAffected)
+	}
+}
+
+// refreshMessagesFromRecords reloads a webhook/Graph session's messages and LastMessageAt from
+// copilot_message_records (the source of truth), so a stale stored snapshot never hides newer
+// messages after a restart. AI fields are kept as stored (no OpenAI calls at startup).
+func (s *CopilotService) refreshMessagesFromRecords(sess *CopilotSession) {
+	if s.DB == nil || sess == nil || sess.ThreadID == "" {
+		return
+	}
+	var conv models.CopilotConversation
+	if err := s.DB.Where(&models.CopilotConversation{PSID: sess.ThreadID}).Limit(1).Find(&conv).Error; err != nil || conv.ID == 0 {
+		return
+	}
+	// Order was deleted: drop the stale marker so earlier messages show again.
+	if conv.LastOrderID != nil {
+		var n int64
+		s.DB.Model(&models.Order{}).Where("id = ?", *conv.LastOrderID).Count(&n)
+		if n == 0 {
+			s.DB.Model(&conv).Updates(map[string]interface{}{"last_order_id": nil, "last_order_at": nil})
+			conv.LastOrderID = nil
+			conv.LastOrderAt = nil
+		}
+	}
+	q := s.DB.Where("conversation_id = ?", conv.ID)
+	if conv.LastOrderAt != nil {
+		q = q.Where("msg_timestamp > ?", *conv.LastOrderAt)
+	}
+	var recs []models.CopilotMessageRecord
+	if err := q.Order("msg_timestamp DESC, id DESC").Limit(30).Find(&recs).Error; err != nil {
+		return
+	}
+	msgs := make([]CopilotMessage, 0, len(recs))
+	for i := len(recs) - 1; i >= 0; i-- {
+		r := recs[i]
+		if r.Type == "text" && IsFBSystemNotice(r.Text) {
+			continue
+		}
+		msgs = append(msgs, CopilotMessage{Sender: r.Sender, Type: r.Type, Text: r.Text, ImageURL: r.ImageURL, OCRText: r.OCRText})
+	}
+	sess.Messages = msgs
+	if len(recs) > 0 {
+		sess.LastMessageAt = recs[0].MsgTimestamp
+	}
+	if conv.CustomerName != "" {
+		sess.CustomerName = conv.CustomerName
+	}
+	if conv.AvatarURL != "" {
+		sess.AvatarURL = conv.AvatarURL
+	}
+	if conv.LastOrderID == nil {
+		sess.CreatedOrder = nil
+	} else if sess.CreatedOrder == nil || sess.CreatedOrder.ID != *conv.LastOrderID {
+		var ord models.Order
+		if err := s.DB.Preload("Products").Limit(1).Find(&ord, *conv.LastOrderID).Error; err == nil && ord.ID != 0 {
+			s.FormatOrderMedia(&ord)
+			sess.CreatedOrder = &ord
+		} else {
+			sess.CreatedOrder = nil
+		}
 	}
 }

@@ -1453,6 +1453,9 @@ func (h *SaleV2Handler) DestroyOrder(c *gin.Context) {
 	id := c.Param("id")
 	h.DB.Where("id = ?", id).Delete(&models.Order{})
 	h.DB.Where("order_id = ?", id).Delete(&models.OrderProduct{})
+	// Copilot: a deleted order no longer marks the chat as "ordered" nor hides earlier messages.
+	h.DB.Model(&models.CopilotConversation{}).Where("last_order_id = ?", id).
+		Updates(map[string]interface{}{"last_order_id": nil, "last_order_at": nil})
 	h.updateProductStatuses()
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
