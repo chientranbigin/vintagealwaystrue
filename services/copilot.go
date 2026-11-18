@@ -655,7 +655,6 @@ func (s *CopilotService) formatMediaPath(path string) string {
 	return s.MediaBase + "/" + clean
 }
 
-
 // FetchFBUserProfile queries Facebook Graph API for the real customer name and profile picture.
 func (s *CopilotService) FetchFBUserProfile(psid, pageToken string) (string, string) {
 	if psid == "" || pageToken == "" {
@@ -690,12 +689,15 @@ func (s *CopilotService) UpsertFBMessage(
 	if s.DB == nil {
 		return nil, false, fmt.Errorf("database not initialized")
 	}
+	if strings.TrimSpace(psid) == "" {
+		return nil, false, fmt.Errorf("empty psid")
+	}
 	if msgTime.IsZero() {
 		msgTime = time.Now()
 	}
 
 	var conv models.CopilotConversation
-	err := s.DB.Where("psid = ?", psid).First(&conv).Error
+	err := s.DB.Where(&models.CopilotConversation{PSID: psid}).First(&conv).Error
 	if err != nil {
 		if customerName == "" && pageToken != "" {
 			name, pic := s.FetchFBUserProfile(psid, pageToken)
@@ -778,8 +780,11 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	if s.DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
+	if strings.TrimSpace(psid) == "" {
+		return nil, fmt.Errorf("empty psid")
+	}
 	var conv models.CopilotConversation
-	if err := s.DB.Where("psid = ?", psid).First(&conv).Error; err != nil {
+	if err := s.DB.Where(&models.CopilotConversation{PSID: psid}).First(&conv).Error; err != nil {
 		return nil, err
 	}
 
@@ -787,9 +792,13 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	if conv.LastOrderAt != nil {
 		query = query.Where("msg_timestamp > ?", *conv.LastOrderAt)
 	}
+	// Newest 30 messages, then flip back to chronological order.
 	var recs []models.CopilotMessageRecord
-	if err := query.Order("msg_timestamp ASC, id ASC").Limit(30).Find(&recs).Error; err != nil {
+	if err := query.Order("msg_timestamp DESC, id DESC").Limit(30).Find(&recs).Error; err != nil {
 		return nil, err
+	}
+	for i, j := 0, len(recs)-1; i < j; i, j = i+1, j-1 {
+		recs[i], recs[j] = recs[j], recs[i]
 	}
 
 	var msgs []CopilotMessage
@@ -854,12 +863,12 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 }
 
 func (s *CopilotService) MarkConversationOrdered(psid string, orderID uint) {
-	if s.DB == nil {
+	if s.DB == nil || strings.TrimSpace(psid) == "" {
 		return
 	}
 	now := time.Now()
 	s.DB.Model(&models.CopilotConversation{}).
-		Where("psid = ?", psid).
+		Where(&models.CopilotConversation{PSID: psid}).
 		Updates(map[string]interface{}{
 			"last_order_at": now,
 			"last_order_id": orderID,
