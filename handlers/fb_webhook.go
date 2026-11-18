@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"sale-app/models"
 	"sale-app/services"
 
 	"github.com/gin-gonic/gin"
@@ -446,5 +447,38 @@ func (h *CopilotHandler) Reanalyze(c *gin.Context) {
 		return
 	}
 	h.Copilot.SaveAndBroadcast(sess)
+	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
+}
+
+// LinkOrder attaches an order created on the regular Create Order page (opened from Copilot)
+// to the Copilot conversation, so its receipt shows up there and can be sent to the customer.
+func (h *CopilotHandler) LinkOrder(c *gin.Context) {
+	var req struct {
+		ThreadID string `json:"thread_id" binding:"required"`
+		OrderID  uint   `json:"order_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	var order models.Order
+	if err := h.DB.Preload("Products").First(&order, req.OrderID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy đơn"})
+		return
+	}
+	h.Copilot.FormatOrderMedia(&order)
+	h.Copilot.MarkConversationOrdered(req.ThreadID, order.ID)
+	sess, ok := h.Copilot.GetSession(req.ThreadID)
+	if ok {
+		cp := *sess
+		cp.CreatedOrder = &order
+		cp.UpdatedAt = time.Now()
+		h.Copilot.SaveAndBroadcast(&cp)
+		sess = &cp
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
 }

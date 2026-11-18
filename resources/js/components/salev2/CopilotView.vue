@@ -28,7 +28,7 @@
               v-model="search"
               type="search"
               placeholder="Tìm khách hoặc mã SP"
-              class="flex-1 bg-transparent outline-none text-[15px] text-slate-800"
+              class="flex-1 bg-transparent outline-none text-[16px] text-slate-800"
             />
           </div>
         </div>
@@ -107,6 +107,14 @@
           >
             <i class="el-icon-goods"></i>{{ (activeSession.detected_products || []).length }}
           </button>
+          <button
+            v-if="!activeSession.created_order"
+            class="h-9 px-3 rounded-full bg-emerald-600 text-white text-sm font-bold flex items-center gap-1 active:bg-emerald-700 disabled:opacity-60"
+            :disabled="goingToOrder"
+            @click="goCreateOrder"
+          >
+            <i :class="goingToOrder ? 'el-icon-loading' : 'el-icon-shopping-cart-full'"></i> Lên đơn
+          </button>
         </div>
 
         <button
@@ -153,50 +161,40 @@
           </div>
         </div>
 
-        <!-- AI suggestion bar (where Messenger's composer would be) -->
-        <div class="shrink-0 border-t border-slate-200 bg-slate-50 px-3 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 8px)">
+        <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
+        <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 8px)">
           <div v-if="pendingSend" class="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-2 mb-2 text-[13px]">
             <i class="el-icon-loading"></i>
             <span class="flex-1">Đang gửi sau {{ pendingSend.left }}s…</span>
             <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
           </div>
-          <div class="flex items-center gap-1.5 text-[12px] font-bold text-blue-700 mb-1">
-            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : 'el-icon-magic-stick'"></i>
-            <span class="flex-1">{{ reanalyzing[activeSession.thread_id] ? 'AI đang phân tích lại…' : 'Gợi ý trả lời' }}</span>
-            <button class="text-slate-500 font-semibold" @click="replyExpanded = !replyExpanded">
-              {{ replyExpanded ? 'Thu gọn' : 'Sửa' }}
-            </button>
+          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : 'text-blue-700'">
+            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : 'el-icon-magic-stick')"></i>
+            <span class="flex-1">{{ reanalyzing[activeSession.thread_id] ? 'AI đang phân tích lại…' : (replyDirty ? 'Tin nhắn của bạn' : 'Gợi ý AI — sửa trực tiếp hoặc gửi luôn') }}</span>
+            <button v-if="replyDirty && lastServerReply && editableReply !== lastServerReply" class="text-blue-600 font-semibold" @click="useSuggestion">Dùng gợi ý AI</button>
           </div>
-          <textarea
-            v-if="replyExpanded"
-            v-model="editableReply"
-            rows="5"
-            class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-[15px] leading-snug outline-none focus:border-blue-500"
-          ></textarea>
-          <div
-            v-else
-            class="rounded-xl bg-white border border-slate-200 px-3 py-2 text-[14px] leading-snug text-slate-800 line-clamp-3"
-            @click="replyExpanded = true"
-          >
-            {{ editableReply || 'Chưa có gợi ý — chờ khách nhắn tin.' }}
-          </div>
-          <div v-if="activeSession.size_advice && replyExpanded" class="mt-1.5 text-[12px] text-blue-800 bg-blue-50 rounded-lg px-2 py-1">
-            Size: {{ activeSession.size_advice }}
-          </div>
-          <div class="flex gap-2 mt-2">
-            <button class="flex-1 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold text-sm active:bg-slate-100" @click="copySuggestedReply">
-              <i class="el-icon-document-copy"></i> Copy
-            </button>
+          <div class="flex items-end gap-2">
+            <div class="relative flex-1">
+              <textarea
+                v-model="editableReply"
+                rows="3"
+                placeholder="Nhập tin nhắn…"
+                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-10 py-2 text-[16px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
+                @input="replyDirty = true"
+              ></textarea>
+              <button
+                v-if="editableReply"
+                class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center active:bg-slate-300"
+                aria-label="Xoá nội dung để tự nhập"
+                @click="clearReply"
+              ><i class="el-icon-close"></i></button>
+            </div>
             <button
-              class="flex-1 h-10 rounded-xl bg-blue-600 text-white font-bold text-sm active:bg-blue-700 disabled:opacity-50"
-              :disabled="!canSendToCustomer || !editableReply || !!pendingSend"
+              class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg active:bg-blue-700 disabled:opacity-40 shrink-0"
+              aria-label="Gửi cho khách"
+              :disabled="!canSendToCustomer || !editableReply.trim() || !!pendingSend"
               @click="queueSend"
-            >
-              <i class="el-icon-s-promotion"></i> Gửi
-            </button>
-            <button class="flex-1 h-10 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold text-sm active:bg-emerald-100" @click="openOrderSheet">
-              <i class="el-icon-shopping-cart-full"></i> Lên đơn
-            </button>
+            ><i class="el-icon-s-promotion"></i></button>
           </div>
         </div>
       </div>
@@ -227,12 +225,21 @@
                 </div>
               </div>
             </div>
-            <button class="w-full h-11 mt-3 rounded-xl bg-emerald-600 text-white font-bold" @click="openOrderSheet">Lên đơn</button>
+            <div v-if="activeSession.size_advice" class="mt-3 text-[13px] text-blue-800 bg-blue-50 rounded-xl px-3 py-2">
+              <b>Tư vấn size:</b> {{ activeSession.size_advice }}
+            </div>
+            <button
+              v-if="!activeSession.created_order"
+              class="w-full h-11 mt-3 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-60"
+              :disabled="goingToOrder"
+              @click="goCreateOrder"
+            >
+              <i :class="goingToOrder ? 'el-icon-loading' : 'el-icon-shopping-cart-full'"></i> Lên đơn
+            </button>
           </template>
 
-          <template v-else-if="sheet === 'order'">
+          <template v-else-if="sheet === 'order' && activeSession.created_order">
             <!-- Order exists: receipt -->
-            <template v-if="activeSession.created_order">
               <div class="flex items-center gap-2 mb-3">
                 <h3 class="text-base font-bold text-emerald-800 m-0 flex-1">Đã lên đơn #{{ activeSession.created_order.id }}</h3>
                 <router-link :to="`/salev2/order/${activeSession.created_order.id}/edit`" class="text-sm font-semibold text-blue-600">Sửa đơn</router-link>
@@ -254,41 +261,6 @@
                   <i class="el-icon-download"></i>
                 </button>
               </div>
-            </template>
-
-            <!-- No order yet: editable form -->
-            <template v-else>
-              <h3 class="text-base font-bold text-slate-900 mt-0 mb-2">Lên đơn</h3>
-              <div v-if="!availableProducts.length" class="text-sm text-slate-500 bg-slate-50 rounded-xl p-3 mb-3">
-                Chưa có sản phẩm còn hàng trong hội thoại này.
-              </div>
-              <label
-                v-for="p in availableProducts"
-                :key="'op-' + p.id"
-                class="flex items-center gap-3 p-2 mb-2 rounded-xl border"
-                :class="orderForm.product_codes.includes(p.code) ? 'border-blue-400 bg-blue-50/50' : 'border-slate-200'"
-              >
-                <input v-model="orderForm.product_codes" type="checkbox" :value="p.code" class="w-5 h-5 accent-blue-600" />
-                <img v-if="p.thumb_url" :src="p.thumb_url" class="w-10 h-12 rounded object-cover" />
-                <span class="flex-1 font-bold text-slate-800">{{ p.code }}</span>
-                <span class="font-bold text-slate-700">{{ formatPrice(p.price) }}</span>
-              </label>
-              <div class="space-y-2 mt-3">
-                <input v-model="orderForm.name" class="w-full h-11 rounded-xl border border-slate-300 px-3 text-[15px] outline-none focus:border-blue-500" placeholder="Tên người nhận" />
-                <input v-model="orderForm.phone" type="tel" inputmode="tel" class="w-full h-11 rounded-xl border border-slate-300 px-3 text-[15px] outline-none focus:border-blue-500" placeholder="Số điện thoại" />
-                <textarea v-model="orderForm.address" rows="2" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-[15px] outline-none focus:border-blue-500" placeholder="Địa chỉ nhận hàng"></textarea>
-                <input v-model="orderForm.note" class="w-full h-11 rounded-xl border border-slate-300 px-3 text-[15px] outline-none focus:border-blue-500" placeholder="Ghi chú (không bắt buộc)" />
-              </div>
-              <p v-if="orderFormError" class="text-[13px] text-rose-600 mt-2 mb-0">{{ orderFormError }}</p>
-              <button
-                class="w-full h-12 mt-3 rounded-xl bg-blue-600 text-white font-bold text-[15px] disabled:opacity-50"
-                :disabled="creatingOrder"
-                @click="manualCreateOrder"
-              >
-                <i v-if="creatingOrder" class="el-icon-loading"></i>
-                Tạo đơn {{ orderFormTotal ? formatPrice(orderFormTotal) : '' }}
-              </button>
-            </template>
           </template>
         </div>
       </div>
@@ -410,6 +382,42 @@
               </div>
             </div>
           </div>
+          <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
+        <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2 pb-3" >
+          <div v-if="pendingSend" class="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-2 mb-2 text-[13px]">
+            <i class="el-icon-loading"></i>
+            <span class="flex-1">Đang gửi sau {{ pendingSend.left }}s…</span>
+            <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : 'text-blue-700'">
+            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : 'el-icon-magic-stick')"></i>
+            <span class="flex-1">{{ reanalyzing[activeSession.thread_id] ? 'AI đang phân tích lại…' : (replyDirty ? 'Tin nhắn của bạn' : 'Gợi ý AI — sửa trực tiếp hoặc gửi luôn') }}</span>
+            <button v-if="replyDirty && lastServerReply && editableReply !== lastServerReply" class="text-blue-600 font-semibold" @click="useSuggestion">Dùng gợi ý AI</button>
+          </div>
+          <div class="flex items-end gap-2">
+            <div class="relative flex-1">
+              <textarea
+                v-model="editableReply"
+                rows="3"
+                placeholder="Nhập tin nhắn…"
+                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-10 py-2 text-[16px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
+                @input="replyDirty = true"
+              ></textarea>
+              <button
+                v-if="editableReply"
+                class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center active:bg-slate-300"
+                aria-label="Xoá nội dung để tự nhập"
+                @click="clearReply"
+              ><i class="el-icon-close"></i></button>
+            </div>
+            <button
+              class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg active:bg-blue-700 disabled:opacity-40 shrink-0"
+              aria-label="Gửi cho khách"
+              :disabled="!canSendToCustomer || !editableReply.trim() || !!pendingSend"
+              @click="queueSend"
+            ><i class="el-icon-s-promotion"></i></button>
+          </div>
+        </div>
         </div>
 
         <!-- Column 3: AI + products + order -->
@@ -419,32 +427,20 @@
           </div>
 
           <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-bold text-slate-800 m-0">Gợi ý trả lời</h3>
-              <div class="flex gap-1.5">
-                <el-button size="mini" icon="el-icon-document-copy" @click="copySuggestedReply">Copy</el-button>
-                <el-button
-                  type="primary"
-                  size="mini"
-                  icon="el-icon-s-promotion"
-                  :disabled="!canSendToCustomer || !editableReply || !!pendingSend"
-                  @click="queueSend"
-                >Gửi</el-button>
-              </div>
+            <div class="flex items-center justify-between mb-2.5">
+              <h3 class="text-sm font-bold text-slate-800 m-0">Sản phẩm nhận diện ({{ (activeSession.detected_products || []).length }})</h3>
+              <el-button
+                v-if="!activeSession.created_order"
+                type="success"
+                size="mini"
+                icon="el-icon-shopping-cart-full"
+                :loading="goingToOrder"
+                @click="goCreateOrder"
+              >Lên đơn</el-button>
             </div>
-            <div v-if="pendingSend" class="flex items-center gap-2 bg-slate-900 text-white rounded-lg px-3 py-1.5 mb-2 text-xs">
-              <i class="el-icon-loading"></i>
-              <span class="flex-1">Đang gửi sau {{ pendingSend.left }}s…</span>
-              <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
-            </div>
-            <el-input v-model="editableReply" type="textarea" :rows="4" placeholder="Nội dung gợi ý..." />
-            <div v-if="activeSession.size_advice" class="mt-2.5 bg-blue-50 border border-blue-100 rounded-xl p-2.5 text-xs text-blue-800">
+            <div v-if="activeSession.size_advice" class="mb-2.5 bg-blue-50 border border-blue-100 rounded-xl p-2.5 text-xs text-blue-800">
               <strong>Tư vấn size:</strong> {{ activeSession.size_advice }}
             </div>
-          </div>
-
-          <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-            <h3 class="text-sm font-bold text-slate-800 mb-2.5 mt-0">Sản phẩm nhận diện ({{ (activeSession.detected_products || []).length }})</h3>
             <div v-if="!(activeSession.detected_products || []).length" class="text-xs text-slate-400">Chưa phát hiện mã sản phẩm trong ảnh/tin nhắn.</div>
             <div v-else class="space-y-2">
               <div v-for="p in activeSession.detected_products" :key="'dp-' + p.id" class="flex items-start gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50/80">
@@ -493,26 +489,6 @@
             </div>
           </div>
 
-          <div v-else class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-bold text-slate-800 m-0">Lên đơn nhanh</h3>
-              <span class="text-[11px] text-slate-400">Hoặc nhắn: "OK ạ, để em lên đơn ngay"</span>
-            </div>
-            <div v-if="!availableProducts.length" class="text-xs text-slate-400 mb-2">Chưa có sản phẩm còn hàng trong hội thoại.</div>
-            <el-checkbox-group v-model="orderForm.product_codes" class="mb-2">
-              <el-checkbox v-for="p in availableProducts" :key="'dc-' + p.id" :label="p.code">{{ p.code }} · {{ formatPrice(p.price) }}</el-checkbox>
-            </el-checkbox-group>
-            <div class="space-y-2">
-              <el-input v-model="orderForm.name" size="small" placeholder="Tên người nhận" />
-              <el-input v-model="orderForm.phone" size="small" placeholder="Số điện thoại" />
-              <el-input v-model="orderForm.address" size="small" type="textarea" :rows="2" placeholder="Địa chỉ" />
-              <el-input v-model="orderForm.note" size="small" placeholder="Ghi chú" />
-            </div>
-            <p v-if="orderFormError" class="text-xs text-rose-600 mt-2 mb-0">{{ orderFormError }}</p>
-            <el-button type="primary" size="small" class="w-full mt-3" :loading="creatingOrder" @click="manualCreateOrder">
-              Tạo đơn {{ orderFormTotal ? formatPrice(orderFormTotal) : '' }}
-            </el-button>
-          </div>
         </div>
       </div>
     </div>
@@ -612,16 +588,13 @@ export default {
       isMobile: typeof window !== 'undefined' ? window.innerWidth < 768 : false,
       mobileView: 'list',
       sheet: null,
-      replyExpanded: false,
+      replyDirty: false,
+      goingToOrder: false,
       search: '',
       seen: readSeen(),
       flashIds: {},
       // send with undo
       pendingSend: null,
-      // order form
-      orderForm: { name: '', phone: '', address: '', note: '', product_codes: [] },
-      orderFormError: '',
-      lastDraftKey: '',
       renderedOrderId: null,
       reanalyzing: {},
       stickToBottom: true
@@ -646,11 +619,6 @@ export default {
     },
     availableProducts() {
       return ((this.activeSession && this.activeSession.detected_products) || []).filter((p) => p.status === 'AVAILABLE');
-    },
-    orderFormTotal() {
-      return this.availableProducts
-        .filter((p) => this.orderForm.product_codes.includes(p.code))
-        .reduce((sum, p) => sum + Number(p.price || 0), 0);
     },
     canSendToCustomer() {
       return Boolean(this.activeSession && /^\d+$/.test(this.activeSession.thread_id || ''));
@@ -677,6 +645,7 @@ export default {
       try {
         const res = await axios.get('/salev2/api/copilot/sessions');
         this.sessions = res.data.sessions || [];
+        if (this.openFromRoute()) return;
         if (!this.activeThreadId && this.sortedSessions.length > 0 && !this.isMobile) {
           this.selectSession(this.sortedSessions[0].thread_id);
         } else if (this.activeSession) {
@@ -768,9 +737,8 @@ export default {
     selectSession(threadId) {
       if (this.activeThreadId !== threadId) {
         this.clearPendingSend();
-        this.replyExpanded = false;
+        this.replyDirty = false;
         this.lastServerReply = '';
-        this.lastDraftKey = '';
         this.receiptImg = '';
         this.receiptCanvas = null;
       }
@@ -833,14 +801,9 @@ export default {
     syncActiveState(sess, shouldScroll) {
       const nextReply = sess.suggested_reply || '';
       if (nextReply !== this.lastServerReply) {
-        this.editableReply = nextReply;
         this.lastServerReply = nextReply;
-      }
-      const draft = sess.order_draft || {};
-      const draftKey = JSON.stringify(draft);
-      if (draftKey !== this.lastDraftKey) {
-        this.lastDraftKey = draftKey;
-        this.fillOrderForm(sess);
+        // Never overwrite what the user is typing; they can pull the new suggestion back in.
+        if (!this.replyDirty) this.editableReply = nextReply;
       }
       if (shouldScroll) this.$nextTick(() => this.scrollChatToBottom());
       if (sess.created_order && (!this.receiptImg || !this.renderedOrderId || this.renderedOrderId !== sess.created_order.id)) {
@@ -850,18 +813,67 @@ export default {
         this.receiptCanvas = null;
       }
     },
-    fillOrderForm(sess) {
-      const draft = sess.order_draft || {};
-      const avail = (sess.detected_products || []).filter((p) => p.status === 'AVAILABLE').map((p) => p.code);
-      const codes = (draft.product_codes || []).filter((c) => avail.includes(c));
-      this.orderForm = {
-        name: draft.name || sess.customer_name || '',
-        phone: draft.phone || '',
-        address: draft.address || '',
-        note: draft.note || '',
-        product_codes: codes.length ? codes : avail.slice(0, 1)
-      };
-      this.orderFormError = '';
+    // Back from Create Order (?thread=...&receipt=1): reopen that chat with its receipt.
+    openFromRoute() {
+      const q = this.$route.query || {};
+      const threadId = q.thread ? String(q.thread) : '';
+      if (!threadId || !this.sessions.some((s) => s.thread_id === threadId)) return false;
+      if (this.isMobile) {
+        this.openChat(threadId);
+        if (q.receipt && this.activeSession && this.activeSession.created_order) this.openOrderSheet();
+      } else {
+        this.selectSession(threadId);
+      }
+      this.$router.replace({ path: this.$route.path }).catch(() => {});
+      return true;
+    },
+    // "Lên đơn": open the regular Create Order page pre-filled with customer + products + prices.
+    async goCreateOrder() {
+      const sess = this.activeSession;
+      if (!sess || this.goingToOrder) return;
+      this.goingToOrder = true;
+      try {
+        const draft = sess.order_draft || {};
+        const avail = this.availableProducts.map((p) => p.code);
+        let codes = (draft.product_codes || []).filter((c) => avail.includes(c));
+        if (!codes.length && avail.length === 1) codes = avail;
+        let matched = [];
+        if (codes.length) {
+          const res = await axios.get('/salev2/api/products', {
+            params: { search: codes.join(','), status: 'AVAILABLE', limit: 100, include_empty_thumb: 'true' }
+          });
+          const list = (res.data && res.data.data) || [];
+          matched = codes
+            .map((c) => list.find((p) => (p.name || '').toUpperCase() === c.toUpperCase()))
+            .filter(Boolean);
+        }
+        sessionStorage.setItem(
+          'smart_order_prefill',
+          JSON.stringify({
+            parsed: {
+              name: draft.name || sess.customer_name || '',
+              phone: draft.phone || '',
+              address: draft.address || '',
+              note: draft.note || ''
+            },
+            matched_products: matched,
+            copilot_thread: sess.thread_id
+          })
+        );
+        this.$router.push({ path: '/salev2/order/create', query: { from_smart: '1' } });
+      } catch (e) {
+        this.$message.error('Không chuẩn bị được đơn: ' + (e.message || ''));
+      } finally {
+        this.goingToOrder = false;
+      }
+    },
+    clearReply() {
+      this.editableReply = '';
+      this.replyDirty = true;
+    },
+    useSuggestion() {
+      this.editableReply = this.lastServerReply;
+      this.replyDirty = false;
     },
     openOrderSheet() {
       this.sheet = 'order';
@@ -883,15 +895,6 @@ export default {
       this.previewSrc = src;
       this.previewVisible = true;
     },
-    async copySuggestedReply() {
-      try {
-        await navigator.clipboard.writeText(this.editableReply || '');
-        this.$message.success('Đã copy');
-      } catch (e) {
-        this.$message.error('Không thể copy tự động');
-      }
-    },
-    // ---------- send reply with undo ----------
     queueSend() {
       const text = (this.editableReply || '').trim();
       if (!text || !this.canSendToCustomer || this.pendingSend) return;
@@ -925,7 +928,10 @@ export default {
       try {
         await axios.post('/salev2/api/copilot/send-text', { thread_id: threadId, text });
         this.$message.success('Đã gửi cho khách');
-        this.replyExpanded = false;
+        if (this.activeThreadId === threadId && this.editableReply.trim() === text) {
+          this.editableReply = '';
+          this.replyDirty = false;
+        }
       } catch (e) {
         if (sess && sess.messages) {
           const i = sess.messages.indexOf(optimistic);
@@ -1017,40 +1023,6 @@ export default {
       link.click();
     },
     // ---------- order ----------
-    async manualCreateOrder() {
-      if (!this.activeSession || this.creatingOrder) return;
-      const f = this.orderForm;
-      if (!f.product_codes.length) {
-        this.orderFormError = 'Chọn ít nhất một sản phẩm còn hàng.';
-        return;
-      }
-      if (!f.phone.trim() || !f.address.trim()) {
-        this.orderFormError = 'Cần số điện thoại và địa chỉ nhận hàng.';
-        return;
-      }
-      this.orderFormError = '';
-      this.creatingOrder = true;
-      try {
-        const res = await axios.post('/salev2/api/copilot/order', {
-          thread_id: this.activeSession.thread_id,
-          name: f.name.trim(),
-          phone: f.phone.trim(),
-          address: f.address.trim(),
-          note: f.note.trim(),
-          product_codes: f.product_codes
-        });
-        if (res.data && res.data.order) {
-          this.$set(this.activeSession, 'created_order', res.data.order);
-          this.$message.success(`Đã tạo đơn #${res.data.order.id}`);
-          this.receiptImg = '';
-          this.renderReceipt(res.data.order);
-        }
-      } catch (e) {
-        this.orderFormError = (e.response && e.response.data && e.response.data.error) || 'Không thể tạo đơn';
-      } finally {
-        this.creatingOrder = false;
-      }
-    },
     resolveProductThumb(p) {
       const raw = p.image_thumb_scale_url || p.image_thumb_scale || p.path_thumb || '';
       if (!raw) return '';

@@ -5,7 +5,12 @@
          <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Create Order</h1>
          <p class="text-slate-500 mt-1">Fill customer details and select products to create a new order</p>
        </div>
-       <el-button @click="$router.push('/salev2/orders')" icon="el-icon-back" circle></el-button>
+       <el-button @click="copilotThread ? $router.push({ path: '/salev2/copilot', query: { thread: copilotThread } }) : $router.push('/salev2/orders')" icon="el-icon-back" circle></el-button>
+     </div>
+
+     <div v-if="copilotThread" class="mb-5 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2.5 text-sm">
+       <i class="el-icon-chat-dot-round"></i>
+       <span class="flex-1">Đơn từ Copilot: thông tin khách, sản phẩm và giá đã điền sẵn — kiểm tra, sửa nếu cần rồi bấm <b>Complete Order</b>. Tạo xong sẽ quay lại hội thoại để gửi receipt.</span>
      </div>
 
      <div v-loading="loading">
@@ -251,6 +256,7 @@ export default {
                 deposit_amount: 0,
                 products: []
             },
+            copilotThread: '',
             discountType: 'amount',
             discountPercent: 0,
             showProductSelector: false,
@@ -385,7 +391,19 @@ export default {
                     final_amount: this.finalAmount
                 };
                 
-                await axios.post('/salev2/api/order', payload);
+                const res = await axios.post('/salev2/api/order', payload);
+                const created = res.data && res.data.order;
+                if (this.copilotThread && created && created.id) {
+                    // Opened from Copilot: attach the order to that chat and go back to it (receipt ready to send).
+                    try {
+                        await axios.post('/salev2/api/copilot/link-order', { thread_id: this.copilotThread, order_id: created.id });
+                    } catch (linkErr) {
+                        console.error('Link order to Copilot failed', linkErr);
+                    }
+                    this.$message.success(`Đã tạo đơn #${created.id}`);
+                    this.$router.push({ path: '/salev2/copilot', query: { thread: this.copilotThread, receipt: '1' } });
+                    return;
+                }
                 this.$message.success('Order Created!');
                 this.$router.push('/salev2/orders');
             } catch(e) {
@@ -396,6 +414,7 @@ export default {
         },
         applySmartData(data) {
             if (!data) return;
+            if (data.copilot_thread) this.copilotThread = String(data.copilot_thread);
             if (data.parsed) {
                 if (data.parsed.name) this.order.name = data.parsed.name;
                 if (data.parsed.phone) this.order.phone = data.parsed.phone;
@@ -409,7 +428,7 @@ export default {
                     }
                 }
             }
-            this.$message.success('Đã tự động điền thông tin từ Smart Parse!');
+            this.$message.success(this.copilotThread ? 'Đã điền sẵn từ Copilot — kiểm tra rồi bấm Complete Order' : 'Đã tự động điền thông tin từ Smart Parse!');
         },
         async applySmartParse() {
             if (!this.smartText.trim()) {
