@@ -70,10 +70,15 @@ type openAIChatMessage struct {
 	Content string `json:"content"`
 }
 
+type openAIResponseFormat struct {
+	Type string `json:"type"`
+}
+
 type openAIChatRequest struct {
-	Model       string              `json:"model"`
-	Messages    []openAIChatMessage `json:"messages"`
-	Temperature float64             `json:"temperature"`
+	Model          string                `json:"model"`
+	Messages       []openAIChatMessage   `json:"messages"`
+	Temperature    float64               `json:"temperature"`
+	ResponseFormat *openAIResponseFormat `json:"response_format,omitempty"`
 }
 
 type openAIChatResponse struct {
@@ -88,28 +93,34 @@ type openAIChatResponse struct {
 }
 
 func (s *SmartOrderService) callOpenAI(ctx context.Context, text string) (*SmartOrderParsedResult, error) {
-	prompt := fmt.Sprintf(`Phân tích đoạn text sau và xuất ra JSON với các trường:
+	prompt := fmt.Sprintf(`Phân tích tin nhắn đặt hàng/giao hàng của khách (có thể viết tự do trên 1 dòng hoặc nhiều dòng, đảo thứ tự, viết tắt địa danh như KTT, HBT, HN, HCM, Q1, P., KĐT..., dùng dấu -, |, /, dấu chấm trong SĐT) và xuất ra JSON với đúng 5 trường sau:
 
-- "name": tên người nhận
-- "phone": số điện thoại
-- "address": địa chỉ giao hàng (bao gồm cả phần trong ngoặc nếu có)
-- "products": danh sách mã sản phẩm (ví dụ: ts1169, ts1158...), dạng mảng chuỗi
-- "note": nội dung ghi chú sau `+"`note:`"+`, nếu có. Nếu có nhiều cụm thì ngăn cách bằng dấu phẩy.
+- "name": tên người nhận (chỉ lấy tên, không dính SĐT hay địa chỉ; nếu không có thì để "")
+- "phone": số điện thoại Việt Nam chỉ gồm chữ số bắt đầu bằng 0 (ví dụ: 0945435858; bỏ dấu chấm/cách, đổi +84/84 đầu thành 0; nếu không có thì để "")
+- "address": địa chỉ giao hàng đầy đủ (giữ nguyên thông tin địa chỉ kể cả phần trong ngoặc hoặc chữ viết tắt, bỏ chữ "Địa chỉ:" ở đầu nếu có, KHÔNG kèm tên người nhận hay SĐT)
+- "products": mảng chuỗi các mã sản phẩm (ví dụ: ["ts1169", "ts1158"]). Lưu ý: KHÔNG nhầm số nhà, lô, tòa, phòng, quận (như "Nhà E", "E12", "P302", "Q1", "Lô A2") với mã sản phẩm. Nếu không có thì để [].
+- "note": nội dung ghi chú giao hàng (như nội dung sau "note:", "ghi chú:", "lưu ý:", hoặc yêu cầu giao giờ hành chính/gọi trước...). Nếu nhiều ý thì ngăn cách bằng dấu phẩy. Nếu không có thì để "".
 
-Yêu cầu:
-- Trả về **duy nhất JSON**, không thêm chữ giải thích, không xuống dòng ngoài JSON.
-- Nếu không có `+"`note:`"+` thì để "note": ""
+Ví dụ:
+Input: "Địa chỉ: Nhà E, khu tập thể Nguyễn Công Trứ, Hai Bà Trưng, Hà Nội - HUY - 0945435858"
+Output: {"name":"HUY","phone":"0945435858","address":"Nhà E, khu tập thể Nguyễn Công Trứ, Hai Bà Trưng, Hà Nội","products":[],"note":""}
 
-Đoạn text:
+Input: "ts1169, st220 - Lan Anh - 0912.345.678 | P302 KTT Thành Công, Ba Đình, HN (note: giao sau 5h)"
+Output: {"name":"Lan Anh","phone":"0912345678","address":"P302 KTT Thành Công, Ba Đình, HN","products":["ts1169","st220"],"note":"giao sau 5h"}
+
+Yêu cầu: Trả về duy nhất 1 JSON object hợp lệ.
+
+Đoạn text cần phân tích:
 """%s"""`, text)
 
 	reqBody := openAIChatRequest{
 		Model: s.Model,
 		Messages: []openAIChatMessage{
-			{Role: "system", Content: "Bạn là một trợ lý phân tích dữ liệu giao hàng."},
+			{Role: "system", Content: "Bạn là trợ lý trích xuất dữ liệu đơn hàng tiếng Việt cực kỳ chính xác. Luôn trả về JSON object hợp lệ."},
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.3,
+		Temperature:    0.1,
+		ResponseFormat: &openAIResponseFormat{Type: "json_object"},
 	}
 
 	jsonBytes, err := json.Marshal(reqBody)
@@ -169,9 +180,18 @@ Yêu cầu:
 		return nil, fmt.Errorf("failed to unmarshal openai json: %w (raw: %s)", err, content)
 	}
 
-	// Clean phone
+	// Clean and normalize phone
 	cleanPhoneRe := regexp.MustCompile(`\D`)
 	result.Phone = cleanPhoneRe.ReplaceAllString(result.Phone, "")
+	if strings.HasPrefix(result.Phone, "84") && len(result.Phone) == 11 {
+		result.Phone = "0" + result.Phone[2:]
+	}
+	result.Name = strings.TrimSpace(result.Name)
+	result.Address = strings.TrimSpace(result.Address)
+	result.Note = strings.TrimSpace(result.Note)
+	if result.Products == nil {
+		result.Products = []string{}
+	}
 
 	return &result, nil
 }
