@@ -71,6 +71,9 @@ func TestFBSystemNoticeAndLikeSticker(t *testing.T) {
 	if !IsFBSystemNotice("Lê Minh Quangg đã trả lời về một bài viết. Xem bài viết") {
 		t.Fatal("post-reply banner should be a system notice")
 	}
+	if !IsFBSystemNotice("Lê Minh Quangg đã trả lời về một bài viết. Xem bài viết(https://www.facebook.com/x/posts/pfbid0q)") {
+		t.Fatal("post-reply banner with link should be a system notice")
+	}
 	if IsFBSystemNotice("Shop đã trả lời anh rồi ạ, anh xem giúp em") {
 		t.Fatal("normal text must not be filtered")
 	}

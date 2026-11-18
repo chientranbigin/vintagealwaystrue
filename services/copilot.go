@@ -1020,7 +1020,7 @@ func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, 
 	return synced, nil
 }
 
-var fbSystemNoticeRe = regexp.MustCompile(`(?i)(đã trả lời (về )?(một |1 )?(quảng cáo|bài viết)\.?(\s*xem (bài viết|quảng cáo))?$|replied to (an|your) (ad|post)\.?(\s*view (post|ad))?$)`)
+var fbSystemNoticeRe = regexp.MustCompile(`(?i)^.{1,80}?\s(đã trả lời (về )?(một |1 )?(quảng cáo|bài viết)|replied to (an|a|your) (ad|post))\.?(\s|\(|$)`)
 
 // IsFBSystemNotice reports Meta-generated banner lines that arrive as page messages.
 func IsFBSystemNotice(text string) bool {
