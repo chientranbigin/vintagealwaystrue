@@ -58,6 +58,8 @@ type CopilotProductMatch struct {
 	Status   string            `json:"status"`
 	ThumbURL string            `json:"thumb_url"`
 	Sizes    []CopilotSizeInfo `json:"sizes"`
+	// Images are original-resolution photos: main first, then detail shots.
+	Images []string `json:"images,omitempty"`
 }
 
 type CopilotOrderDraft struct {
@@ -365,6 +367,7 @@ func (s *CopilotService) toProductMatch(p models.Product) CopilotProductMatch {
 		Status:   strPtrVal(p.Status),
 		ThumbURL: thumb,
 		Sizes:    sizes,
+		Images:   s.originalImages(p),
 	}
 }
 
@@ -443,46 +446,75 @@ func (s *CopilotService) generateAISuggestion(
 
 	// Fast fallback if OpenAI key is missing
 	if strings.TrimSpace(s.OpenAIKey) == "" {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return s.fallbackSuggestion(customerName, action, transcript, messages, products)
 	}
 
-	prodJSON, _ := json.Marshal(products)
-	systemPrompt := `Bạn là trợ lý bán hàng cho shop thời trang Vintage Always True.
-Nhiệm vụ: Đọc hội thoại giữa Khách và Shop cùng danh sách sản phẩm khớp từ Database (kèm giá, trạng thái AVAILABLE/SOLD, và số đo chi tiết VAI/NGỰC/EO/DÀI...) để:
-1. Soạn "suggested_reply": câu trả lời tự nhiên, lịch sự bằng tiếng Việt (xưng "em" - gọi khách "mình/anh/chị") để chủ shop copy dán qua Facebook.
-   - Chỉ trả lời (các) tin nhắn MỚI NHẤT của Khách mà Shop chưa trả lời. Ngắn gọn 1-4 câu, KHÔNG nhắc lại thông tin Shop/AI đã trả lời ở các lượt trước.
-   - Chỉ dùng thông tin có trong dữ liệu sản phẩm và "Chính sách shop" bên dưới. TUYỆT ĐỐI KHÔNG tự bịa phí ship, thời gian giao, chính sách đổi trả, khuyến mãi. Nếu khách hỏi điều không có dữ liệu: đặt "needs_human": true và trả lời kiểu "Dạ để em kiểm tra và báo lại mình ngay ạ".
-   - Nếu khách đã chốt mua và gửi đủ tên/SĐT/địa chỉ: xác nhận lại ngắn gọn mã + giá + thông tin nhận hàng.
-   - Nếu khách hỏi còn hàng: báo rõ mã nào còn (kèm giá + số đo nổi bật), mã nào đã bán.
-   - Nếu khách hỏi có vừa chiều cao/cân nặng không: phân tích dựa trên số đo thực tế trong DB (lưu ý đồ vintage thường form rộng/ôm tùy loại, ngực áo thường lớn hơn ngực cơ thể 10-16cm, eo quần x2 nếu số đo ghi nửa vòng hoặc đúng cm nếu ghi cả vòng).
-   - Nếu khách mặc cả / xin giảm giá / đổi trả / khiếu nại: đặt "needs_human": true, ghi rõ "human_reason", và gợi ý câu trả lời khéo đợi nhân viên kiểm tra.
-2. Ghi ngắn gọn nhận xét vào "size_advice" (nếu có hỏi size/số đo).
-3. Trích xuất "order_draft": lấy tên khách, SĐT, địa chỉ, ghi chú và danh sách mã sản phẩm đang AVAILABLE được nhắc tới trong hội thoại (TUYỆT ĐỐI KHÔNG đưa mã đã SOLD vào order_draft).
+	pending := s.pendingCustomerCodes(messages)
+	productContext, soldCodes := buildProductContext(products, pending)
+	systemPrompt := `Bạn là trợ lý bán hàng của shop đồ vintage nam "Vintage Always True", soạn sẵn tin nhắn để chủ shop gửi khách qua Messenger.
 
-Trả về JSON thuần theo schema:
-{
-  "suggested_reply": "string",
-  "size_advice": "string",
-  "needs_human": false,
-  "human_reason": "string",
-  "order_draft": {
-    "name": "string",
-    "phone": "string",
-    "address": "string",
-    "note": "string",
-    "product_codes": ["TS123"]
-  }
-}`
+DỮ LIỆU SẢN PHẨM được chia 2 nhóm:
+- "CÒN HÀNG": chỉ được giới thiệu / chốt các mã trong nhóm này.
+- "ĐÃ BÁN": các mã này KHÔNG còn. TUYỆT ĐỐI không nói chúng còn hàng, không báo giá/số đo như hàng còn. Nếu khách hỏi tới thì báo đã bán.
+
+1. "suggested_reply" — trả lời (các) tin MỚI NHẤT của Khách mà Shop chưa trả lời:
+   - Nếu có dòng "KHÁCH ĐANG HỎI", chỉ báo còn/hết cho đúng các mã đó; không nhắc lại mã đã trả lời ở lượt trước.
+   - Giọng như chủ shop nhắn Messenger: tự nhiên, thân thiện, NGẮN 1-3 câu. Dùng "dạ", "nha", "nhé", "ạ"; được viết tắt quen thuộc (sp, k, dc, r, ib, ship); tối đa 1 emoji hợp ngữ cảnh (😊 🥰 👍 ✨ 🥲).
+   - Không mở đầu "Chào anh/chị ..." ở mọi tin; không dùng câu văn mẫu kiểu "Mình có muốn tham khảo thêm không ạ?", "Nếu cần thêm thông tin gì cứ cho em biết", "Em rất sẵn lòng hỗ trợ".
+   - Giá viết gọn: 350k. KHÔNG kèm số đo, trừ khi khách hỏi size / số đo / chiều cao cân nặng / có vừa không.
+   - Không nhắc lại điều Shop đã trả lời trước đó.
+   - Chỉ dùng dữ liệu sản phẩm và "Chính sách shop". KHÔNG bịa phí ship, thời gian giao, đổi trả, khuyến mãi. Thiếu dữ liệu: "needs_human": true và trả lời kiểu "Dạ để em check lại rồi báo mình liền nha".
+   - Khách hỏi vừa không: dựa số đo thực tế (đồ vintage: ngực áo thường lớn hơn ngực người 10-16cm; eo quần ghi nửa vòng thì x2).
+   - Khách mặc cả / xin giảm / đổi trả / khiếu nại: "needs_human": true + "human_reason", trả lời khéo kiểu đợi em check.
+   - Khách đã chốt và gửi đủ tên/SĐT/địa chỉ: xác nhận ngắn mã + giá.
+   Ví dụ giọng:
+   • Khách: "Mẫu này còn k shop" (còn hàng) → "Dạ mẫu này còn nha anh, 350k ạ 😊"
+   • Khách gửi 4 ảnh, chỉ TS4764 còn → "Dạ mấy mẫu kia em bán mất r ạ 🥲 còn mỗi TS4764 350k thôi nha anh"
+   • Hết hàng → "Dạ mẫu này em bán mất r anh ơi 🥲"
+2. "size_advice": nhận xét size ngắn gọn (chỉ khi khách hỏi size/số đo), để trống nếu không.
+3. "order_draft": tên, SĐT, địa chỉ, ghi chú khách đã gửi, và mã sản phẩm CÒN HÀNG khách muốn lấy (không bao giờ đưa mã ĐÃ BÁN).
+
+Trả về JSON thuần:
+{"suggested_reply":"string","size_advice":"string","needs_human":false,"human_reason":"string","order_draft":{"name":"string","phone":"string","address":"string","note":"string","product_codes":["TS123"]}}`
 
 	policy := strings.TrimSpace(os.Getenv("COPILOT_SHOP_POLICY"))
 	if policy == "" {
 		policy = "(Chưa cấu hình — không được tự đưa ra phí ship / thời gian giao / đổi trả)"
 	}
 	userPrompt := fmt.Sprintf(
-		"Tên khách Facebook: %s\nAction hiện tại: %s\n\nChính sách shop:\n%s\n\nSản phẩm tìm thấy trong DB:\n%s\n\nHội thoại hiện tại:\n%s",
-		customerName, action, policy, string(prodJSON), transcript,
+		"Tên khách Facebook: %s\nAction hiện tại: %s\n\nChính sách shop:\n%s\n\n%s\n\nHội thoại hiện tại:\n%s",
+		customerName, action, policy, productContext, transcript,
 	)
 
+	out, ok := s.callCopilotAI(ctx, systemPrompt, userPrompt)
+	if !ok {
+		return s.fallbackSuggestion(customerName, action, transcript, messages, products)
+	}
+	// Guard: the model must never present a SOLD code as available. Retry once with an
+	// explicit correction; if it still slips, flag the reply for a human.
+	if bad := soldCodesPresentedAsAvailable(out.SuggestedReply, soldCodes); len(bad) > 0 {
+		retryPrompt := userPrompt + "\n\nLƯU Ý: bản nháp trước đã giới thiệu nhầm mã ĐÃ BÁN " + strings.Join(bad, ", ") +
+			" như còn hàng. Viết lại, các mã đó phải báo là đã bán hoặc không nhắc tới."
+		if out2, ok2 := s.callCopilotAI(ctx, systemPrompt, retryPrompt); ok2 {
+			out = out2
+		}
+		if bad2 := soldCodesPresentedAsAvailable(out.SuggestedReply, soldCodes); len(bad2) > 0 {
+			out.NeedsHuman = true
+			out.HumanReason = "Gợi ý có nhắc mã đã bán (" + strings.Join(bad2, ", ") + ") — kiểm tra lại trước khi gửi"
+		}
+	}
+	if out.OrderDraft != nil {
+		out.OrderDraft.ProductCodes = filterOutCodes(out.OrderDraft.ProductCodes, soldCodes)
+		if out.OrderDraft.Name == "" {
+			out.OrderDraft.Name = customerName
+		}
+	}
+	return out
+}
+
+// callCopilotAI sends one chat completion and decodes the JSON reply.
+func (s *CopilotService) callCopilotAI(ctx context.Context, systemPrompt, userPrompt string) (aiCopilotOutput, bool) {
+	var out aiCopilotOutput
 	payload := map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
@@ -495,25 +527,25 @@ Trả về JSON thuần theo schema:
 
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(bodyBytes))
 	if err != nil {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.OpenAIKey)
 
 	resp, err := s.Client.Do(req)
 	if err != nil {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
 
 	var openAIResp struct {
@@ -525,34 +557,41 @@ Trả về JSON thuần theo schema:
 		Usage OpenAITokenUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(respBytes, &openAIResp); err != nil || len(openAIResp.Choices) == 0 {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
 	RecordOpenAIUsage("copilot", "gpt-4o-mini", openAIResp.Usage)
 
-	var out aiCopilotOutput
 	if err := json.Unmarshal([]byte(openAIResp.Choices[0].Message.Content), &out); err != nil {
-		return s.fallbackSuggestion(customerName, action, transcript, products)
+		return out, false
 	}
-	if out.OrderDraft != nil && out.OrderDraft.Name == "" {
-		out.OrderDraft.Name = customerName
-	}
-	return out
+	return out, true
 }
 
-func (s *CopilotService) fallbackSuggestion(customerName, action, transcript string, products []CopilotProductMatch) aiCopilotOutput {
+func (s *CopilotService) fallbackSuggestion(customerName, action, transcript string, messages []CopilotMessage, products []CopilotProductMatch) aiCopilotOutput {
 	parsed := s.SmartOrder.FallbackParse(transcript)
 	if parsed.Name == "" {
 		parsed.Name = customerName
 	}
 
-	var availCodes []string
-	var replyParts []string
+	// Only answer codes the customer asked about after the shop's last reply.
+	pending := s.pendingCustomerCodes(messages)
+	isPending := map[string]bool{}
+	for _, c := range pending {
+		isPending[c] = true
+	}
+	var availCodes, availParts, soldParts []string
 	for _, p := range products {
-		if strings.EqualFold(p.Status, "AVAILABLE") {
+		avail := strings.EqualFold(p.Status, "AVAILABLE")
+		if avail {
 			availCodes = append(availCodes, p.Code)
-			replyParts = append(replyParts, fmt.Sprintf("Mã %s còn hàng, giá %sđ ạ", p.Code, FormatVNDPrice(p.Price)))
+		}
+		if len(pending) > 0 && !isPending[strings.ToUpper(p.Code)] {
+			continue
+		}
+		if avail {
+			availParts = append(availParts, p.Code+" "+priceK(p.Price))
 		} else {
-			replyParts = append(replyParts, fmt.Sprintf("Mã %s bên em vừa bán mất rồi ạ", p.Code))
+			soldParts = append(soldParts, p.Code)
 		}
 	}
 
@@ -563,9 +602,16 @@ func (s *CopilotService) fallbackSuggestion(customerName, action, transcript str
 		humanReason = "Khách hỏi giảm giá / đổi trả"
 	}
 
-	reply := strings.Join(replyParts, ". ")
-	if reply == "" {
-		reply = "Dạ mình gửi giúp em mã sản phẩm hoặc chiều cao cân nặng để em kiểm tra cho mình nha ạ."
+	var reply string
+	switch {
+	case len(availParts) > 0 && len(soldParts) > 0:
+		reply = "Dạ " + strings.Join(availParts, ", ") + " còn nha 😊 còn " + strings.Join(soldParts, ", ") + " em bán mất r ạ"
+	case len(availParts) > 0:
+		reply = "Dạ " + strings.Join(availParts, ", ") + " còn nha anh 😊"
+	case len(soldParts) > 0:
+		reply = "Dạ " + strings.Join(soldParts, ", ") + " em bán mất r ạ 🥲"
+	default:
+		reply = "Dạ mình gửi em mã sp hoặc chiều cao cân nặng để em check cho nha 😊"
 	}
 
 	return aiCopilotOutput{
@@ -580,6 +626,128 @@ func (s *CopilotService) fallbackSuggestion(customerName, action, transcript str
 			ProductCodes: availCodes,
 		},
 	}
+}
+
+// pendingCustomerCodes returns product codes the customer mentioned (text or photo OCR)
+// after the shop's last message, i.e. what still needs an answer.
+func (s *CopilotService) pendingCustomerCodes(messages []CopilotMessage) []string {
+	start := 0
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Sender == "shop" {
+			start = i + 1
+			break
+		}
+	}
+	seen := map[string]bool{}
+	var codes []string
+	for _, m := range messages[start:] {
+		if m.Sender != "customer" {
+			continue
+		}
+		for _, c := range append(s.ExtractProductCodesFromText(m.Text), s.ExtractProductCodesFromText(m.OCRText)...) {
+			if !seen[c] {
+				seen[c] = true
+				codes = append(codes, c)
+			}
+		}
+	}
+	return codes
+}
+
+// buildProductContext renders products for the prompt as two explicit groups so the model
+// can't mix up sold and available items, and returns the sold codes for the output guard.
+func buildProductContext(products []CopilotProductMatch, pending []string) (string, []string) {
+	var avail, sold []string
+	var soldCodes []string
+	for _, p := range products {
+		if strings.EqualFold(p.Status, "AVAILABLE") {
+			var sizes []string
+			for _, sz := range p.Sizes {
+				sizes = append(sizes, fmt.Sprintf("%s %g", sz.Name, sz.Value))
+			}
+			line := fmt.Sprintf("- %s | %s | %s", p.Code, p.Type, priceK(p.Price))
+			if len(sizes) > 0 {
+				line += " | số đo: " + strings.Join(sizes, ", ")
+			}
+			avail = append(avail, line)
+		} else {
+			sold = append(sold, p.Code)
+			soldCodes = append(soldCodes, strings.ToUpper(p.Code))
+		}
+	}
+	var b strings.Builder
+	if len(pending) > 0 {
+		b.WriteString("KHÁCH ĐANG HỎI (chưa trả lời): " + strings.Join(pending, ", ") + "\n\n")
+	}
+	b.WriteString("CÒN HÀNG (chỉ được giới thiệu các mã này):\n")
+	if len(avail) == 0 {
+		b.WriteString("(không có)\n")
+	} else {
+		b.WriteString(strings.Join(avail, "\n") + "\n")
+	}
+	b.WriteString("\nĐÃ BÁN (không còn, không được nói là còn hàng): ")
+	if len(sold) == 0 {
+		b.WriteString("(không có)")
+	} else {
+		b.WriteString(strings.Join(sold, ", "))
+	}
+	return b.String(), soldCodes
+}
+
+var soldWordsRe = regexp.MustCompile(`(?i)(bán|hết|sold|không còn|k còn|ko còn|chưa còn)`)
+
+// soldCodesPresentedAsAvailable returns sold codes that appear in a sentence of the reply
+// without any "sold / out of stock" wording next to them.
+func soldCodesPresentedAsAvailable(reply string, soldCodes []string) []string {
+	if reply == "" || len(soldCodes) == 0 {
+		return nil
+	}
+	sentences := regexp.MustCompile(`[.!?\n]+`).Split(reply, -1)
+	var bad []string
+	for _, code := range soldCodes {
+		num := strings.TrimLeft(code, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+		codeRe := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(code) + `\b|\b` + regexp.QuoteMeta(num) + `\b`)
+		for _, sen := range sentences {
+			if codeRe.MatchString(sen) && !soldWordsRe.MatchString(sen) {
+				bad = append(bad, code)
+				break
+			}
+		}
+	}
+	return bad
+}
+
+func filterOutCodes(codes, remove []string) []string {
+	rm := map[string]bool{}
+	for _, c := range remove {
+		rm[strings.ToUpper(c)] = true
+	}
+	var out []string
+	for _, c := range codes {
+		if !rm[strings.ToUpper(strings.TrimSpace(c))] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// priceK formats 350000 as "350k" (and 1250000 as "1tr250").
+func priceK(v int64) string {
+	if v <= 0 {
+		return ""
+	}
+	if v >= 1000000 {
+		tr := v / 1000000
+		rest := (v % 1000000) / 1000
+		if rest == 0 {
+			return fmt.Sprintf("%dtr", tr)
+		}
+		return fmt.Sprintf("%dtr%03d", tr, rest)
+	}
+	if v%1000 == 0 {
+		return fmt.Sprintf("%dk", v/1000)
+	}
+	return FormatVNDPrice(v)
 }
 
 func (s *CopilotService) buildConversationTranscript(messages []CopilotMessage) string {
@@ -1241,4 +1409,33 @@ func (s *CopilotService) SendFBText(ctx context.Context, psid, text, pageToken s
 		return fmt.Errorf("Facebook HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// originalImages lists a product's original photos (not the scaled thumb): the main photo
+// (PathThumb / IsMain image) first, then the detail photos, de-duplicated.
+func (s *CopilotService) originalImages(p models.Product) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		u := s.formatMediaPath(strings.TrimSpace(path))
+		if u == "" || seen[u] {
+			return
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	if p.PathThumb != nil {
+		add(*p.PathThumb)
+	}
+	for _, img := range p.Images {
+		if img.IsMain {
+			add(img.FilePath)
+		}
+	}
+	for _, img := range p.Images {
+		if !img.IsMain {
+			add(img.FilePath)
+		}
+	}
+	return out
 }
