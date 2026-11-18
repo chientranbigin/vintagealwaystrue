@@ -354,6 +354,7 @@ export default {
           to_search_value_3: this.sizeFilters[2]?.to,
         };
         if (this.sortByUpload) params.sort = 'upload';
+        if (this.activeTab === 'ALL') params.include_empty_thumb = 'true';
         const res = await axios.get('/salev2/api/products', { params });
         this.products = res.data.data;
         this.total = res.data.total;
