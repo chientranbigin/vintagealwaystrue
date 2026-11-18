@@ -795,7 +795,8 @@ func (s *CopilotService) UpsertFBMessage(
 	return &conv, true, nil
 }
 
-// RebuildAndAnalyzeSession loads messages after LastOrderAt from DB, runs AI & DB matching, and returns a CopilotSession.
+// RebuildAndAnalyzeSession loads the full stored thread (newest copilotDisplayMessages), runs AI and
+// product matching on the recent tail, and returns a CopilotSession. Orders no longer cut the history.
 func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid string, action string) (*CopilotSession, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -809,12 +810,9 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	}
 
 	query := s.DB.Where("conversation_id = ?", conv.ID)
-	if conv.LastOrderAt != nil {
-		query = query.Where("msg_timestamp > ?", *conv.LastOrderAt)
-	}
-	// Newest 30 messages, then flip back to chronological order.
+	// Newest messages (whole history up to the display cap), then flip back to chronological order.
 	var recs []models.CopilotMessageRecord
-	if err := query.Order("msg_timestamp DESC, id DESC").Limit(30).Find(&recs).Error; err != nil {
+	if err := query.Order("msg_timestamp DESC, id DESC").Limit(copilotDisplayMessages).Find(&recs).Error; err != nil {
 		return nil, err
 	}
 	for i, j := 0, len(recs)-1; i < j; i, j = i+1, j-1 {
@@ -844,20 +842,25 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 			ImageURL: r.ImageURL,
 			OCRText:  r.OCRText,
 		})
-		if r.Type == "text" && r.Text != "" {
-			addCodes(s.ExtractProductCodesFromText(r.Text))
+	}
+	// Products + AI work on the recent part of the chat only, so old purchases don't flood the
+	// suggestion; the full history is still returned for display.
+	aiMsgs := tailMessages(msgs, copilotAIContextMessages)
+	for _, m := range aiMsgs {
+		if m.Type == "text" && m.Text != "" {
+			addCodes(s.ExtractProductCodesFromText(m.Text))
 		}
-		if r.Type == "image" && r.OCRText != "" {
-			addCodes(s.ExtractProductCodesFromText(r.OCRText))
+		if m.Type == "image" && m.OCRText != "" {
+			addCodes(s.ExtractProductCodesFromText(m.OCRText))
 		}
 	}
 
 	detectedProducts := s.lookupProductsByCodes(allCodes)
-	convText := s.buildConversationTranscript(msgs)
+	convText := s.buildConversationTranscript(aiMsgs)
 	recommendedProducts := s.recommendProductsByMeasurements(convText, detectedProducts)
 	allMatched := append(detectedProducts, recommendedProducts...)
 
-	aiRes := s.generateAISuggestion(ctx, conv.CustomerName, action, msgs, allMatched)
+	aiRes := s.generateAISuggestion(ctx, conv.CustomerName, action, aiMsgs, allMatched)
 
 	var createdOrder *models.Order
 	if conv.LastOrderID != nil {
@@ -1042,7 +1045,7 @@ func (s *CopilotService) importGraphConversation(conv graphConversation, pageID,
 
 // SyncRecentFBConversations fetches the latest Messenger threads via Graph API and stores them in DB.
 func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, pageToken string) (int, error) {
-	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 15, 10, "")
+	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 25, 10, "")
 	if err != nil {
 		return 0, err
 	}
@@ -1070,13 +1073,13 @@ func (s *CopilotService) HasFBConversation(psid string) bool {
 	return n > 0
 }
 
-// ImportFBHistory pulls the last 30 messages of one customer's thread so a customer first seen
+// ImportFBHistory pulls the last 100 messages of one customer's thread so a customer first seen
 // via webhook starts with full context (not just the message that triggered the webhook).
 func (s *CopilotService) ImportFBHistory(ctx context.Context, pageID, psid, pageToken string) error {
 	if strings.TrimSpace(psid) == "" {
 		return fmt.Errorf("empty psid")
 	}
-	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 30, 1, "&user_id="+url.QueryEscape(psid))
+	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 100, 1, "&user_id="+url.QueryEscape(psid))
 	if err != nil {
 		return err
 	}

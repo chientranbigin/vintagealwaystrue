@@ -134,10 +134,6 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 
 	pageID, pageToken := h.getMainPageCredentials()
 	historyLoaded := map[string]bool{}
-	triggerNorm := strings.ToLower(strings.TrimSpace(os.Getenv("COPILOT_ORDER_TRIGGER")))
-	if triggerNorm == "" {
-		triggerNorm = "ok ạ, để em lên đơn ngay"
-	}
 
 	for _, entry := range payload.Entry {
 		for _, event := range entry.Messaging {
@@ -174,7 +170,6 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 			}
 
 			insertedAny := false
-			shouldCreateOrder := false
 
 			text := strings.TrimSpace(msg.Text)
 			if services.IsFBSystemNotice(text) {
@@ -191,9 +186,6 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 				)
 				if inserted {
 					insertedAny = true
-					if senderRole == "shop" && strings.Contains(strings.ToLower(text), triggerNorm) {
-						shouldCreateOrder = true
-					}
 				}
 			}
 
@@ -223,23 +215,11 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 				continue
 			}
 
-			action := "suggest"
-			if shouldCreateOrder {
-				action = "create_order"
-			}
-
-			sess, err := h.Copilot.RebuildAndAnalyzeSession(ctx, psid, action)
+			// Orders are created manually from Copilot's "Lên đơn" button; no chat trigger phrase.
+			sess, err := h.Copilot.RebuildAndAnalyzeSession(ctx, psid, "suggest")
 			if err != nil || sess == nil {
 				continue
 			}
-
-			if shouldCreateOrder && sess.OrderDraft != nil && len(sess.OrderDraft.ProductCodes) > 0 {
-				if order, err := h.createOrderFromDraft(sess.OrderDraft); err == nil && order != nil {
-					sess.CreatedOrder = order
-					h.Copilot.MarkConversationOrdered(psid, order.ID)
-				}
-			}
-
 			h.Copilot.SaveAndBroadcast(sess)
 		}
 	}

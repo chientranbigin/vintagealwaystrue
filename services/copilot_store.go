@@ -17,7 +17,8 @@ const (
 	copilotMaxStoredMessages = 400 // full history kept per thread
 	copilotMaxMemImagesB64   = 12  // newest images keeping base64 in memory (UI preview)
 	copilotMemSessions       = 30  // sessions kept in memory / listed on the Copilot screen
-	copilotAIContextMessages = 60  // history tail sent to OpenAI for "suggest"
+	copilotAIContextMessages = 40  // history tail sent to OpenAI / scanned for product codes
+	copilotDisplayMessages   = 300 // messages loaded per thread for display (full history view)
 )
 
 // CopilotSessionRecord persists a Copilot conversation so it survives deploys / restarts.
@@ -308,11 +309,8 @@ func (s *CopilotService) refreshMessagesFromRecords(sess *CopilotSession) {
 		}
 	}
 	q := s.DB.Where("conversation_id = ?", conv.ID)
-	if conv.LastOrderAt != nil {
-		q = q.Where("msg_timestamp > ?", *conv.LastOrderAt)
-	}
 	var recs []models.CopilotMessageRecord
-	if err := q.Order("msg_timestamp DESC, id DESC").Limit(30).Find(&recs).Error; err != nil {
+	if err := q.Order("msg_timestamp DESC, id DESC").Limit(copilotDisplayMessages).Find(&recs).Error; err != nil {
 		return
 	}
 	oldTail := ""
