@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"sale-app/services"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -159,6 +161,9 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 			shouldCreateOrder := false
 
 			text := strings.TrimSpace(msg.Text)
+			if services.IsFBSystemNotice(text) {
+				text = ""
+			}
 			// Recognize Facebook thumb-up Like stickers
 			if text == "" && isLikeSticker(msg.StickerID) {
 				text = "👍"
@@ -224,7 +229,7 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 }
 
 func isLikeSticker(stickerID int64) bool {
-	return stickerID == 369239263222822 || stickerID == 369239343222814 || stickerID == 369239383222810
+	return services.IsLikeStickerID(stickerID)
 }
 
 // SyncFBConversations pulls recent Messenger threads from Facebook Graph API.

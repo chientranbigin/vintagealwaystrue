@@ -63,3 +63,18 @@ func TestMergeGapAppends(t *testing.T) {
 	snap := []CopilotMessage{txt("customer", "z")}
 	eq(t, mergeCopilotMessages(h, snap), []CopilotMessage{h[0], snap[0]})
 }
+
+func TestFBSystemNoticeAndLikeSticker(t *testing.T) {
+	if !IsFBSystemNotice("Tran Anh Tu đã trả lời một quảng cáo.") {
+		t.Fatal("ad banner should be a system notice")
+	}
+	if IsFBSystemNotice("Shop đã trả lời anh rồi ạ, anh xem giúp em") {
+		t.Fatal("normal text must not be filtered")
+	}
+	if !IsLikeStickerAttachment("sticker_369239263222822", "") || !IsLikeStickerAttachment("", "sticker-369239383222810") {
+		t.Fatal("like sticker not detected")
+	}
+	if IsLikeStickerAttachment("1703845684703879", "image-1703845684703879") {
+		t.Fatal("photo detected as like")
+	}
+}

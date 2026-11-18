@@ -746,7 +746,10 @@ func (s *CopilotService) UpsertFBMessage(
 	if fbMsgID != "" {
 		var existing models.CopilotMessageRecord
 		if err := s.DB.Where("fb_message_id = ?", fbMsgID).First(&existing).Error; err == nil {
-			// Already processed
+			// Already processed; fix records stored with an older classification.
+			if existing.Type != msgType || existing.Text != text {
+				s.DB.Model(&existing).Updates(map[string]interface{}{"type": msgType, "text": text, "image_url": imageURL})
+			}
 			return &conv, false, nil
 		}
 	}
@@ -814,6 +817,9 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	}
 
 	for _, r := range recs {
+		if r.Type == "text" && IsFBSystemNotice(r.Text) {
+			continue
+		}
 		msgs = append(msgs, CopilotMessage{
 			Sender:   r.Sender,
 			Type:     r.Type,
@@ -946,6 +952,8 @@ func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, 
 					} `json:"from"`
 					Attachments struct {
 						Data []struct {
+							ID        string `json:"id"`
+							Name      string `json:"name"`
 							MimeType  string `json:"mime_type"`
 							ImageData struct {
 								URL string `json:"url"`
@@ -986,12 +994,19 @@ func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, 
 			if ts.IsZero() {
 				ts = time.Now()
 			}
-			if m.Message != "" {
+			if IsFBSystemNotice(m.Message) {
+				// "<Tên> đã trả lời một quảng cáo." is a Meta banner, not a real shop message.
+				s.DeleteFBMessage(m.ID)
+			} else if m.Message != "" {
 				_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", m.ID, sender, "text", m.Message, "", ts, pageToken)
 			}
 			for idx, att := range m.Attachments.Data {
+				attID := fmt.Sprintf("%s_att_%d", m.ID, idx)
+				if IsLikeStickerAttachment(att.ID, att.Name) {
+					_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "text", "👍", "", ts, pageToken)
+					continue
+				}
 				if att.ImageData.URL != "" {
-					attID := fmt.Sprintf("%s_att_%d", m.ID, idx)
 					_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "image", "", att.ImageData.URL, ts, pageToken)
 				}
 			}
@@ -1003,4 +1018,37 @@ func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, 
 		}
 	}
 	return synced, nil
+}
+
+var fbSystemNoticeRe = regexp.MustCompile(`(?i)(đã trả lời (một |1 )?quảng cáo\.?$|replied to (an|your) ad\.?$)`)
+
+// IsFBSystemNotice reports Meta-generated banner lines that arrive as page messages.
+func IsFBSystemNotice(text string) bool {
+	t := strings.TrimSpace(text)
+	return t != "" && fbSystemNoticeRe.MatchString(t)
+}
+
+// Facebook "Like" (thumbs up) sticker ids in small / medium / large.
+var fbLikeStickerIDs = map[string]bool{"369239263222822": true, "369239343222814": true, "369239383222810": true}
+
+func IsLikeStickerID(id int64) bool {
+	return fbLikeStickerIDs[strconv.FormatInt(id, 10)]
+}
+
+// IsLikeStickerAttachment matches Graph API attachments like {"id":"sticker_369239263222822"}.
+func IsLikeStickerAttachment(id, name string) bool {
+	for _, v := range []string{id, name} {
+		v = strings.TrimPrefix(strings.TrimPrefix(v, "sticker_"), "sticker-")
+		if fbLikeStickerIDs[v] {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *CopilotService) DeleteFBMessage(fbMsgID string) {
+	if s.DB == nil || fbMsgID == "" {
+		return
+	}
+	s.DB.Where("fb_message_id = ?", fbMsgID).Delete(&models.CopilotMessageRecord{})
 }
