@@ -239,6 +239,16 @@
             <el-button type="success" size="small" icon="el-icon-picture-outline" :loading="renderingReceipt" @click="copyReceiptImage">
               Copy Ảnh Receipt
             </el-button>
+            <el-button
+              v-if="receiptImg && /^\d+$/.test(activeSession.thread_id || '')"
+              type="primary"
+              size="small"
+              icon="el-icon-s-promotion"
+              :loading="sendingReceipt"
+              @click="sendReceiptToCustomer"
+            >
+              Gửi cho khách
+            </el-button>
             <el-button v-if="receiptImg" size="small" icon="el-icon-download" @click="downloadReceipt">
               Tải ảnh
             </el-button>
@@ -342,6 +352,7 @@ export default {
       receiptCanvas: null,
       renderingReceipt: false,
       creatingOrder: false,
+      sendingReceipt: false,
       syncingFB: false,
       previewVisible: false,
       previewSrc: '',
@@ -529,6 +540,31 @@ export default {
         }, 'image/png');
       } catch (e) {
         this.$message.error('Trình duyệt không hỗ trợ copy ảnh trực tiếp, vui lòng bấm Tải ảnh.');
+      }
+    },
+    async sendReceiptToCustomer() {
+      if (!this.receiptImg || !this.activeSession) return;
+      try {
+        await this.$confirm(`Gửi ảnh receipt đơn #${this.currentOrder ? this.currentOrder.id : ''} cho ${this.activeSession.customer_name} qua Messenger?`, 'Gửi receipt', {
+          confirmButtonText: 'Gửi',
+          cancelButtonText: 'Huỷ',
+          type: 'info'
+        });
+      } catch (e) {
+        return;
+      }
+      this.sendingReceipt = true;
+      try {
+        await axios.post('/salev2/api/copilot/send-receipt', {
+          thread_id: this.activeSession.thread_id,
+          image_base64: this.receiptImg
+        });
+        this.$message.success('Đã gửi receipt cho khách qua Messenger!');
+      } catch (e) {
+        const msg = (e.response && e.response.data && e.response.data.error) || e.message;
+        this.$message.error('Gửi receipt thất bại: ' + msg);
+      } finally {
+        this.sendingReceipt = false;
       }
     },
     downloadReceipt() {

@@ -282,5 +282,6 @@ func (h *CopilotHandler) createOrderFromDraft(draft *services.CopilotOrderDraft)
 
 	// Reload with Products for Receipt rendering
 	h.DB.Preload("Products").First(&order, order.ID)
+	h.Copilot.FormatOrderMedia(&order)
 	return &order, nil
 }

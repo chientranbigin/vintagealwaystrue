@@ -244,6 +244,7 @@ func main() {
 	api.GET("/copilot/stream", copilot.Stream)
 	api.POST("/copilot/order", copilot.CreateOrderFromSession)
 	api.POST("/copilot/sync-fb", copilot.SyncFBConversations)
+	api.POST("/copilot/send-receipt", copilot.SendReceipt)
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)
 	r.GET("/api/images/cleanup", v2.CleanupImages)

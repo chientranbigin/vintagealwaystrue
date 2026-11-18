@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"regexp"
@@ -439,6 +441,9 @@ func (s *CopilotService) generateAISuggestion(
 	systemPrompt := `Bạn là trợ lý bán hàng cho shop thời trang Vintage Always True.
 Nhiệm vụ: Đọc hội thoại giữa Khách và Shop cùng danh sách sản phẩm khớp từ Database (kèm giá, trạng thái AVAILABLE/SOLD, và số đo chi tiết VAI/NGỰC/EO/DÀI...) để:
 1. Soạn "suggested_reply": câu trả lời tự nhiên, lịch sự bằng tiếng Việt (xưng "em" - gọi khách "mình/anh/chị") để chủ shop copy dán qua Facebook.
+   - Chỉ trả lời (các) tin nhắn MỚI NHẤT của Khách mà Shop chưa trả lời. Ngắn gọn 1-4 câu, KHÔNG nhắc lại thông tin Shop/AI đã trả lời ở các lượt trước.
+   - Chỉ dùng thông tin có trong dữ liệu sản phẩm và "Chính sách shop" bên dưới. TUYỆT ĐỐI KHÔNG tự bịa phí ship, thời gian giao, chính sách đổi trả, khuyến mãi. Nếu khách hỏi điều không có dữ liệu: đặt "needs_human": true và trả lời kiểu "Dạ để em kiểm tra và báo lại mình ngay ạ".
+   - Nếu khách đã chốt mua và gửi đủ tên/SĐT/địa chỉ: xác nhận lại ngắn gọn mã + giá + thông tin nhận hàng.
    - Nếu khách hỏi còn hàng: báo rõ mã nào còn (kèm giá + số đo nổi bật), mã nào đã bán.
    - Nếu khách hỏi có vừa chiều cao/cân nặng không: phân tích dựa trên số đo thực tế trong DB (lưu ý đồ vintage thường form rộng/ôm tùy loại, ngực áo thường lớn hơn ngực cơ thể 10-16cm, eo quần x2 nếu số đo ghi nửa vòng hoặc đúng cm nếu ghi cả vòng).
    - Nếu khách mặc cả / xin giảm giá / đổi trả / khiếu nại: đặt "needs_human": true, ghi rõ "human_reason", và gợi ý câu trả lời khéo đợi nhân viên kiểm tra.
@@ -460,9 +465,13 @@ Trả về JSON thuần theo schema:
   }
 }`
 
+	policy := strings.TrimSpace(os.Getenv("COPILOT_SHOP_POLICY"))
+	if policy == "" {
+		policy = "(Chưa cấu hình — không được tự đưa ra phí ship / thời gian giao / đổi trả)"
+	}
 	userPrompt := fmt.Sprintf(
-		"Tên khách Facebook: %s\nAction hiện tại: %s\n\nSản phẩm tìm thấy trong DB:\n%s\n\nHội thoại hiện tại:\n%s",
-		customerName, action, string(prodJSON), transcript,
+		"Tên khách Facebook: %s\nAction hiện tại: %s\n\nChính sách shop:\n%s\n\nSản phẩm tìm thấy trong DB:\n%s\n\nHội thoại hiện tại:\n%s",
+		customerName, action, policy, string(prodJSON), transcript,
 	)
 
 	payload := map[string]interface{}{
@@ -846,6 +855,7 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	if conv.LastOrderID != nil {
 		var ord models.Order
 		if err := s.DB.Preload("Products").First(&ord, *conv.LastOrderID).Error; err == nil {
+			s.FormatOrderMedia(&ord)
 			createdOrder = &ord
 		}
 	}
@@ -1096,4 +1106,77 @@ func (s *CopilotService) DeleteFBMessage(fbMsgID string) {
 		return
 	}
 	s.DB.Where("fb_message_id = ?", fbMsgID).Delete(&models.CopilotMessageRecord{})
+}
+
+// FormatOrderMedia resolves product image paths inside an order to absolute URLs (scale image
+// first, like SaleV2's formatProduct), so the Copilot receipt can render them.
+func (s *CopilotService) FormatOrderMedia(order *models.Order) {
+	if order == nil {
+		return
+	}
+	for i := range order.Products {
+		p := &order.Products[i]
+		if p.PathThumb != nil && *p.PathThumb != "" {
+			v := s.formatMediaPath(*p.PathThumb)
+			p.PathThumb = &v
+		}
+		if p.ImageThumbScale != nil && *p.ImageThumbScale != "" {
+			v := s.formatMediaPath(*p.ImageThumbScale)
+			p.ImageThumbScale = &v
+			p.ImageThumbScaleURL = &v
+		}
+		if d := s.formatMediaPath(p.DisplayThumb()); d != "" {
+			p.DisplayThumbURL = &d
+		}
+	}
+}
+
+// SendFBImage uploads an image and sends it to a Messenger user (PSID) via the Page Send API.
+func (s *CopilotService) SendFBImage(ctx context.Context, psid string, img []byte, filename, pageToken string) error {
+	if psid == "" || pageToken == "" {
+		return fmt.Errorf("thiếu PSID hoặc FB_MAIN_PAGE_TOKEN")
+	}
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	_ = w.WriteField("recipient", fmt.Sprintf(`{"id":%q}`, psid))
+	_ = w.WriteField("messaging_type", "RESPONSE")
+	_ = w.WriteField("message", `{"attachment":{"type":"image","payload":{"is_reusable":false}}}`)
+	hdr := make(textproto.MIMEHeader)
+	hdr.Set("Content-Disposition", fmt.Sprintf(`form-data; name="filedata"; filename=%q`, filename))
+	hdr.Set("Content-Type", "image/png")
+	part, err := w.CreatePart(hdr)
+	if err != nil {
+		return err
+	}
+	if _, err := part.Write(img); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	endpoint := "https://graph.facebook.com/v21.0/me/messages?access_token=" + url.QueryEscape(pageToken)
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		var fbErr struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    int    `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &fbErr) == nil && fbErr.Error.Message != "" {
+			return fmt.Errorf("Facebook (%d): %s", fbErr.Error.Code, fbErr.Error.Message)
+		}
+		return fmt.Errorf("Facebook HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -361,4 +362,35 @@ func (h *CopilotHandler) TermsOfService(c *gin.Context) {
 </body>
 </html>`
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+}
+
+// SendReceipt sends the rendered receipt PNG to the customer's Messenger thread via the Send API.
+func (h *CopilotHandler) SendReceipt(c *gin.Context) {
+	var req struct {
+		ThreadID    string `json:"thread_id" binding:"required"`
+		ImageBase64 string `json:"image_base64" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	raw := req.ImageBase64
+	if i := strings.Index(raw, ","); i >= 0 && strings.HasPrefix(raw, "data:") {
+		raw = raw[i+1:]
+	}
+	img, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil || len(img) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Ảnh receipt không hợp lệ"})
+		return
+	}
+	_, pageToken := h.getMainPageCredentials()
+	if err := h.Copilot.SendFBImage(c.Request.Context(), req.ThreadID, img, "receipt.png", pageToken); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
