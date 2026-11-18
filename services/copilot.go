@@ -26,8 +26,8 @@ var copilotProductPrefixes = []string{
 }
 
 type CopilotMessage struct {
-	Sender      string `json:"sender"`       // "customer" or "shop"
-	Type        string `json:"type"`         // "text" or "image"
+	Sender      string `json:"sender"` // "customer" or "shop"
+	Type        string `json:"type"`   // "text" or "image"
 	Text        string `json:"text"`
 	ImageBase64 string `json:"image_base64,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
@@ -98,7 +98,7 @@ func NewCopilotService(db *gorm.DB, vision *VisionService, mediaBase string) *Co
 	if vision == nil {
 		vision = NewVisionService()
 	}
-	return &CopilotService{
+	svc := &CopilotService{
 		DB:          db,
 		Vision:      vision,
 		SmartOrder:  NewSmartOrderService(),
@@ -108,6 +108,8 @@ func NewCopilotService(db *gorm.DB, vision *VisionService, mediaBase string) *Co
 		sessions:    make(map[string]*CopilotSession),
 		subscribers: make(map[chan *CopilotSession]struct{}),
 	}
+	svc.initStore()
+	return svc
 }
 
 func (s *CopilotService) Subscribe() chan *CopilotSession {
@@ -150,16 +152,17 @@ func (s *CopilotService) SaveAndBroadcast(sess *CopilotSession) {
 			newOrder = append(newOrder, id)
 		}
 	}
-	if len(newOrder) > 30 {
-		for _, oldID := range newOrder[30:] {
+	if len(newOrder) > copilotMemSessions {
+		for _, oldID := range newOrder[copilotMemSessions:] {
 			delete(s.sessions, oldID)
 		}
-		newOrder = newOrder[:30]
+		newOrder = newOrder[:copilotMemSessions]
 	}
 	s.sessionList = newOrder
 	s.mu.Unlock()
 
 	s.broadcast(sess)
+	go s.persistSession(sess)
 }
 
 func (s *CopilotService) ListSessions() []*CopilotSession {
@@ -221,8 +224,12 @@ func (s *CopilotService) AnalyzeIngest(ctx context.Context, req CopilotIngestReq
 
 	// Preserve created_order if same session already created an order recently
 	var prevCreatedOrder *models.Order
-	if prev, ok := s.GetSession(threadID); ok && prev.CreatedOrder != nil && req.Action != "create_order" {
-		prevCreatedOrder = prev.CreatedOrder
+	var history []CopilotMessage
+	if prev, ok := s.loadSession(threadID); ok {
+		history = prev.Messages
+		if prev.CreatedOrder != nil && req.Action != "create_order" {
+			prevCreatedOrder = prev.CreatedOrder
+		}
 	}
 
 	// 1. Run OCR on images (matching Smart Upload's Google Vision pipeline) & collect all codes
@@ -250,22 +257,32 @@ func (s *CopilotService) AnalyzeIngest(ctx context.Context, req CopilotIngestReq
 		}
 	}
 
+	// Merge the snapshot into the stored full history (extension only sends the latest ~30 messages).
+	merged := mergeCopilotMessages(history, req.Messages)
+
+	// AI context: "suggest" sees the longer history; "create_order" keeps the extension's
+	// slice (messages since the last order trigger) so old orders don't leak into the new one.
+	aiMessages := tailMessages(merged, copilotAIContextMessages)
+	if req.Action == "create_order" {
+		aiMessages = req.Messages
+	}
+
 	// 2. Lookup matched products in DB
 	detectedProducts := s.lookupProductsByCodes(allCodes)
 
 	// 3. Check if customer mentioned height/weight and recommend available items if no product detected yet
-	convText := s.buildConversationTranscript(req.Messages)
+	convText := s.buildConversationTranscript(aiMessages)
 	recommendedProducts := s.recommendProductsByMeasurements(convText, detectedProducts)
 	allMatched := append(detectedProducts, recommendedProducts...)
 
 	// 4. Generate AI Suggestion & Order Draft
-	aiRes := s.generateAISuggestion(ctx, customerName, req.Action, req.Messages, allMatched)
+	aiRes := s.generateAISuggestion(ctx, customerName, req.Action, aiMessages, allMatched)
 
 	sess := &CopilotSession{
 		ThreadID:         threadID,
 		CustomerName:     customerName,
 		Action:           req.Action,
-		Messages:         req.Messages,
+		Messages:         merged,
 		DetectedProducts: allMatched,
 		SuggestedReply:   aiRes.SuggestedReply,
 		SizeAdvice:       aiRes.SizeAdvice,
@@ -312,14 +329,12 @@ func (s *CopilotService) lookupProductsByCodes(codes []string) []CopilotProductM
 }
 
 func (s *CopilotService) toProductMatch(p models.Product) CopilotProductMatch {
+	// Prefer the scaled thumb (ImageThumbScale), then PathThumb, then gallery images.
 	thumb := p.DisplayThumb()
-	if thumb != "" && !strings.HasPrefix(thumb, "http") && s.MediaBase != "" {
-		clean := strings.TrimPrefix(thumb, "/")
-		if !strings.HasPrefix(clean, "storage/") {
-			clean = "storage/sale/" + clean
-		}
-		thumb = s.MediaBase + "/" + clean
+	if thumb == "" {
+		thumb = p.BestQualityThumb()
 	}
+	thumb = s.formatMediaPath(thumb)
 	var sizes []CopilotSizeInfo
 	for _, sz := range p.Sizes {
 		if sz.Name != nil && sz.Value != nil {
@@ -616,4 +631,24 @@ func int64PtrVal(p *int64) int64 {
 		return 0
 	}
 	return *p
+}
+
+// formatMediaPath mirrors SaleV2Handler.FormatImagePath so Copilot thumbnails resolve
+// exactly like the rest of SaleV2 (ProductVault, OrderCreate...).
+func (s *CopilotService) formatMediaPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if strings.Contains(path, "tadimedia.vn") {
+		path = strings.Replace(path, "www.tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+		path = strings.Replace(path, "tadimedia.vn", "vintagealwaystrue.id.vn", 1)
+	}
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	clean := strings.TrimPrefix(strings.TrimLeft(path, "/"), "storage/")
+	if clean == "" || s.MediaBase == "" {
+		return clean
+	}
+	return s.MediaBase + "/" + clean
 }

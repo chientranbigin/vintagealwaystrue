@@ -1,0 +1,218 @@
+package services
+
+import (
+	"encoding/json"
+	"log"
+	"net/url"
+	"strings"
+	"time"
+)
+
+const (
+	copilotMaxStoredMessages = 400 // full history kept per thread
+	copilotMaxMemImagesB64   = 12  // newest images keeping base64 in memory (UI preview)
+	copilotMemSessions       = 30  // sessions kept in memory / listed on the Copilot screen
+	copilotAIContextMessages = 60  // history tail sent to OpenAI for "suggest"
+)
+
+// CopilotSessionRecord persists a Copilot conversation so it survives deploys / restarts.
+// Data holds the JSON of CopilotSession (without image_base64 to keep rows small).
+type CopilotSessionRecord struct {
+	ThreadID     string `gorm:"primaryKey;size:191"`
+	CustomerName string `gorm:"size:255"`
+	Data         string `gorm:"type:longtext"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time `gorm:"index"`
+}
+
+func (CopilotSessionRecord) TableName() string { return "copilot_sessions" }
+
+func (s *CopilotService) initStore() {
+	if s.DB == nil {
+		return
+	}
+	if err := s.DB.AutoMigrate(&CopilotSessionRecord{}); err != nil {
+		log.Printf("[copilot] AutoMigrate copilot_sessions error: %v", err)
+		return
+	}
+	var recs []CopilotSessionRecord
+	if err := s.DB.Order("updated_at DESC").Limit(copilotMemSessions).Find(&recs).Error; err != nil {
+		log.Printf("[copilot] load sessions error: %v", err)
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rec := range recs {
+		sess := decodeSessionRecord(rec)
+		if sess == nil {
+			continue
+		}
+		s.sessions[sess.ThreadID] = sess
+		s.sessionList = append(s.sessionList, sess.ThreadID)
+	}
+	log.Printf("[copilot] loaded %d sessions from DB", len(s.sessionList))
+}
+
+func decodeSessionRecord(rec CopilotSessionRecord) *CopilotSession {
+	var sess CopilotSession
+	if err := json.Unmarshal([]byte(rec.Data), &sess); err != nil {
+		return nil
+	}
+	if sess.ThreadID == "" {
+		sess.ThreadID = rec.ThreadID
+	}
+	return &sess
+}
+
+// loadSession returns a session from memory, falling back to the DB (older threads not in memory).
+func (s *CopilotService) loadSession(threadID string) (*CopilotSession, bool) {
+	if sess, ok := s.GetSession(threadID); ok {
+		return sess, true
+	}
+	if s.DB == nil {
+		return nil, false
+	}
+	var rec CopilotSessionRecord
+	if err := s.DB.Where("thread_id = ?", threadID).Limit(1).Find(&rec).Error; err != nil || rec.ThreadID == "" {
+		return nil, false
+	}
+	sess := decodeSessionRecord(rec)
+	return sess, sess != nil
+}
+
+func (s *CopilotService) persistSession(sess *CopilotSession) {
+	if s.DB == nil || sess == nil {
+		return
+	}
+	cp := *sess
+	cp.Messages = make([]CopilotMessage, len(sess.Messages))
+	for i, m := range sess.Messages {
+		m.ImageBase64 = ""
+		cp.Messages[i] = m
+	}
+	b, err := json.Marshal(&cp)
+	if err != nil {
+		log.Printf("[copilot] marshal session %s error: %v", sess.ThreadID, err)
+		return
+	}
+	rec := CopilotSessionRecord{
+		ThreadID:     sess.ThreadID,
+		CustomerName: sess.CustomerName,
+		Data:         string(b),
+		UpdatedAt:    time.Now(),
+	}
+	// Save = INSERT ... or UPDATE by primary key.
+	if err := s.DB.Save(&rec).Error; err != nil {
+		log.Printf("[copilot] save session %s error: %v", sess.ThreadID, err)
+	}
+}
+
+// messageKey identifies a message across snapshots. Facebook CDN image URLs keep the same
+// path but rotate their signed query string, so images are compared by path only.
+func messageKey(m CopilotMessage) string {
+	img := ""
+	if m.Type == "image" && m.ImageURL != "" {
+		if u, err := url.Parse(m.ImageURL); err == nil {
+			// Filename is unique per photo; CDN host shards differ between page loads.
+			img = u.Path[strings.LastIndex(u.Path, "/")+1:]
+		} else {
+			img = m.ImageURL
+		}
+	}
+	return m.Sender + "|" + m.Type + "|" + strings.TrimSpace(m.Text) + "|" + img
+}
+
+// mergeCopilotMessages appends a new extension snapshot onto the stored history.
+//   - Tail of history overlaps head of snapshot  -> history[:i] + snapshot
+//   - Snapshot is fully inside history (older view) -> history unchanged
+//   - No overlap (gap)                             -> history + snapshot
+func mergeCopilotMessages(history, snap []CopilotMessage) []CopilotMessage {
+	if len(history) == 0 {
+		return capMessages(append([]CopilotMessage(nil), snap...))
+	}
+	if len(snap) == 0 {
+		return history
+	}
+	hk := make([]string, len(history))
+	for i, m := range history {
+		hk[i] = messageKey(m)
+	}
+	sk := make([]string, len(snap))
+	for i, m := range snap {
+		sk[i] = messageKey(m)
+	}
+
+	start := len(history) - len(snap)
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(history); i++ {
+		match := true
+		for j := 0; i+j < len(history); j++ {
+			if hk[i+j] != sk[j] {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		out := make([]CopilotMessage, 0, i+len(snap))
+		out = append(out, history[:i]...)
+		for j, m := range snap {
+			// Keep OCR text already computed for this message earlier.
+			if m.OCRText == "" && i+j < len(history) {
+				m.OCRText = history[i+j].OCRText
+			}
+			out = append(out, m)
+		}
+		return capMessages(out)
+	}
+
+	if containsSequence(hk, sk) {
+		return history
+	}
+	return capMessages(append(append([]CopilotMessage(nil), history...), snap...))
+}
+
+func containsSequence(hay, needle []string) bool {
+	for i := 0; i+len(needle) <= len(hay); i++ {
+		ok := true
+		for j := range needle {
+			if hay[i+j] != needle[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func capMessages(msgs []CopilotMessage) []CopilotMessage {
+	if len(msgs) > copilotMaxStoredMessages {
+		msgs = msgs[len(msgs)-copilotMaxStoredMessages:]
+	}
+	// Only the newest images keep base64 in memory; older ones render from image_url.
+	kept := 0
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ImageBase64 == "" {
+			continue
+		}
+		if kept < copilotMaxMemImagesB64 {
+			kept++
+			continue
+		}
+		msgs[i].ImageBase64 = ""
+	}
+	return msgs
+}
+
+func tailMessages(msgs []CopilotMessage, n int) []CopilotMessage {
+	if len(msgs) > n {
+		return msgs[len(msgs)-n:]
+	}
+	return msgs
+}
