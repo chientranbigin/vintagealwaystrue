@@ -1297,10 +1297,14 @@ func (s *CopilotService) ImportFBHistory(ctx context.Context, pageID, psid, page
 
 var fbSystemNoticeRe = regexp.MustCompile(`(?i)^.{1,80}?\s(đã trả lời (về )?(một |1 )?(quảng cáo|bài viết)|replied to (an|a|your) (ad|post))\.?(\s|\(|$)`)
 
+// Business Suite automation lines, e.g. "Đã thêm nhãn tự động: Đã đánh dấu trạng thái đơn đặt
+// hàng là Đã đặt hàng." — they arrive as page messages but nobody typed them.
+var fbAutomationNoticeRe = regexp.MustCompile(`(?i)^(đã thêm nhãn tự động|đã đánh dấu trạng thái đơn|đã xóa nhãn tự động|đã gỡ nhãn tự động|automatically (added|removed) (the )?label|marked (the )?order status)`)
+
 // IsFBSystemNotice reports Meta-generated banner lines that arrive as page messages.
 func IsFBSystemNotice(text string) bool {
 	t := strings.TrimSpace(text)
-	return t != "" && fbSystemNoticeRe.MatchString(t)
+	return t != "" && (fbSystemNoticeRe.MatchString(t) || fbAutomationNoticeRe.MatchString(t))
 }
 
 // Facebook "Like" (thumbs up) sticker ids in small / medium / large.

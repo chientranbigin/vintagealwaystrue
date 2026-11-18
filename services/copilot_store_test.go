@@ -81,6 +81,12 @@ func TestFBSystemNoticeAndLikeSticker(t *testing.T) {
 	if !IsFBSystemNotice("Lê Minh Quangg đã trả lời về một bài viết. Xem bài viết(https://www.facebook.com/x/posts/pfbid0q)") {
 		t.Fatal("post-reply banner with link should be a system notice")
 	}
+	if !IsFBSystemNotice("Đã thêm nhãn tự động: Đã đánh dấu trạng thái đơn đặt hàng là Đã đặt hàng.") {
+		t.Fatal("Business Suite auto-label line should be a system notice")
+	}
+	if IsFBSystemNotice("Dạ em đã thêm nhãn cho đơn của anh rồi nha") {
+		t.Fatal("normal shop text mentioning a label must not be filtered")
+	}
 	if IsFBSystemNotice("Shop đã trả lời anh rồi ạ, anh xem giúp em") {
 		t.Fatal("normal text must not be filtered")
 	}
