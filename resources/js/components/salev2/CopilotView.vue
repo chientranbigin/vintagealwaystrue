@@ -170,13 +170,12 @@
           <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
             <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
             <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
-            <button v-if="replyDirty && lastServerReply && editableReply !== lastServerReply" class="text-blue-600 font-semibold" @click="useSuggestion">Dùng gợi ý</button>
             <button
               class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
               :disabled="!!reanalyzing[activeSession.thread_id]"
-              title="Gọi AI soạn câu trả lời (~11đ/lần)"
+              :title="showingAISuggestion ? 'Gọi AI soạn câu mới (~11đ)' : 'Dùng gợi ý AI (gọi AI nếu chưa có)'"
               @click="askAI"
-            >✨ Gợi ý AI</button>
+            >{{ showingAISuggestion ? '↻ Gợi ý lại' : '✨ Gợi ý AI' }}</button>
           </div>
           <div class="flex items-end gap-2">
             <div class="relative flex-1">
@@ -409,13 +408,12 @@
           <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
             <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
             <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
-            <button v-if="replyDirty && lastServerReply && editableReply !== lastServerReply" class="text-blue-600 font-semibold" @click="useSuggestion">Dùng gợi ý</button>
             <button
               class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
               :disabled="!!reanalyzing[activeSession.thread_id]"
-              title="Gọi AI soạn câu trả lời (~11đ/lần)"
+              :title="showingAISuggestion ? 'Gọi AI soạn câu mới (~11đ)' : 'Dùng gợi ý AI (gọi AI nếu chưa có)'"
               @click="askAI"
-            >✨ Gợi ý AI</button>
+            >{{ showingAISuggestion ? '↻ Gợi ý lại' : '✨ Gợi ý AI' }}</button>
           </div>
           <div class="flex items-end gap-2">
             <div class="relative flex-1">
@@ -723,6 +721,10 @@ export default {
     availableProducts() {
       return ((this.activeSession && this.activeSession.detected_products) || []).filter((p) => p.status === 'AVAILABLE');
     },
+    showingAISuggestion() {
+      const sess = this.activeSession;
+      return Boolean(sess && sess.ai_generated && sess.suggested_reply && this.editableReply === sess.suggested_reply);
+    },
     canShareFiles() {
       try {
         return !!(navigator.canShare && navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] }));
@@ -885,10 +887,18 @@ export default {
       this.sheet = 'products';
       if (this.activeSession) this.refreshSession(this.activeSession.thread_id);
     },
+    // 1st tap: put the existing AI suggestion (for the latest message) back in the composer — free.
+    // Tap again while it is shown, or when none exists yet: ask OpenAI for a fresh one.
     async askAI() {
-      if (!this.activeSession) return;
+      const sess = this.activeSession;
+      if (!sess) return;
+      if (sess.ai_generated && sess.suggested_reply && !this.showingAISuggestion) {
+        this.editableReply = sess.suggested_reply;
+        this.replyDirty = false;
+        return;
+      }
       this.replyDirty = false;
-      await this.reanalyze(this.activeSession.thread_id);
+      await this.reanalyze(sess.thread_id);
     },
     // Opening a chat always lands on the newest message, even while images above are loading.
     pinToBottom() {
@@ -1098,10 +1108,6 @@ export default {
     clearReply() {
       this.editableReply = '';
       this.replyDirty = true;
-    },
-    useSuggestion() {
-      this.editableReply = this.lastServerReply;
-      this.replyDirty = false;
     },
     openOrderSheet() {
       this.sheet = 'order';
