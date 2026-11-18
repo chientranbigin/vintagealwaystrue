@@ -1,5 +1,5 @@
 <template>
-  <div class="copilot-root md:p-6 max-w-[1600px] mx-auto">
+  <div class="copilot-root max-w-[1600px] mx-auto md:p-6 md:h-[calc(100vh-64px)] md:flex md:flex-col md:overflow-hidden">
     <!-- ===================== MOBILE (< md): Messenger-style ===================== -->
     <div class="md:hidden">
       <!-- Screen 1: conversation list -->
@@ -295,8 +295,8 @@
     </div>
 
     <!-- ===================== DESKTOP (md+): 3 columns ===================== -->
-    <div class="hidden md:block">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="hidden md:flex md:flex-col md:flex-1 md:min-h-0">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
         <div>
           <h1 class="text-2xl font-extrabold text-slate-900 m-0 flex items-center gap-2.5">
             <span>AI Sales Copilot</span>
@@ -322,9 +322,9 @@
         <el-button type="primary" size="small" icon="el-icon-download" :loading="syncingFB" @click="syncFromFacebook">Đồng bộ hộp thư FB ngay</el-button>
       </div>
 
-      <div v-else class="grid grid-cols-12 gap-4 items-stretch">
+      <div v-else class="grid grid-cols-12 gap-4 flex-1 min-h-0">
         <!-- Column 1: list -->
-        <div class="col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[80vh]">
+        <div class="col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full min-h-0">
           <div class="px-4 py-3 border-b border-slate-100 font-bold text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50/70">
             Hội thoại gần đây ({{ sortedSessions.length }})
           </div>
@@ -368,7 +368,7 @@
         </div>
 
         <!-- Column 2: chat -->
-        <div v-if="activeSession" class="col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[80vh] overflow-hidden">
+        <div v-if="activeSession" class="col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
           <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
             <div class="flex items-center gap-2.5 min-w-0">
               <img v-if="activeSession.avatar_url" :src="activeSession.avatar_url" class="w-8 h-8 rounded-full object-cover" />
@@ -413,7 +413,7 @@
         </div>
 
         <!-- Column 3: AI + products + order -->
-        <div v-if="activeSession" class="col-span-4 space-y-3 h-[80vh] overflow-y-auto pr-0.5">
+        <div v-if="activeSession" class="col-span-4 space-y-3 h-full min-h-0 overflow-y-auto pr-0.5">
           <div v-if="activeSession.needs_human" class="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
             <b><i class="el-icon-warning-outline"></i> Cần nhân viên:</b> {{ activeSession.human_reason || 'khách hỏi thông tin chưa có dữ liệu' }}
           </div>
@@ -523,7 +523,8 @@
     </el-dialog>
 
     <!-- Hidden Receipt Template -->
-    <div style="position: absolute; left: -9999px; top: 0;">
+    <!-- fixed (not absolute) so this off-screen render target never adds to the page height -->
+    <div style="position: fixed; left: -10000px; top: 0; pointer-events: none;" aria-hidden="true">
       <div ref="receiptTemplate" id="copilot-order-receipt" class="p-8 bg-white w-[450px] font-sans text-slate-800">
         <div class="text-center mb-6">
           <h1 class="text-4xl font-extrabold tracking-[4px] m-0 text-slate-900">VINTAGE</h1>
