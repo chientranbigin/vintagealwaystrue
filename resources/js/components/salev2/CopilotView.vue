@@ -114,13 +114,16 @@
             >
               <div v-if="msg.type === 'image'">
                 <img
-                  v-if="msg.image_base64"
-                  :src="msg.image_base64"
-                  @click="previewImage(msg.image_base64)"
+                  v-if="(msg.image_base64 || msg.image_url) && !brokenImages[msg.image_base64 || msg.image_url]"
+                  :src="msg.image_base64 || msg.image_url"
+                  referrerpolicy="no-referrer"
+                  loading="lazy"
+                  @click="previewImage(msg.image_base64 || msg.image_url)"
+                  @error="markImageBroken(msg.image_base64 || msg.image_url)"
                   class="max-w-[230px] max-h-[260px] rounded-xl object-cover cursor-pointer hover:opacity-95 transition-opacity block"
                 />
                 <div v-else class="text-xs italic opacity-75 py-1">
-                  [Ảnh chưa tải được Base64]
+                  [Ảnh]
                 </div>
                 <div v-if="msg.ocr_text" class="mt-1.5 text-[11px] opacity-85 bg-black/10 rounded-lg px-2 py-1 break-words">
                   OCR: {{ msg.ocr_text }}
@@ -329,7 +332,8 @@ export default {
       renderingReceipt: false,
       creatingOrder: false,
       previewVisible: false,
-      previewSrc: ''
+      previewSrc: '',
+      brokenImages: {}
     };
   },
   computed: {
@@ -436,6 +440,9 @@ export default {
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
+    },
+    markImageBroken(src) {
+      this.$set(this.brokenImages, src, true);
     },
     previewImage(src) {
       this.previewSrc = src;

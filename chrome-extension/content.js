@@ -58,6 +58,21 @@
     statusTextEl = document.createElement("span");
     statusTextEl.textContent = "Copilot: Sẵn sàng";
 
+    const verifyBtn = document.createElement("button");
+    verifyBtn.textContent = "Verify";
+    verifyBtn.title = "Highlight tin nhắn Extension đang đọc để đối chiếu với Facebook";
+    verifyBtn.style.cssText = [
+      "background:#334155",
+      "color:#f8fafc",
+      "border:none",
+      "border-radius:6px",
+      "padding:4px 8px",
+      "font-size:11px",
+      "font-weight:600",
+      "cursor:pointer"
+    ].join(";");
+    verifyBtn.addEventListener("click", () => verifyVisualOverlay());
+
     const syncBtn = document.createElement("button");
     syncBtn.textContent = "Sync ngay";
     syncBtn.style.cssText = [
@@ -73,6 +88,7 @@
     syncBtn.addEventListener("click", () => syncCurrentConversation(true));
 
     badgeEl.appendChild(statusTextEl);
+    badgeEl.appendChild(verifyBtn);
     badgeEl.appendChild(syncBtn);
     document.body.appendChild(badgeEl);
   }
@@ -95,7 +111,6 @@
       if (!config.autoSync || isSyncing) return;
       if (!location.href.includes("/inbox")) return;
 
-      // Ignore mutations caused by our own badge
       const isOnlyBadge = mutations.every(
         (m) => badgeEl && (badgeEl.contains(m.target) || m.target === badgeEl)
       );
@@ -145,24 +160,107 @@
   }
 
   function isGarbageName(txt) {
-    if (!txt || txt.length < 2 || txt.length > 65) return true;
-    return /^(hộp thư|inbox|tất cả|messenger|meta business|trả lời|reply|tìm kiếm|search|chưa đọc|unread|xem trang cá nhân|view profile|bình luận|comments|tin nhắn|messages)$/i.test(
-      txt.trim()
-    );
+    if (!txt || txt.length < 2 || txt.length > 55) return true;
+    const lower = txt.trim().toLowerCase();
+    const exactBlacklist = /^(hộp thư|inbox|tất cả|messenger|meta business|trả lời|reply|tìm kiếm|search|chưa đọc|unread|xem trang cá nhân|view profile|bình luận|comments|tin nhắn|messages|người gửi|chỉ định cho tôi|giới thiệu|about|chi tiết|details|hoạt động|activity|xem bài viết|view post)$/i;
+    if (exactBlacklist.test(lower)) return true;
+    const partialBlacklist = [
+      "bình luận trên facebook",
+      "tin nhắn trên",
+      "facebook comment",
+      "messenger",
+      "instagram",
+      "meta business",
+      "chỉ định",
+      "tất cả tin nhắn",
+      "đã trả lời",
+      "xem bài viết",
+      "đã bình luận",
+      "replied to",
+      "view post",
+      "commented on",
+      "trang cá nhân",
+      "đã trả lời một quảng cáo",
+      "mới nhất"
+    ];
+    return partialBlacklist.some((p) => lower.includes(p));
+  }
+
+  /**
+   * Chat header name: the biggest text directly above the message list region
+   * (above "Chỉ định cuộc trò chuyện này"). Ties resolve to the topmost element.
+   */
+  function extractHeaderName(region) {
+    const rr = region.getBoundingClientRect();
+    let best = "";
+    let bestFs = 0;
+    let bestTop = Infinity;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const txt = (node.nodeValue || "").trim();
+      if (!txt) continue;
+      const el = node.parentElement;
+      if (!el || (badgeEl && badgeEl.contains(el))) continue;
+      if (el.closest("button, [role='button'], [role='tab'], [role='region']")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (r.left < rr.left - 10 || r.left > rr.left + rr.width * 0.6) continue;
+      if (r.top < rr.top - 220 || r.bottom > rr.top) continue;
+      if (isGarbageName(txt)) continue;
+      const fs = parseFloat(getComputedStyle(el).fontSize || "12");
+      if (fs < 15) continue;
+      if (fs > bestFs || (fs === bestFs && r.top < bestTop)) {
+        bestFs = fs;
+        bestTop = r.top;
+        best = txt;
+      }
+    }
+    return best;
   }
 
   function extractCustomerName(chatPane) {
+    const region = findMessageRegion();
+    if (region) {
+      const headerName = extractHeaderName(region);
+      if (headerName) return headerName;
+    }
+
+    // 1. Right-hand Customer Info Panel (Profile header)
+    const rightEls = document.querySelectorAll("h1, h2, h3, [role='heading'], a, strong, span");
+    let rightBest = "";
+    let rightMaxFs = 0;
+    for (const el of rightEls) {
+      if (badgeEl && badgeEl.contains(el)) continue;
+      if (el.children.length > 1) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (r.left < window.innerWidth * 0.72) continue;
+      if (r.top < 45 || r.top > 320) continue;
+
+      const txt = (el.textContent || "").trim();
+      if (isGarbageName(txt)) continue;
+
+      const fs = parseFloat(getComputedStyle(el).fontSize || "12");
+      if (fs >= 14 && fs > rightMaxFs) {
+        rightMaxFs = fs;
+        rightBest = txt;
+      }
+    }
+    if (rightBest) return rightBest;
+
+    // 2. Center chat pane header bar
     const paneRect = chatPane.getBoundingClientRect();
     const minLeft = Math.max(paneRect.left, window.innerWidth * 0.18);
-    const maxRight = Math.min(paneRect.right, window.innerWidth * 0.78);
+    const maxRight = Math.min(paneRect.right, window.innerWidth * 0.75);
 
-    // 1. Search header bar of the center chat pane (usually top 45px..190px of viewport)
-    const headerEls = document.querySelectorAll("h1, h2, h3, [role='heading'], a[role='link'] span, strong");
+    const headerEls = document.querySelectorAll("h1, h2, h3, [role='heading'], a[role='link'] span, strong, span");
     let bestName = "";
     let bestFontSize = 0;
 
     for (const el of headerEls) {
       if (badgeEl && badgeEl.contains(el)) continue;
+      if (el.children.length > 1) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       if (r.left < minLeft || r.right > maxRight) continue;
@@ -172,14 +270,24 @@
       if (isGarbageName(txt)) continue;
 
       const fs = parseFloat(getComputedStyle(el).fontSize || "12");
-      if (fs >= bestFontSize) {
+      if (fs >= 13 && fs >= bestFontSize) {
         bestFontSize = fs;
         bestName = txt;
       }
     }
     if (bestName) return bestName;
 
-    // 2. Fallback: active selected conversation in left sidebar
+    // 3. Extract from "<Name> đã trả lời về một bài viết" if present
+    const allTexts = chatPane.querySelectorAll("span, strong");
+    for (const el of allTexts) {
+      const txt = (el.textContent || "").trim();
+      const m = txt.match(/^(.{2,45}?)\s+(?:đã trả lời|đã bình luận|replied to|commented on)\b/i);
+      if (m && m[1] && !isGarbageName(m[1])) {
+        return m[1].trim();
+      }
+    }
+
+    // 4. Active selected conversation in left sidebar
     const selected = document.querySelector('[aria-selected="true"], [aria-current="page"], [aria-current="true"]');
     if (selected) {
       const spans = selected.querySelectorAll("span, strong");
@@ -188,16 +296,6 @@
         if (!isGarbageName(txt) && !/\d{1,2}:\d{2}/.test(txt)) {
           return txt;
         }
-      }
-    }
-
-    // 3. Fallback: right customer info panel heading
-    const rightHeaders = document.querySelectorAll("h2, h3, [role='heading']");
-    for (const el of rightHeaders) {
-      const r = el.getBoundingClientRect();
-      if (r.left > window.innerWidth * 0.7 && r.top > 40 && r.top < 250) {
-        const txt = (el.textContent || "").trim();
-        if (!isGarbageName(txt)) return txt;
       }
     }
 
@@ -214,22 +312,239 @@
     );
   }
 
+  /**
+   * Detect Meta Business Suite bottom banners (e.g. "Tin trả lời gợi ý", "Bạn có muốn được chỉ định...")
+   * so we stop reading messages right above them.
+   */
+  function findBottomNoiseBoundary(chatPane, composer) {
+    let bound = composer ? composer.getBoundingClientRect().top - 6 : chatPane.getBoundingClientRect().bottom - 50;
+    const noisePhrases = [
+      "tin trả lời gợi ý",
+      "nhấp để chèn",
+      "suggested replies",
+      "bạn có muốn được chỉ định",
+      "chỉ định cho tôi",
+      "assign to me"
+    ];
+
+    const walker = document.createTreeWalker(chatPane, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const txt = normalizeText(node.nodeValue);
+      if (!txt) continue;
+      if (noisePhrases.some((p) => txt.includes(p))) {
+        const el = node.parentElement;
+        if (el) {
+          const r = el.getBoundingClientRect();
+          if (r.top > window.innerHeight * 0.35 && r.top < bound) {
+            bound = r.top - 4;
+          }
+        }
+      }
+    }
+    return bound;
+  }
+
+  /**
+   * Collect containers that represent Meta's "Người gửi: <Staff Name>" metadata rows
+   * so we skip both the label and the duplicated staff name inside them.
+   */
+  function findSenderLabelContainers(chatPane) {
+    const blocked = new Set();
+    const walker = document.createTreeWalker(chatPane, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const txt = normalizeText(node.nodeValue);
+      if (txt === "người gửi:" || txt.startsWith("người gửi:") || txt === "sent by:" || txt.startsWith("sent by:")) {
+        // Walk up 2-3 levels to cover the metadata row containing "Người gửi: <Name>"
+        let el = node.parentElement;
+        for (let i = 0; i < 3 && el && el !== chatPane; i++) {
+          const full = normalizeText(el.innerText || el.textContent || "");
+          if (full.length < 120 && el.getBoundingClientRect().height < 48) {
+            blocked.add(el);
+            el = el.parentElement;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+    return Array.from(blocked);
+  }
+
+  function isInsideAny(el, containers) {
+    for (const c of containers) {
+      if (c === el || c.contains(el)) return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meta Business Suite structure (verified 2026-11):
+  //  - Messenger/IG DM: messages live in [role=region][aria-label^="Vùng chứa danh sách tin nhắn"].
+  //    Every real text bubble is a [dir=auto] element. Everything else inside the region
+  //    (timestamps, "X đã trả lời một quảng cáo.", "Người gửi: <staff>", "Xem bài viết",
+  //    "Hệ thống đã tự động tạo...") is NOT inside [dir=auto] and is system noise.
+  // ---------------------------------------------------------------------------
+  const LIKE_LABEL_RE = /^(👍|thích|like|biểu tượng thích|nút thích|thumbs up|\(y\))$/i;
+  const EMOJI_IMG_RE = /static\.[a-z.]*fbcdn\.net\/images\/emoji|\/emoji\.php\//i;
+
+  function findMessageRegion() {
+    const regions = document.querySelectorAll('[role="region"][aria-label]');
+    for (const r of regions) {
+      const al = normalizeText(r.getAttribute("aria-label"));
+      if (al.includes("danh sách tin nhắn") || al.includes("message list") || al.includes("messages list")) {
+        const rect = r.getBoundingClientRect();
+        if (rect.width > 200 && rect.height > 100) return r;
+      }
+    }
+    return null;
+  }
+
+  function pickLikeItem(el, rect, centerX) {
+    const label = normalizeText(
+      el.getAttribute("aria-label") || el.getAttribute("alt") || el.querySelector?.("title")?.textContent || ""
+    );
+    if (!LIKE_LABEL_RE.test(label)) return null;
+    if (rect.width < 24 || rect.height < 24 || rect.width > 140) return null;
+    if (el.closest("button, [role='button']")) return null;
+    return {
+      sender: rect.left + rect.width / 2 > centerX ? "shop" : "customer",
+      type: "text",
+      text: "👍",
+      imageUrl: "",
+      el,
+      top: rect.top
+    };
+  }
+
+  function isContentImage(img, rect) {
+    if (rect.width < 55 || rect.height < 55) return false;
+    const src = img.currentSrc || img.src || "";
+    if (!src || src.startsWith("data:image/svg")) return false;
+    if (EMOJI_IMG_RE.test(src)) return false;
+    if (img.naturalWidth > 0 && img.naturalWidth < 65) return false;
+    return true;
+  }
+
+  function outermostDirAuto(root) {
+    return Array.from(root.querySelectorAll('[dir="auto"]')).filter((el) => {
+      const parentDir = el.parentElement && el.parentElement.closest('[dir="auto"]');
+      return !parentDir || !root.contains(parentDir);
+    });
+  }
+
+  function extractRegionMessages(region, composer) {
+    const rRect = region.getBoundingClientRect();
+    const centerX = rRect.left + rRect.width / 2;
+    const items = [];
+    const seenImg = new Set();
+
+    for (const el of outermostDirAuto(region)) {
+      if (composer && composer.contains(el)) continue;
+      if (el.closest("button, [role='button']")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const text = (el.innerText || el.textContent || "").trim();
+      if (!text) continue;
+      items.push({
+        sender: r.left + r.width / 2 > centerX ? "shop" : "customer",
+        type: "text",
+        text,
+        imageUrl: "",
+        el,
+        top: r.top
+      });
+    }
+
+    for (const img of region.querySelectorAll("img")) {
+      const r = img.getBoundingClientRect();
+      const like = pickLikeItem(img, r, centerX);
+      if (like) {
+        items.push(like);
+        continue;
+      }
+      if (!isContentImage(img, r)) continue;
+      const src = img.currentSrc || img.src;
+      if (seenImg.has(src)) continue;
+      seenImg.add(src);
+      items.push({
+        sender: r.left + r.width / 2 > centerX ? "shop" : "customer",
+        type: "image",
+        text: "",
+        imageUrl: src,
+        el: img,
+        top: r.top
+      });
+    }
+
+    // Big Like (👍) sent as a message: a [data-message-id] row with no text and no photo,
+    // rendered as a CSS sprite <i data-visualcompletion="css-img"> (~36x36).
+    for (const msg of region.querySelectorAll("[data-message-id]")) {
+      if (msg.querySelector('[dir="auto"]')) continue;
+      if (Array.from(msg.querySelectorAll("img")).some((img) => isContentImage(img, img.getBoundingClientRect()))) continue;
+      const sprite = Array.from(msg.querySelectorAll('i[data-visualcompletion="css-img"], [role="img"]')).find((s) => {
+        const r = s.getBoundingClientRect();
+        return r.width >= 24 && r.height >= 24 && r.width <= 140 && !s.closest("button, [role='button']");
+      });
+      if (!sprite) continue;
+      const r = sprite.getBoundingClientRect();
+      items.push({
+        sender: r.left + r.width / 2 > centerX ? "shop" : "customer",
+        type: "text",
+        text: "👍",
+        imageUrl: "",
+        el: sprite,
+        top: r.top
+      });
+    }
+
+    const seenLike = new Set();
+    for (const el of region.querySelectorAll("svg[aria-label], [role='img'][aria-label]")) {
+      if (el.closest("[data-message-id]") && !el.closest("[data-message-id]").querySelector('[dir="auto"]')) continue;
+      if (el.tagName === "IMG") continue;
+      const r = el.getBoundingClientRect();
+      const like = pickLikeItem(el, r, centerX);
+      if (!like) continue;
+      const key = `${Math.round(r.top)}:${Math.round(r.left)}`;
+      if (seenLike.has(key)) continue;
+      seenLike.add(key);
+      items.push(like);
+    }
+
+    items.sort((a, b) => a.top - b.top);
+    return items;
+  }
+
   function extractRawMessages(chatPane, composer) {
+    // Only chat (Messenger/IG DM) is synced; comment threads produce junk names like "Mới nhất".
+    if (/thread_type=(FB_PAGE_POST|IG_COMMENT|IG_MEDIA)/i.test(location.search)) return [];
+    const region = findMessageRegion();
+    if (region) {
+      return extractRegionMessages(region, composer);
+    }
+    return extractRawMessagesLegacy(chatPane, composer);
+  }
+
+  function extractRawMessagesLegacy(chatPane, composer) {
     const paneRect = chatPane.getBoundingClientRect();
     const centerX = paneRect.left + paneRect.width / 2;
     const topBound = paneRect.top + 48;
-    const bottomBound = composer ? composer.getBoundingClientRect().top - 6 : paneRect.bottom - 50;
+    const bottomBound = findBottomNoiseBoundary(chatPane, composer);
+    const senderLabelContainers = findSenderLabelContainers(chatPane);
 
     const items = [];
     const seenTexts = new Set();
     const seenImgSrcs = new Set();
 
-    // 1. Extract product images (both <img> and CSS background-image)
+    // 1. Extract product images
     const imgs = chatPane.querySelectorAll("img");
     for (const img of imgs) {
       const r = img.getBoundingClientRect();
       if (r.width < 55 || r.height < 55) continue;
-      if (r.top < topBound || r.bottom > bottomBound + 20) continue;
+      if (r.top < topBound || r.bottom > bottomBound + 10) continue;
+      if (isInsideAny(img, senderLabelContainers)) continue;
+
       const src = img.currentSrc || img.src || "";
       if (!src || src.startsWith("data:image/svg")) continue;
       if (img.naturalWidth > 0 && img.naturalWidth < 65) continue;
@@ -242,12 +557,40 @@
         type: "image",
         text: "",
         imageUrl: src,
-        imgElement: img,
+        el: img,
         top: r.top
       });
     }
 
-    // 2. Extract text messages
+    // 2. Extract Like / Reaction sticker SVGs (e.g. customer sends 👍 Like icon)
+    const svgs = chatPane.querySelectorAll("svg");
+    const seenSvgPos = new Set();
+    for (const svg of svgs) {
+      const r = svg.getBoundingClientRect();
+      if (r.width < 24 || r.width > 70 || r.height < 24 || r.height > 70) continue;
+      if (r.top < topBound || r.bottom > bottomBound) continue;
+      if (svg.closest("button, [role='button']")) continue;
+
+      const label = normalizeText(svg.getAttribute("aria-label") || svg.querySelector("title")?.textContent || "");
+      const isLike = label.includes("thích") || label.includes("like") || label.includes("thumbs");
+      if (!isLike) continue;
+
+      const key = `${Math.round(r.top)}:${Math.round(r.left)}`;
+      if (seenSvgPos.has(key)) continue;
+      seenSvgPos.add(key);
+
+      const sender = r.left + r.width / 2 > centerX ? "shop" : "customer";
+      items.push({
+        sender,
+        type: "text",
+        text: "👍",
+        imageUrl: "",
+        el: svg,
+        top: r.top
+      });
+    }
+
+    // 3. Extract text messages
     const walker = document.createTreeWalker(chatPane, NodeFilter.SHOW_TEXT, null);
     let textNode;
     while ((textNode = walker.nextNode())) {
@@ -257,13 +600,18 @@
       if (!parent) continue;
       if (composer && composer.contains(parent)) continue;
       if (parent.closest("button, [role='button'], script, style, svg")) continue;
+      if (isInsideAny(parent, senderLabelContainers)) continue;
 
       const r = parent.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       if (r.top < topBound || r.bottom > bottomBound) continue;
 
+      // Skip small metadata text (font-size <= 11.5px like timestamps / "Đã gửi" / "Người gửi")
+      const fontSize = parseFloat(getComputedStyle(parent).fontSize || "14");
+      if (fontSize <= 11.5 && raw.length < 40) continue;
+
       if (
-        /^(đã xem|seen|sent|đã gửi|đã nhận|delivered|nhập tin nhắn|type a message|trả lời|reply|bạn đã gửi|chưa đọc|unread|\d{1,2}:\d{2})$/i.test(
+        /^(đã xem|seen|sent|đã gửi|đã nhận|delivered|nhập tin nhắn|type a message|trả lời|reply|bạn đã gửi|chưa đọc|unread|người gửi:?|\d{1,2}:\d{2})$/i.test(
           raw
         )
       ) {
@@ -271,12 +619,15 @@
       }
 
       const distFromCenter = Math.abs(r.left + r.width / 2 - centerX);
-      if (distFromCenter < 35 && r.width < 150 && raw.length < 28) {
+      if (distFromCenter < 45 && r.width < 170 && raw.length < 30) {
         continue;
       }
 
       const bubbleEl = parent.closest('[dir="auto"]') || parent;
+      if (isInsideAny(bubbleEl, senderLabelContainers)) continue;
       const bRect = bubbleEl.getBoundingClientRect();
+      if (bRect.bottom > bottomBound) continue;
+
       const fullText = (bubbleEl.innerText || bubbleEl.textContent || "").trim();
       if (!fullText) continue;
 
@@ -290,18 +641,41 @@
         type: "text",
         text: fullText,
         imageUrl: "",
+        el: bubbleEl,
         top: bRect.top
       });
     }
 
     items.sort((a, b) => a.top - b.top);
-    return items.map(({ sender, type, text, imageUrl, imgElement }) => ({
-      sender,
-      type,
-      text,
-      imageUrl,
-      imgElement
-    }));
+    return items;
+  }
+
+  function verifyVisualOverlay() {
+    const { chatPane, composer } = findChatPaneAndComposer();
+    const items = extractRawMessages(chatPane, composer);
+    if (items.length === 0) {
+      updateBadgeStatus("Verify: 0 tin nhắn", "#fbbf24");
+      return;
+    }
+
+    const restored = [];
+    for (const item of items) {
+      if (!item.el) continue;
+      const prevOutline = item.el.style.outline;
+      const prevOffset = item.el.style.outlineOffset;
+      const color = item.type === "image" ? "#eab308" : item.sender === "shop" ? "#3b82f6" : "#22c55e";
+      item.el.style.outline = `3px solid ${color}`;
+      item.el.style.outlineOffset = "2px";
+      restored.push(() => {
+        item.el.style.outline = prevOutline;
+        item.el.style.outlineOffset = prevOffset;
+      });
+    }
+
+    updateBadgeStatus(`Verify: ${items.length} mục (Xanh dương=Shop, Lá=Khách, Vàng=Ảnh)`, "#38bdf8");
+    setTimeout(() => {
+      restored.forEach((fn) => fn());
+    }, 4500);
   }
 
   function sliceSessionAndDetectAction(allMessages) {
@@ -371,7 +745,6 @@
     if (url.startsWith("data:image/")) return url;
     if (imageCache.has(url)) return imageCache.get(url);
 
-    // Strategy 1: Fetch via background service worker (bypasses page CORS)
     try {
       const res = await chrome.runtime.sendMessage({
         type: "FETCH_IMAGE_BASE64",
@@ -386,7 +759,6 @@
       console.warn("[VAT Copilot] Background fetch failed:", e);
     }
 
-    // Strategy 2: Direct fetch in page context (works for blob: URLs)
     try {
       const resp = await fetch(url);
       if (resp.ok) {
@@ -499,4 +871,5 @@
       updateBadgeStatus("Lỗi đọc hội thoại", "#f87171");
     }
   }
+
 })();
