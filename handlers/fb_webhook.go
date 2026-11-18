@@ -216,8 +216,9 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 				continue
 			}
 
-			// Orders are created manually from Copilot's "Lên đơn" button; no chat trigger phrase.
-			sess, err := h.Copilot.RebuildAndAnalyzeSession(ctx, psid, "suggest")
+			// No OpenAI call here (cost): messages + product status + free rule-based suggestion.
+			// The AI suggestion is requested from the UI ("Gợi ý AI" button -> /copilot/reanalyze).
+			sess, err := h.Copilot.RebuildSession(ctx, psid, false)
 			if err != nil || sess == nil {
 				continue
 			}
@@ -473,4 +474,27 @@ func (h *CopilotHandler) Usage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, rep)
+}
+
+// Refresh reloads one thread and re-checks product stock status from the DB without calling
+// OpenAI (used when opening a chat / the detected-products list).
+func (h *CopilotHandler) Refresh(c *gin.Context) {
+	var req struct {
+		ThreadID string `json:"thread_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	sess, err := h.Copilot.RebuildSession(c.Request.Context(), req.ThreadID, false)
+	if err != nil || sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy hội thoại"})
+		return
+	}
+	h.Copilot.SaveAndBroadcast(sess)
+	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
 }

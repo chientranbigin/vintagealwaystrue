@@ -88,6 +88,10 @@ type CopilotSession struct {
 	LastMessageAt time.Time `json:"last_message_at"`
 	// AIStale: messages changed since the AI fields were computed (e.g. reloaded after a restart).
 	AIStale bool `json:"ai_stale,omitempty"`
+	// AIGenerated: suggestion came from OpenAI (button). false = free rule-based suggestion.
+	AIGenerated bool `json:"ai_generated"`
+	// AIForKey: last message the AI suggestion was computed for (kept until a new message).
+	AIForKey string `json:"ai_for_key,omitempty"`
 }
 
 type CopilotService struct {
@@ -467,6 +471,7 @@ DỮ LIỆU SẢN PHẨM được chia 2 nhóm:
    - Khách hỏi vừa không: dựa số đo thực tế (đồ vintage: ngực áo thường lớn hơn ngực người 10-16cm; eo quần ghi nửa vòng thì x2).
    - Khách mặc cả / xin giảm / đổi trả / khiếu nại: "needs_human": true + "human_reason", trả lời khéo kiểu đợi em check.
    - Khách đã chốt và gửi đủ tên/SĐT/địa chỉ: xác nhận ngắn mã + giá.
+   - Khi liệt kê nhiều mã, không ghi số lượng kiểu "3 chiếc", chỉ liệt kê mã.
    Ví dụ giọng:
    • Khách: "Mẫu này còn k shop" (còn hàng) → "Dạ mẫu này còn nha anh, 350k ạ 😊"
    • Khách gửi 4 ảnh, chỉ TS4764 còn → "Dạ mấy mẫu kia em bán mất r ạ 🥲 còn mỗi TS4764 350k thôi nha anh"
@@ -969,6 +974,14 @@ func (s *CopilotService) UpsertFBMessage(
 // RebuildAndAnalyzeSession loads the full stored thread (newest copilotDisplayMessages), runs AI and
 // product matching on the recent tail, and returns a CopilotSession. Orders no longer cut the history.
 func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid string, action string) (*CopilotSession, error) {
+	return s.RebuildSession(ctx, psid, true)
+}
+
+// RebuildSession reloads a thread from the DB and re-checks product status. OpenAI is called only
+// when useAI is true (the "Gợi ý AI" button); otherwise the previous AI suggestion is kept if no
+// new message arrived since, else a free rule-based suggestion is used.
+func (s *CopilotService) RebuildSession(ctx context.Context, psid string, useAI bool) (*CopilotSession, error) {
+	action := "suggest"
 	if s.DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -1031,7 +1044,27 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 	recommendedProducts := s.recommendProductsByMeasurements(convText, detectedProducts)
 	allMatched := append(detectedProducts, recommendedProducts...)
 
-	aiRes := s.generateAISuggestion(ctx, conv.CustomerName, action, aiMsgs, allMatched)
+	lastKey := ""
+	if n := len(msgs); n > 0 {
+		lastKey = messageKey(msgs[n-1])
+	}
+	var aiRes aiCopilotOutput
+	aiGenerated := false
+	if useAI {
+		aiRes = s.generateAISuggestion(ctx, conv.CustomerName, action, aiMsgs, allMatched)
+		aiGenerated = strings.TrimSpace(s.OpenAIKey) != ""
+	} else if prev, ok := s.GetSession(conv.PSID); ok && prev.AIGenerated && prev.AIForKey == lastKey {
+		aiRes = aiCopilotOutput{
+			SuggestedReply: prev.SuggestedReply,
+			SizeAdvice:     prev.SizeAdvice,
+			NeedsHuman:     prev.NeedsHuman,
+			HumanReason:    prev.HumanReason,
+			OrderDraft:     prev.OrderDraft,
+		}
+		aiGenerated = true
+	} else {
+		aiRes = s.fallbackSuggestion(conv.CustomerName, action, convText, aiMsgs, allMatched)
+	}
 
 	var createdOrder *models.Order
 	if conv.LastOrderID != nil {
@@ -1056,6 +1089,8 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 		OrderDraft:       aiRes.OrderDraft,
 		CreatedOrder:     createdOrder,
 		UpdatedAt:        conv.UpdatedAt,
+		AIGenerated:      aiGenerated,
+		AIForKey:         lastKey,
 	}
 	if n := len(recs); n > 0 {
 		sess.LastMessageAt = recs[n-1].MsgTimestamp
@@ -1088,7 +1123,7 @@ func (s *CopilotService) LoadRecentSessionsFromDB(ctx context.Context) []*Copilo
 	}
 	var out []*CopilotSession
 	for _, conv := range convs {
-		if sess, err := s.RebuildAndAnalyzeSession(ctx, conv.PSID, "suggest"); err == nil {
+		if sess, err := s.RebuildSession(ctx, conv.PSID, false); err == nil {
 			out = append(out, sess)
 			s.mu.Lock()
 			s.sessions[sess.ThreadID] = sess
@@ -1226,7 +1261,7 @@ func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, 
 		if psid == "" {
 			continue
 		}
-		if sess, err := s.RebuildAndAnalyzeSession(ctx, psid, "suggest"); err == nil {
+		if sess, err := s.RebuildSession(ctx, psid, false); err == nil {
 			s.SaveAndBroadcast(sess)
 			synced++
 		}
