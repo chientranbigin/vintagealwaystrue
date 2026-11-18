@@ -204,9 +204,14 @@
         <div class="absolute inset-0 bg-black/40" @click="sheet = null"></div>
         <div class="relative bg-white rounded-t-3xl max-h-[88vh] overflow-y-auto px-4 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 16px)">
           <div class="w-10 h-1.5 rounded-full bg-slate-300 mx-auto mb-3"></div>
+          <button
+            class="absolute top-3 right-3 w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-lg active:bg-slate-200"
+            aria-label="Đóng"
+            @click="sheet = null"
+          ><i class="el-icon-close"></i></button>
 
           <template v-if="sheet === 'products'">
-            <h3 class="text-base font-bold text-slate-900 mt-0 mb-3">Sản phẩm nhận diện ({{ (activeSession.detected_products || []).length }})</h3>
+            <h3 class="text-base font-bold text-slate-900 mt-0 mb-3 pr-12">Sản phẩm nhận diện ({{ (activeSession.detected_products || []).length }})</h3>
             <div v-if="!(activeSession.detected_products || []).length" class="text-sm text-slate-400 pb-4">
               Chưa thấy mã sản phẩm trong ảnh/tin nhắn.
             </div>
@@ -240,7 +245,7 @@
 
           <template v-else-if="sheet === 'order' && activeSession.created_order">
             <!-- Order exists: receipt -->
-              <div class="flex items-center gap-2 mb-3">
+              <div class="flex items-center gap-2 mb-3 pr-12">
                 <h3 class="text-base font-bold text-emerald-800 m-0 flex-1">Đã lên đơn #{{ activeSession.created_order.id }}</h3>
                 <router-link :to="`/salev2/order/${activeSession.created_order.id}/edit`" class="text-sm font-semibold text-blue-600">Sửa đơn</router-link>
               </div>
