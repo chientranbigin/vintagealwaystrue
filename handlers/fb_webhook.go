@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -129,7 +130,8 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	_, pageToken := h.getMainPageCredentials()
+	pageID, pageToken := h.getMainPageCredentials()
+	historyLoaded := map[string]bool{}
 	triggerNorm := strings.ToLower(strings.TrimSpace(os.Getenv("COPILOT_ORDER_TRIGGER")))
 	if triggerNorm == "" {
 		triggerNorm = "ok ạ, để em lên đơn ngay"
@@ -150,6 +152,18 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 			}
 			if psid == "" {
 				continue
+			}
+
+			// First time we see this customer: import their recent thread from Graph API so the
+			// AI has the earlier context. The current message is part of it (deduped by mid).
+			importedHistory := false
+			if !historyLoaded[psid] && !h.Copilot.HasFBConversation(psid) {
+				historyLoaded[psid] = true
+				if err := h.Copilot.ImportFBHistory(ctx, pageID, psid, pageToken); err != nil {
+					log.Printf("[copilot] import history for %s failed: %v", psid, err)
+				} else {
+					importedHistory = true
+				}
 			}
 
 			msgTime := time.Now()
@@ -202,7 +216,8 @@ func (h *CopilotHandler) processFBWebhookPayload(payload fbWebhookPayload) {
 				}
 			}
 
-			if !insertedAny {
+			// The imported history may already contain this message (same mid), so still rebuild.
+			if !insertedAny && !importedHistory {
 				continue
 			}
 

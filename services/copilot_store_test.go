@@ -2,8 +2,12 @@ package services
 
 import "testing"
 
-func txt(sender, t string) CopilotMessage { return CopilotMessage{Sender: sender, Type: "text", Text: t} }
-func img(sender, u string) CopilotMessage { return CopilotMessage{Sender: sender, Type: "image", ImageURL: u} }
+func txt(sender, t string) CopilotMessage {
+	return CopilotMessage{Sender: sender, Type: "text", Text: t}
+}
+func img(sender, u string) CopilotMessage {
+	return CopilotMessage{Sender: sender, Type: "image", ImageURL: u}
+}
 
 func texts(ms []CopilotMessage) []string {
 	out := make([]string, len(ms))

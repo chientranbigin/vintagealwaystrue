@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"sale-app/models"
 )
 
 const (
@@ -35,6 +37,8 @@ func (s *CopilotService) initStore() {
 		log.Printf("[copilot] AutoMigrate copilot_sessions error: %v", err)
 		return
 	}
+	s.purgeLegacyExtensionSessions()
+
 	var recs []CopilotSessionRecord
 	if err := s.DB.Order("updated_at DESC").Limit(copilotMemSessions).Find(&recs).Error; err != nil {
 		log.Printf("[copilot] load sessions error: %v", err)
@@ -245,5 +249,28 @@ func (s *CopilotService) PurgeThreads(ids ...string) {
 		if err := s.DB.Where("thread_id IN ?", valid).Delete(&CopilotSessionRecord{}).Error; err != nil {
 			log.Printf("[copilot] purge threads error: %v", err)
 		}
+	}
+}
+
+// purgeLegacyExtensionSessions removes sessions created by the Chrome extension, which keyed
+// threads by the Business Suite id instead of the Messenger PSID, so the same customer showed
+// up twice next to the webhook/Graph session. The webhook is now the source of truth: any stored
+// session whose thread_id is not a known PSID is dropped.
+func (s *CopilotService) purgeLegacyExtensionSessions() {
+	if s.DB == nil || !s.DB.Migrator().HasTable(&models.CopilotConversation{}) {
+		return
+	}
+	var convCount int64
+	if err := s.DB.Model(&models.CopilotConversation{}).Count(&convCount).Error; err != nil || convCount == 0 {
+		return // never wipe everything when the PSID table is empty or unreadable
+	}
+	res := s.DB.Where("thread_id NOT IN (?)", s.DB.Model(&models.CopilotConversation{}).Select("ps_id")).
+		Delete(&CopilotSessionRecord{})
+	if res.Error != nil {
+		log.Printf("[copilot] purge legacy sessions error: %v", res.Error)
+		return
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("[copilot] purged %d legacy extension sessions", res.RowsAffected)
 	}
 }

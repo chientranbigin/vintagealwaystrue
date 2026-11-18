@@ -7,7 +7,7 @@
     serverUrl: "https://vintage-sale-go.onrender.com",
     secretKey: "",
     orderTrigger: "OK ạ, để em lên đơn ngay",
-    autoSync: true
+    domAutoSync: false
   };
 
   let debounceTimer = null;
@@ -16,7 +16,7 @@
   let isSyncing = false;
   const imageCache = new Map();
 
-  chrome.storage.local.get(["serverUrl", "secretKey", "orderTrigger", "autoSync"], (res) => {
+  chrome.storage.local.get(["serverUrl", "secretKey", "orderTrigger", "domAutoSync"], (res) => {
     config = { ...config, ...res };
     initBadge();
     startObserver();
@@ -26,7 +26,7 @@
     for (const [k, v] of Object.entries(changes)) {
       config[k] = v.newValue;
     }
-    updateBadgeStatus(config.autoSync ? "Sẵn sàng" : "Đang tạm dừng", "#64748b");
+    updateBadgeStatus(config.domAutoSync ? "Sẵn sàng" : "Đang tạm dừng", "#64748b");
   });
 
   // --- UI Badge ---
@@ -108,7 +108,7 @@
 
   function startObserver() {
     const observer = new MutationObserver((mutations) => {
-      if (!config.autoSync || isSyncing) return;
+      if (!config.domAutoSync || isSyncing) return;
       if (!location.href.includes("/inbox")) return;
 
       const isOnlyBadge = mutations.every(

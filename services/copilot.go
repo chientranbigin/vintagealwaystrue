@@ -904,120 +904,165 @@ func (s *CopilotService) LoadRecentSessionsFromDB(ctx context.Context) []*Copilo
 	return out
 }
 
-// SyncRecentFBConversations fetches the latest Messenger threads via Graph API and stores them in DB.
-func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, pageToken string) (int, error) {
+type graphConversation struct {
+	ID           string `json:"id"`
+	Participants struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	} `json:"participants"`
+	Messages struct {
+		Data []struct {
+			ID          string `json:"id"`
+			Message     string `json:"message"`
+			CreatedTime string `json:"created_time"`
+			From        struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"from"`
+			Attachments struct {
+				Data []struct {
+					ID        string `json:"id"`
+					Name      string `json:"name"`
+					MimeType  string `json:"mime_type"`
+					ImageData struct {
+						URL string `json:"url"`
+					} `json:"image_data"`
+				} `json:"data"`
+			} `json:"attachments"`
+		} `json:"data"`
+	} `json:"messages"`
+}
+
+// fetchGraphConversations calls /{page}/conversations. extraQuery is appended as-is
+// (e.g. "&user_id=<PSID>" to fetch one customer's thread).
+func (s *CopilotService) fetchGraphConversations(ctx context.Context, pageID, pageToken string, msgLimit, convLimit int, extraQuery string) ([]graphConversation, error) {
 	if pageID == "" || pageToken == "" {
-		return 0, fmt.Errorf("thiếu FB_MAIN_PAGE_ID hoặc FB_MAIN_PAGE_TOKEN")
+		return nil, fmt.Errorf("thiếu FB_MAIN_PAGE_ID hoặc FB_MAIN_PAGE_TOKEN")
 	}
-	fields := "participants,updated_time,messages.limit(15){id,message,from,attachments,created_time}"
+	fields := fmt.Sprintf("participants,updated_time,messages.limit(%d){id,message,from,attachments,created_time}", msgLimit)
 	endpoint := fmt.Sprintf(
-		"https://graph.facebook.com/v21.0/%s/conversations?platform=messenger&fields=%s&limit=10&access_token=%s",
+		"https://graph.facebook.com/v21.0/%s/conversations?platform=messenger&fields=%s&limit=%d%s&access_token=%s",
 		url.PathEscape(pageID),
 		url.QueryEscape(fields),
+		convLimit,
+		extraQuery,
 		url.QueryEscape(pageToken),
 	)
-
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	resp, err := s.Client.Do(req)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
-
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Graph API error (%d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("Graph API error (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
-
 	var parsed struct {
-		Data []struct {
-			ID           string `json:"id"`
-			Participants struct {
-				Data []struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				} `json:"data"`
-			} `json:"participants"`
-			Messages struct {
-				Data []struct {
-					ID          string `json:"id"`
-					Message     string `json:"message"`
-					CreatedTime string `json:"created_time"`
-					From        struct {
-						ID   string `json:"id"`
-						Name string `json:"name"`
-					} `json:"from"`
-					Attachments struct {
-						Data []struct {
-							ID        string `json:"id"`
-							Name      string `json:"name"`
-							MimeType  string `json:"mime_type"`
-							ImageData struct {
-								URL string `json:"url"`
-							} `json:"image_data"`
-						} `json:"data"`
-					} `json:"attachments"`
-				} `json:"data"`
-			} `json:"messages"`
-		} `json:"data"`
+		Data []graphConversation `json:"data"`
 	}
 	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
-		return 0, err
+		return nil, err
+	}
+	return parsed.Data, nil
+}
+
+// importGraphConversation stores one Graph conversation's messages (deduplicated by message id)
+// and returns the customer's PSID.
+func (s *CopilotService) importGraphConversation(conv graphConversation, pageID, pageToken string) string {
+	var customerPSID, customerName string
+	for _, p := range conv.Participants.Data {
+		if p.ID != pageID {
+			customerPSID = p.ID
+			customerName = p.Name
+			break
+		}
+	}
+	if customerPSID == "" {
+		return ""
 	}
 
-	synced := 0
-	for _, conv := range parsed.Data {
-		var customerPSID, customerName string
-		for _, p := range conv.Participants.Data {
-			if p.ID != pageID {
-				customerPSID = p.ID
-				customerName = p.Name
-				break
+	// Messages from Graph API are newest-first; iterate backwards
+	msgs := conv.Messages.Data
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m := msgs[i]
+		sender := "customer"
+		if m.From.ID == pageID {
+			sender = "shop"
+		}
+		ts, _ := time.Parse("2006-01-02T15:04:05-0700", m.CreatedTime)
+		if ts.IsZero() {
+			ts = time.Now()
+		}
+		if IsFBSystemNotice(m.Message) {
+			// "<Tên> đã trả lời một quảng cáo." is a Meta banner, not a real shop message.
+			s.DeleteFBMessage(m.ID)
+		} else if m.Message != "" {
+			_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", m.ID, sender, "text", m.Message, "", ts, pageToken)
+		}
+		for idx, att := range m.Attachments.Data {
+			attID := fmt.Sprintf("%s_att_%d", m.ID, idx)
+			if IsLikeStickerAttachment(att.ID, att.Name) {
+				_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "text", "👍", "", ts, pageToken)
+				continue
+			}
+			if att.ImageData.URL != "" {
+				_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "image", "", att.ImageData.URL, ts, pageToken)
 			}
 		}
-		if customerPSID == "" {
+	}
+	return customerPSID
+}
+
+// SyncRecentFBConversations fetches the latest Messenger threads via Graph API and stores them in DB.
+func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, pageToken string) (int, error) {
+	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 15, 10, "")
+	if err != nil {
+		return 0, err
+	}
+	synced := 0
+	for _, conv := range convs {
+		psid := s.importGraphConversation(conv, pageID, pageToken)
+		if psid == "" {
 			continue
 		}
-
-		// Messages from Graph API are newest-first; iterate backwards
-		msgs := conv.Messages.Data
-		for i := len(msgs) - 1; i >= 0; i-- {
-			m := msgs[i]
-			sender := "customer"
-			if m.From.ID == pageID {
-				sender = "shop"
-			}
-			ts, _ := time.Parse("2006-01-02T15:04:05-0700", m.CreatedTime)
-			if ts.IsZero() {
-				ts = time.Now()
-			}
-			if IsFBSystemNotice(m.Message) {
-				// "<Tên> đã trả lời một quảng cáo." is a Meta banner, not a real shop message.
-				s.DeleteFBMessage(m.ID)
-			} else if m.Message != "" {
-				_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", m.ID, sender, "text", m.Message, "", ts, pageToken)
-			}
-			for idx, att := range m.Attachments.Data {
-				attID := fmt.Sprintf("%s_att_%d", m.ID, idx)
-				if IsLikeStickerAttachment(att.ID, att.Name) {
-					_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "text", "👍", "", ts, pageToken)
-					continue
-				}
-				if att.ImageData.URL != "" {
-					_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "image", "", att.ImageData.URL, ts, pageToken)
-				}
-			}
-		}
-
-		if sess, err := s.RebuildAndAnalyzeSession(ctx, customerPSID, "suggest"); err == nil {
+		if sess, err := s.RebuildAndAnalyzeSession(ctx, psid, "suggest"); err == nil {
 			s.SaveAndBroadcast(sess)
 			synced++
 		}
 	}
 	return synced, nil
+}
+
+// HasFBConversation reports whether this PSID already has a stored conversation.
+func (s *CopilotService) HasFBConversation(psid string) bool {
+	if s.DB == nil || strings.TrimSpace(psid) == "" {
+		return false
+	}
+	var n int64
+	s.DB.Model(&models.CopilotConversation{}).Where(&models.CopilotConversation{PSID: psid}).Count(&n)
+	return n > 0
+}
+
+// ImportFBHistory pulls the last 30 messages of one customer's thread so a customer first seen
+// via webhook starts with full context (not just the message that triggered the webhook).
+func (s *CopilotService) ImportFBHistory(ctx context.Context, pageID, psid, pageToken string) error {
+	if strings.TrimSpace(psid) == "" {
+		return fmt.Errorf("empty psid")
+	}
+	convs, err := s.fetchGraphConversations(ctx, pageID, pageToken, 30, 1, "&user_id="+url.QueryEscape(psid))
+	if err != nil {
+		return err
+	}
+	for _, conv := range convs {
+		s.importGraphConversation(conv, pageID, pageToken)
+	}
+	return nil
 }
 
 var fbSystemNoticeRe = regexp.MustCompile(`(?i)^.{1,80}?\s(đã trả lời (về )?(một |1 )?(quảng cáo|bài viết)|replied to (an|a|your) (ad|post))\.?(\s|\(|$)`)

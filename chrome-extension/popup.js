@@ -2,7 +2,7 @@ const DEFAULT_CONFIG = {
   serverUrl: "https://vintage-sale-go.onrender.com",
   secretKey: "",
   orderTrigger: "OK ạ, để em lên đơn ngay",
-  autoSync: true
+  domAutoSync: false
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("serverUrl").value = cfg.serverUrl;
     document.getElementById("secretKey").value = cfg.secretKey;
     document.getElementById("orderTrigger").value = cfg.orderTrigger;
-    document.getElementById("autoSync").checked = Boolean(cfg.autoSync);
+    document.getElementById("domAutoSync").checked = Boolean(cfg.domAutoSync);
   });
 
   document.getElementById("saveBtn").addEventListener("click", () => {
@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
       serverUrl: document.getElementById("serverUrl").value.trim() || DEFAULT_CONFIG.serverUrl,
       secretKey: document.getElementById("secretKey").value.trim(),
       orderTrigger: document.getElementById("orderTrigger").value.trim() || DEFAULT_CONFIG.orderTrigger,
-      autoSync: document.getElementById("autoSync").checked
+      domAutoSync: document.getElementById("domAutoSync").checked
     };
 
     chrome.storage.local.set(newConfig, () => {

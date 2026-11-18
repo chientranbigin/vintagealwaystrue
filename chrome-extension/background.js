@@ -2,7 +2,7 @@ const DEFAULT_CONFIG = {
   serverUrl: "https://vintage-sale-go.onrender.com",
   secretKey: "",
   orderTrigger: "OK ạ, để em lên đơn ngay",
-  autoSync: true
+  domAutoSync: false
 };
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
