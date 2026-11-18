@@ -53,7 +53,10 @@ async function handleIngest(payload) {
 }
 
 async function fetchImageAsDataUrl(url) {
-  const resp = await fetch(url, { credentials: "include" });
+  let resp = await fetch(url);
+  if (!resp.ok) {
+    resp = await fetch(url, { credentials: "include" });
+  }
   if (!resp.ok) {
     throw new Error(`Image fetch failed: ${resp.status}`);
   }

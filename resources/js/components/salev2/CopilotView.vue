@@ -1,19 +1,20 @@
 <template>
   <div class="p-4 md:p-6 max-w-[1600px] mx-auto">
     <!-- Top Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
-        <h1 class="text-2xl font-extrabold text-slate-900 m-0 flex items-center gap-2">
+        <h1 class="text-xl md:text-2xl font-extrabold text-slate-900 m-0 flex items-center gap-2.5">
           <span>AI Sales Copilot</span>
           <span
-            class="text-xs font-bold px-2.5 py-0.5 rounded-full"
+            class="text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5"
             :class="sseConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
           >
-            {{ sseConnected ? '● Real-time đang bật' : '○ Đang kết nối...' }}
+            <span class="w-2 h-2 rounded-full" :class="sseConnected ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+            {{ sseConnected ? 'Real-time đang bật' : 'Đang kết nối...' }}
           </span>
         </h1>
         <p class="text-xs text-slate-500 mt-1 mb-0">
-          Nhận tin nhắn & ảnh từ Meta Business Suite • Phân tích mã & số đo • Gợi ý trả lời & lên đơn nhanh
+          Đồng bộ trực tiếp từ Meta Business Suite • Nhận diện mã sản phẩm chuẩn Smart Upload • Tư vấn size & lên đơn
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -22,73 +23,83 @@
     </div>
 
     <!-- Empty State -->
-    <div v-if="sessions.length === 0" class="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+    <div v-if="sessions.length === 0" class="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
       <i class="el-icon-chat-dot-round text-5xl text-slate-300 mb-3 block"></i>
       <h3 class="text-lg font-bold text-slate-700 mb-1">Chưa có cuộc hội thoại nào được đồng bộ</h3>
       <p class="text-sm text-slate-500 max-w-md mx-auto">
-        Hãy mở tab <strong>Meta Business Suite Inbox</strong> có cài Chrome Extension, chọn một cuộc hội thoại khách hàng (hoặc bấm nút <strong>Sync ngay</strong> ở góc phải dưới).
+        Mở tab <strong>Meta Business Suite Inbox</strong> có cài Chrome Extension, chọn cuộc hội thoại khách hàng (hoặc bấm <strong>Sync ngay</strong> ở góc phải dưới).
       </p>
     </div>
 
     <!-- 3-Column Copilot Workspace -->
-    <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+    <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
       <!-- Column 1: Session List -->
-      <div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 font-bold text-xs uppercase tracking-wider text-slate-500">
+      <div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[78vh]">
+        <div class="px-4 py-3 border-b border-slate-100 font-bold text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50/70">
           Hội thoại gần đây ({{ sessions.length }})
         </div>
-        <div class="divide-y divide-slate-100 max-h-[75vh] overflow-y-auto">
+        <div class="divide-y divide-slate-100 overflow-y-auto flex-1">
           <button
             v-for="s in sessions"
             :key="s.thread_id"
             @click="selectSession(s.thread_id)"
-            class="w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 focus:outline-none"
-            :class="activeThreadId === s.thread_id ? 'bg-blue-50/80 border-l-4 border-blue-600' : ''"
+            class="w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 focus:outline-none flex items-start gap-3"
+            :class="activeThreadId === s.thread_id ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'border-l-4 border-transparent'"
           >
-            <div class="flex items-center justify-between gap-2 mb-1">
-              <span class="font-bold text-sm text-slate-800 truncate">{{ s.customer_name }}</span>
-              <span class="text-[10px] text-slate-400 shrink-0">{{ formatTime(s.updated_at) }}</span>
+            <div class="w-9 h-9 rounded-full bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center shrink-0 uppercase">
+              {{ (s.customer_name || 'K').charAt(0) }}
             </div>
-            <div class="flex flex-wrap gap-1 mb-1">
-              <span
-                v-if="s.created_order"
-                class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"
-              >
-                ĐÃ LÊN ĐƠN #{{ s.created_order.id }}
-              </span>
-              <span
-                v-if="s.needs_human"
-                class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700"
-              >
-                CẦN NGƯỜI
-              </span>
-              <span
-                v-for="p in (s.detected_products || []).slice(0, 3)"
-                :key="p.id"
-                class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                :class="p.status === 'AVAILABLE' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'"
-              >
-                {{ p.code }}
-              </span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="font-bold text-sm text-slate-800 truncate">{{ s.customer_name }}</span>
+                <span class="text-[10px] text-slate-400 shrink-0">{{ formatTime(s.updated_at) }}</span>
+              </div>
+              <div class="flex flex-wrap gap-1 mb-1">
+                <span
+                  v-if="s.created_order"
+                  class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"
+                >
+                  ĐƠN #{{ s.created_order.id }}
+                </span>
+                <span
+                  v-if="s.needs_human"
+                  class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700"
+                >
+                  CẦN NGƯỜI
+                </span>
+                <span
+                  v-for="p in (s.detected_products || []).slice(0, 3)"
+                  :key="p.id"
+                  class="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                  :class="p.status === 'AVAILABLE' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'"
+                >
+                  {{ p.code }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 truncate m-0">{{ lastMessagePreview(s) }}</p>
             </div>
-            <p class="text-xs text-slate-500 truncate m-0">
-              {{ lastMessagePreview(s) }}
-            </p>
           </button>
         </div>
       </div>
 
       <!-- Column 2: Full Conversation (Shop + Customer) -->
-      <div v-if="activeSession" class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 flex flex-col h-[78vh]">
-        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-bold text-slate-900 m-0">{{ activeSession.customer_name }}</h2>
-            <span class="text-[11px] text-slate-400">Hiển thị đầy đủ tin nhắn Khách & Shop (sau mốc đơn cũ)</span>
+      <div v-if="activeSession" class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[78vh] overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 uppercase">
+              {{ (activeSession.customer_name || 'K').charAt(0) }}
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-bold text-slate-900 m-0 truncate">{{ activeSession.customer_name }}</h2>
+              <span class="text-[11px] text-slate-400 block">Hội thoại 2 chiều (sau mốc chốt đơn gần nhất)</span>
+            </div>
           </div>
-          <span class="text-xs font-semibold text-slate-500">{{ (activeSession.messages || []).length }} tin</span>
+          <span class="text-xs font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 shrink-0">
+            {{ (activeSession.messages || []).length }} tin
+          </span>
         </div>
 
-        <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/60">
+        <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#f4f6f9]">
           <div
             v-for="(msg, idx) in activeSession.messages"
             :key="idx"
@@ -96,37 +107,36 @@
             :class="msg.sender === 'shop' ? 'justify-end' : 'justify-start'"
           >
             <div
-              class="max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm"
+              class="max-w-[80%] rounded-2xl px-3.5 py-2 text-[13px] shadow-sm"
               :class="msg.sender === 'shop'
                 ? 'bg-blue-600 text-white rounded-br-sm'
-                : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm'"
+                : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-sm'"
             >
-              <div class="text-[10px] font-bold opacity-75 mb-1">
-                {{ msg.sender === 'shop' ? 'Shop' : activeSession.customer_name }}
-              </div>
               <div v-if="msg.type === 'image'">
                 <img
-                  v-if="msg.image_base64 || msg.image_url"
-                  :src="msg.image_base64 || msg.image_url"
-                  class="max-w-[220px] max-h-[260px] rounded-lg object-cover border border-black/10"
+                  v-if="msg.image_base64"
+                  :src="msg.image_base64"
+                  @click="previewImage(msg.image_base64)"
+                  class="max-w-[230px] max-h-[260px] rounded-xl object-cover cursor-pointer hover:opacity-95 transition-opacity block"
                 />
-                <div v-if="msg.ocr_text" class="mt-1.5 text-[11px] opacity-80 bg-black/10 rounded px-2 py-1">
+                <div v-else class="text-xs italic opacity-75 py-1">
+                  [Ảnh chưa tải được Base64]
+                </div>
+                <div v-if="msg.ocr_text" class="mt-1.5 text-[11px] opacity-85 bg-black/10 rounded-lg px-2 py-1 break-words">
                   OCR: {{ msg.ocr_text }}
                 </div>
               </div>
-              <div v-else class="whitespace-pre-wrap break-words leading-relaxed">
-                {{ msg.text }}
-              </div>
+              <div v-else class="whitespace-pre-wrap break-words leading-relaxed">{{ msg.text }}</div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Column 3: AI Suggestion, Detected Products & Receipt -->
-      <div v-if="activeSession" class="lg:col-span-4 space-y-4">
+      <div v-if="activeSession" class="lg:col-span-4 space-y-3 h-[78vh] overflow-y-auto pr-0.5">
         <!-- Human Alert -->
-        <div v-if="activeSession.needs_human" class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-          <div class="font-bold text-rose-700 text-sm flex items-center gap-1.5 mb-1">
+        <div v-if="activeSession.needs_human" class="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 shadow-sm">
+          <div class="font-bold text-rose-700 text-xs flex items-center gap-1.5 mb-1">
             <i class="el-icon-warning"></i>
             <span>Cần người vào xử lý trực tiếp</span>
           </div>
@@ -134,7 +144,7 @@
         </div>
 
         <!-- Suggested Reply -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-slate-800 m-0">Tin nhắn Suggestion</h3>
             <el-button type="primary" size="mini" icon="el-icon-document-copy" @click="copySuggestedReply">
@@ -153,18 +163,18 @@
         </div>
 
         <!-- Detected Products -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-4">
-          <h3 class="text-sm font-bold text-slate-800 mb-3 mt-0">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-800 mb-2.5 mt-0">
             Sản phẩm nhận diện ({{ (activeSession.detected_products || []).length }})
           </h3>
           <div v-if="!activeSession.detected_products || activeSession.detected_products.length === 0" class="text-xs text-slate-400">
             Chưa phát hiện mã sản phẩm trong ảnh/tin nhắn.
           </div>
-          <div v-else class="space-y-2.5">
+          <div v-else class="space-y-2">
             <div
               v-for="p in activeSession.detected_products"
               :key="p.id"
-              class="flex items-start gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50"
+              class="flex items-start gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50/80"
             >
               <img
                 v-if="p.thumb_url"
@@ -180,7 +190,7 @@
                     class="text-[10px] font-bold px-2 py-0.5 rounded-full"
                     :class="p.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
                   >
-                    {{ p.status }}
+                    {{ p.status === 'AVAILABLE' ? 'CÒN HÀNG' : 'ĐÃ BÁN' }}
                   </span>
                 </div>
                 <div class="text-xs font-bold text-slate-700 mt-0.5">{{ formatPrice(p.price) }}</div>
@@ -193,7 +203,7 @@
         </div>
 
         <!-- Created Order & Receipt -->
-        <div v-if="activeSession.created_order" class="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-4">
+        <div v-if="activeSession.created_order" class="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-4 shadow-sm">
           <div class="flex items-center justify-between mb-2">
             <div>
               <h3 class="text-sm font-bold text-emerald-800 m-0">
@@ -226,7 +236,7 @@
         </div>
 
         <!-- Manual Create Order Button (if not created yet) -->
-        <div v-else-if="hasAvailableDraftProducts" class="bg-white rounded-2xl border border-slate-200 p-4">
+        <div v-else-if="hasAvailableDraftProducts" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-slate-800 m-0">Lên đơn nhanh</h3>
             <span class="text-[11px] text-slate-400">Hoặc nhắn: "OK ạ, để em lên đơn ngay"</span>
@@ -244,7 +254,12 @@
       </div>
     </div>
 
-    <!-- Hidden Receipt Template (reused from OrderManager.vue) -->
+    <!-- Image Preview Modal -->
+    <el-dialog :visible.sync="previewVisible" width="520px" append-to-body>
+      <img v-if="previewSrc" :src="previewSrc" class="w-full h-auto rounded-lg block" />
+    </el-dialog>
+
+    <!-- Hidden Receipt Template -->
     <div style="position: absolute; left: -9999px; top: 0;">
       <div ref="receiptTemplate" id="copilot-order-receipt" class="p-8 bg-white w-[450px] font-sans text-slate-800">
         <div class="text-center mb-6">
@@ -306,12 +321,15 @@ export default {
       sessions: [],
       activeThreadId: null,
       editableReply: '',
+      lastServerReply: '',
       sseConnected: false,
       eventSource: null,
       receiptImg: '',
       receiptCanvas: null,
       renderingReceipt: false,
-      creatingOrder: false
+      creatingOrder: false,
+      previewVisible: false,
+      previewSrc: ''
     };
   },
   computed: {
@@ -331,23 +349,6 @@ export default {
       );
     }
   },
-  watch: {
-    activeSession: {
-      immediate: true,
-      handler(sess) {
-        if (sess) {
-          this.editableReply = sess.suggested_reply || '';
-          this.$nextTick(() => this.scrollChatToBottom());
-          if (sess.created_order) {
-            this.renderReceipt(sess.created_order);
-          } else {
-            this.receiptImg = '';
-            this.receiptCanvas = null;
-          }
-        }
-      }
-    }
-  },
   mounted() {
     this.fetchSessions();
     this.connectSSE();
@@ -363,7 +364,9 @@ export default {
         const res = await axios.get('/salev2/api/copilot/sessions');
         this.sessions = res.data.sessions || [];
         if (!this.activeThreadId && this.sessions.length > 0) {
-          this.activeThreadId = this.sessions[0].thread_id;
+          this.selectSession(this.sessions[0].thread_id);
+        } else if (this.activeSession) {
+          this.syncActiveState(this.activeSession, true);
         }
       } catch (e) {
         console.error('Failed to fetch copilot sessions', e);
@@ -389,26 +392,54 @@ export default {
     },
     upsertSession(sess) {
       const idx = this.sessions.findIndex((s) => s.thread_id === sess.thread_id);
+      const prevCount = idx !== -1 && this.sessions[idx].messages ? this.sessions[idx].messages.length : 0;
+      const newCount = sess.messages ? sess.messages.length : 0;
+
       if (idx !== -1) {
-        this.sessions.splice(idx, 1);
+        // Update in-place to avoid jumping/flickering the list
+        this.$set(this.sessions, idx, sess);
+      } else {
+        this.sessions.unshift(sess);
+        if (!this.activeThreadId) {
+          this.activeThreadId = sess.thread_id;
+        }
       }
-      this.sessions.unshift(sess);
-      // Auto-focus incoming session
-      this.activeThreadId = sess.thread_id;
-      this.editableReply = sess.suggested_reply || '';
-      this.$nextTick(() => this.scrollChatToBottom());
-      if (sess.created_order) {
-        this.renderReceipt(sess.created_order);
+
+      if (this.activeThreadId === sess.thread_id) {
+        this.syncActiveState(sess, newCount > prevCount);
       }
     },
     selectSession(threadId) {
       this.activeThreadId = threadId;
+      if (this.activeSession) {
+        this.syncActiveState(this.activeSession, true);
+      }
+    },
+    syncActiveState(sess, shouldScroll) {
+      const nextReply = sess.suggested_reply || '';
+      if (nextReply !== this.lastServerReply) {
+        this.editableReply = nextReply;
+        this.lastServerReply = nextReply;
+      }
+      if (shouldScroll) {
+        this.$nextTick(() => this.scrollChatToBottom());
+      }
+      if (sess.created_order && (!this.currentOrder || this.currentOrder.id !== sess.created_order.id || !this.receiptImg)) {
+        this.renderReceipt(sess.created_order);
+      } else if (!sess.created_order) {
+        this.receiptImg = '';
+        this.receiptCanvas = null;
+      }
     },
     scrollChatToBottom() {
       const el = this.$refs.chatContainer;
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
+    },
+    previewImage(src) {
+      this.previewSrc = src;
+      this.previewVisible = true;
     },
     async copySuggestedReply() {
       try {
