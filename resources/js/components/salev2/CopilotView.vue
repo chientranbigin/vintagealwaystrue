@@ -162,11 +162,6 @@
 
         <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 8px)">
-          <div v-if="pendingSend" class="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-2 mb-2 text-[13px]">
-            <i class="el-icon-loading"></i>
-            <span class="flex-1">Đang gửi sau {{ pendingSend.left }}s…</span>
-            <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
-          </div>
           <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
             <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
             <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
@@ -196,9 +191,9 @@
             <button
               class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg active:bg-blue-700 disabled:opacity-40 shrink-0"
               aria-label="Gửi cho khách"
-              :disabled="!canSendToCustomer || !editableReply.trim() || !!pendingSend"
-              @click="queueSend"
-            ><i class="el-icon-s-promotion"></i></button>
+              :disabled="!canSendToCustomer || !editableReply.trim() || sendingText"
+              @click="sendNow"
+            ><i :class="sendingText ? 'el-icon-loading' : 'el-icon-s-promotion'"></i></button>
           </div>
         </div>
       </div>
@@ -400,11 +395,6 @@
           </div>
           <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2 pb-3" >
-          <div v-if="pendingSend" class="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-2 mb-2 text-[13px]">
-            <i class="el-icon-loading"></i>
-            <span class="flex-1">Đang gửi sau {{ pendingSend.left }}s…</span>
-            <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
-          </div>
           <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
             <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
             <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
@@ -434,9 +424,9 @@
             <button
               class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg active:bg-blue-700 disabled:opacity-40 shrink-0"
               aria-label="Gửi cho khách"
-              :disabled="!canSendToCustomer || !editableReply.trim() || !!pendingSend"
-              @click="queueSend"
-            ><i class="el-icon-s-promotion"></i></button>
+              :disabled="!canSendToCustomer || !editableReply.trim() || sendingText"
+              @click="sendNow"
+            ><i :class="sendingText ? 'el-icon-loading' : 'el-icon-s-promotion'"></i></button>
           </div>
         </div>
         </div>
@@ -651,7 +641,6 @@
 
 <script>
 const SEEN_KEY = 'copilot_seen_v1';
-const UNDO_SECONDS = 5;
 
 function readSeen() {
   try {
@@ -693,8 +682,7 @@ export default {
       search: '',
       seen: readSeen(),
       flashIds: {},
-      // send with undo
-      pendingSend: null,
+      sendingText: false,
       renderedOrderId: null,
       reanalyzing: {},
       stickToBottom: true,
@@ -746,7 +734,6 @@ export default {
     if (this.eventSource) this.eventSource.close();
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('popstate', this.onPopState);
-    this.clearPendingSend();
   },
   methods: {
     onResize() {
@@ -848,7 +835,6 @@ export default {
     // ---------- navigation ----------
     selectSession(threadId) {
       if (this.activeThreadId !== threadId) {
-        this.clearPendingSend();
         this.replyDirty = false;
         this.lastServerReply = '';
         this.receiptImg = '';
@@ -943,7 +929,6 @@ export default {
       }
       if (this.mobileView === 'chat') {
         this.mobileView = 'list';
-        this.clearPendingSend();
       }
     },
     syncActiveState(sess, shouldScroll) {
@@ -1129,29 +1114,13 @@ export default {
       this.previewSrc = src;
       this.previewVisible = true;
     },
-    queueSend() {
+    sendNow() {
       const text = (this.editableReply || '').trim();
-      if (!text || !this.canSendToCustomer || this.pendingSend) return;
-      const threadId = this.activeSession.thread_id;
-      const pending = { text, threadId, left: UNDO_SECONDS, timer: null };
-      pending.timer = setInterval(() => {
-        pending.left -= 1;
-        if (pending.left <= 0) {
-          this.clearPendingSend();
-          this.doSend(threadId, text);
-        }
-      }, 1000);
-      this.pendingSend = pending;
-    },
-    undoSend() {
-      this.clearPendingSend();
-      this.$message.info('Đã huỷ gửi');
-    },
-    clearPendingSend() {
-      if (this.pendingSend && this.pendingSend.timer) clearInterval(this.pendingSend.timer);
-      this.pendingSend = null;
+      if (!text || !this.canSendToCustomer || this.sendingText) return;
+      this.doSend(this.activeSession.thread_id, text);
     },
     async doSend(threadId, text) {
+      this.sendingText = true;
       const sess = this.sessions.find((s) => s.thread_id === threadId);
       const optimistic = { sender: 'shop', type: 'text', text, pending: true };
       if (sess) {
@@ -1173,6 +1142,8 @@ export default {
         }
         const msg = (e.response && e.response.data && e.response.data.error) || e.message;
         this.$message.error('Gửi thất bại: ' + msg);
+      } finally {
+        this.sendingText = false;
       }
     },
     // ---------- receipt ----------
