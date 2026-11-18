@@ -49,7 +49,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Copilot-Secret")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
@@ -230,6 +230,13 @@ func main() {
 		api.POST("/facebook/generate-content", v2.FacebookGenerateContent)
 		api.POST("/facebook/publish-main-post", v2.FacebookPublishMainPost)
 	}
+
+	// Sales Copilot Routes (Chrome Extension ingest + Real-time SSE screen)
+	copilot := handlers.NewCopilotHandler(db, cfg, v1.FB)
+	r.POST("/api/copilot/ingest", copilot.Ingest)
+	api.GET("/copilot/sessions", copilot.ListSessions)
+	api.GET("/copilot/stream", copilot.Stream)
+	api.POST("/copilot/order", copilot.CreateOrderFromSession)
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)
 	r.GET("/api/images/cleanup", v2.CleanupImages)

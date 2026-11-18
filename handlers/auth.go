@@ -123,6 +123,7 @@ func (a *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 		// Public endpoints that don't require login
 		if path == "/login" || path == "/api/login" || path == "/healthz" ||
 			path == "/api/images/cleanup" || path == "/salev2/api/images/cleanup" ||
+			path == "/api/copilot/ingest" ||
 			strings.HasPrefix(path, "/js/") ||
 			strings.HasPrefix(path, "/css/") ||
 			strings.HasPrefix(path, "/admin-theme/") ||

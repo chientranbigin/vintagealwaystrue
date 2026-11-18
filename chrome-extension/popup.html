@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vintage Sales Copilot</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 14px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      font-size: 13px;
+    }
+    h3 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .field {
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #334155;
+      font-size: 12px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 7px 9px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 10px 0;
+    }
+    .btn {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    #saved-msg {
+      color: #16a34a;
+      font-size: 12px;
+      text-align: center;
+      margin-top: 6px;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h3>
+    <span>Vintage Sales Copilot</span>
+    <span style="font-size:11px; color:#64748b;">v1.0</span>
+  </h3>
+
+  <div class="field">
+    <label for="serverUrl">Server URL (Go Backend)</label>
+    <input type="text" id="serverUrl" placeholder="https://vintage-sale-go.onrender.com" />
+  </div>
+
+  <div class="field">
+    <label for="secretKey">Copilot Secret Key</label>
+    <input type="password" id="secretKey" placeholder="Khớp với COPILOT_SECRET trên server" />
+  </div>
+
+  <div class="field">
+    <label for="orderTrigger">Câu lệnh chốt đơn (Shop nhắn)</label>
+    <input type="text" id="orderTrigger" placeholder="OK ạ, để em lên đơn ngay" />
+  </div>
+
+  <div class="row">
+    <label for="autoSync" style="margin:0;">Tự động đồng bộ khi có tin mới</label>
+    <input type="checkbox" id="autoSync" />
+  </div>
+
+  <button class="btn btn-primary" id="saveBtn">Lưu cấu hình</button>
+  <button class="btn btn-secondary" id="openCopilotBtn">Mở màn hình Copilot</button>
+
+  <div id="saved-msg"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

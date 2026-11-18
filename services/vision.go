@@ -74,6 +74,31 @@ func (v *VisionService) ExtractTextFromImage(imagePathOrURL string) (string, err
 		return "", fmt.Errorf("empty image data")
 	}
 
+	return v.ExtractTextFromBytes(imgBytes)
+}
+
+// ExtractTextFromBase64 extracts text from a base64 string or data URL (e.g. data:image/jpeg;base64,...)
+func (v *VisionService) ExtractTextFromBase64(b64OrDataURL string) (string, error) {
+	raw := strings.TrimSpace(b64OrDataURL)
+	if raw == "" {
+		return "", fmt.Errorf("empty base64 image")
+	}
+	if idx := strings.Index(raw, ","); idx != -1 && strings.HasPrefix(raw, "data:") {
+		raw = raw[idx+1:]
+	}
+	imgBytes, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid base64 image: %w", err)
+	}
+	return v.ExtractTextFromBytes(imgBytes)
+}
+
+// ExtractTextFromBytes sends raw image bytes to Google Cloud Vision TEXT_DETECTION
+func (v *VisionService) ExtractTextFromBytes(imgBytes []byte) (string, error) {
+	if len(imgBytes) == 0 {
+		return "", fmt.Errorf("empty image data")
+	}
+
 	b64Data := base64.StdEncoding.EncodeToString(imgBytes)
 
 	reqPayload := map[string]interface{}{

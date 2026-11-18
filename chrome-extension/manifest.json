@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Vintage Always True - Sales Copilot",
+  "version": "1.0.0",
+  "description": "Đọc tin nhắn & ảnh từ Meta Business Suite gửi về Server Go để gợi ý trả lời và lên đơn nhanh.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://business.facebook.com/*",
+    "https://www.facebook.com/*",
+    "https://*.fbcdn.net/*",
+    "https://vintage-sale-go.onrender.com/*",
+    "http://localhost:*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://business.facebook.com/latest/inbox*",
+        "https://business.facebook.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Vintage Sales Copilot"
+  }
+}
