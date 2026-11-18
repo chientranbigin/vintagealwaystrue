@@ -81,12 +81,15 @@
                 Cần NV
               </span>
               <span
-                v-for="p in (s.detected_products || []).slice(0, 3)"
+                v-for="p in (s.detected_products || []).slice(0, 5)"
                 :key="p.id"
                 class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                 :class="p.status === 'AVAILABLE' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400 line-through'"
               >
                 {{ p.code }}
+              </span>
+              <span v-if="(s.detected_products || []).length > 5" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                +{{ s.detected_products.length - 5 }}
               </span>
             </div>
           </div>
@@ -335,11 +338,14 @@
                   <span v-if="s.created_order" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">ĐƠN #{{ s.created_order.id }}</span>
                   <span v-if="s.needs_human" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">CẦN NV</span>
                   <span
-                    v-for="p in (s.detected_products || []).slice(0, 3)"
+                    v-for="p in (s.detected_products || []).slice(0, 5)"
                     :key="p.id"
                     class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                    :class="p.status === 'AVAILABLE' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'"
+                    :class="p.status === 'AVAILABLE' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400 line-through'"
                   >{{ p.code }}</span>
+                  <span v-if="(s.detected_products || []).length > 5" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                    +{{ s.detected_products.length - 5 }}
+                  </span>
                 </div>
                 <div class="flex items-center gap-2">
                   <p class="text-xs truncate m-0 flex-1" :class="isUnread(s) ? 'text-slate-900 font-semibold' : 'text-slate-500'">{{ lastMessagePreview(s) }}</p>

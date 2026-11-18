@@ -333,6 +333,7 @@ func (s *CopilotService) refreshMessagesFromRecords(sess *CopilotSession) {
 		sess.AIStale = true
 	}
 	sess.Messages = msgs
+	sortProductsByMention(sess.DetectedProducts, s.productMentionIndex(msgs))
 	if len(recs) > 0 {
 		sess.LastMessageAt = recs[0].MsgTimestamp
 	}

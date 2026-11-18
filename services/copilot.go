@@ -1030,16 +1030,24 @@ func (s *CopilotService) RebuildSession(ctx context.Context, psid string, useAI 
 	// Products + AI work on the recent part of the chat only, so old purchases don't flood the
 	// suggestion; the full history is still returned for display.
 	aiMsgs := tailMessages(msgs, copilotAIContextMessages)
-	for _, m := range aiMsgs {
+	lastMention := map[string]int{}
+	for idx, m := range aiMsgs {
+		var found []string
 		if m.Type == "text" && m.Text != "" {
-			addCodes(s.ExtractProductCodesFromText(m.Text))
+			found = s.ExtractProductCodesFromText(m.Text)
 		}
 		if m.Type == "image" && m.OCRText != "" {
-			addCodes(s.ExtractProductCodesFromText(m.OCRText))
+			found = append(found, s.ExtractProductCodesFromText(m.OCRText)...)
+		}
+		addCodes(found)
+		for _, c := range found {
+			lastMention[c] = idx
 		}
 	}
 
 	detectedProducts := s.lookupProductsByCodes(allCodes)
+	// Most recently mentioned first (list chips + product sheet show the newest codes).
+	sortProductsByMention(detectedProducts, lastMention)
 	convText := s.buildConversationTranscript(aiMsgs)
 	recommendedProducts := s.recommendProductsByMeasurements(convText, detectedProducts)
 	allMatched := append(detectedProducts, recommendedProducts...)
@@ -1477,4 +1485,22 @@ func (s *CopilotService) originalImages(p models.Product) []string {
 		}
 	}
 	return out
+}
+
+// sortProductsByMention orders products by the index of their latest mention (newest first).
+func sortProductsByMention(products []CopilotProductMatch, lastMention map[string]int) {
+	sort.SliceStable(products, func(i, j int) bool {
+		return lastMention[strings.ToUpper(products[i].Code)] > lastMention[strings.ToUpper(products[j].Code)]
+	})
+}
+
+// productMentionIndex maps each product code to the index of its latest mention in msgs.
+func (s *CopilotService) productMentionIndex(msgs []CopilotMessage) map[string]int {
+	last := map[string]int{}
+	for idx, m := range msgs {
+		for _, c := range append(s.ExtractProductCodesFromText(m.Text), s.ExtractProductCodesFromText(m.OCRText)...) {
+			last[c] = idx
+		}
+	}
+	return last
 }
