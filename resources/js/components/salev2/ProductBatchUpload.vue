@@ -151,11 +151,49 @@
                  <el-button type="text" class="text-red-500" @click="clearGroups" v-if="groups.length">Clear All</el-button>
              </div>
 
+             <!-- Upload Progress Bar -->
+             <div v-if="showUploadProgress" class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 space-y-1.5">
+                 <div class="flex items-center justify-between text-xs font-bold">
+                     <span class="flex items-center gap-1.5" :class="uploading || pollInterval ? 'text-blue-600' : (errorGroupCount > 0 ? 'text-amber-600' : 'text-emerald-600')">
+                         <i v-if="uploading || pollInterval" class="el-icon-loading"></i>
+                         <i v-else-if="errorGroupCount > 0" class="el-icon-warning-outline"></i>
+                         <i v-else class="el-icon-circle-check"></i>
+                         <span v-if="uploading">Đang tải lên & xử lý...</span>
+                         <span v-else-if="pollInterval">Đang xử lý ảnh trên server...</span>
+                         <span v-else>Hoàn tất xử lý</span>
+                     </span>
+                     <span class="text-slate-600">
+                         {{ completedGroupCount }}/{{ groups.length }} sản phẩm ({{ uploadProgressPct }}%)
+                     </span>
+                 </div>
+                 <el-progress
+                     :percentage="uploadProgressPct"
+                     :status="uploadProgressStatus"
+                     :stroke-width="8"
+                     :show-text="false">
+                 </el-progress>
+             </div>
+
              <div v-if="batchComplete || successGroupCount > 0 || errorGroupCount > 0" class="px-4 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
                  <div class="flex items-center gap-3">
                      <span class="text-slate-600">Kết quả:</span>
                      <span class="text-green-600"><i class="el-icon-check"></i> {{ successGroupCount }} thành công</span>
-                     <span class="text-red-500"><i class="el-icon-warning"></i> {{ errorGroupCount }} lỗi</span>
+                     <button
+                         type="button"
+                         @click="toggleErrorFilter"
+                         :disabled="errorGroupCount === 0"
+                         :title="filterErrorOnly ? 'Click để hiện tất cả sản phẩm' : 'Click để lọc sản phẩm lỗi'"
+                         class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition text-sm font-bold"
+                         :class="[
+                             errorGroupCount === 0 ? 'text-red-400 cursor-default opacity-60' : 'cursor-pointer',
+                             filterErrorOnly
+                                 ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-200'
+                                 : (errorGroupCount > 0 ? 'text-red-600 bg-red-50 hover:bg-red-100 border border-red-200' : '')
+                         ]">
+                         <i class="el-icon-warning"></i>
+                         <span>{{ errorGroupCount }} lỗi</span>
+                         <span v-if="filterErrorOnly" class="text-[10px] uppercase tracking-wide ml-0.5">(Đang lọc ×)</span>
+                     </button>
                  </div>
                  <div class="flex flex-wrap items-center gap-2">
                      <el-button v-if="batchComplete" size="mini" type="primary" plain icon="el-icon-s-grid" @click="summaryModalVisible = true">
@@ -180,7 +218,7 @@
              </div>
 
              <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                 <div v-for="(group, idx) in groups" :key="idx" class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 relative group-card">
+                 <div v-for="(group, idx) in groups" :key="idx" v-show="!filterErrorOnly || errorGroupCount === 0 || group.status === 'ERROR'" class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 relative group-card">
                      <!-- Main Image Header -->
                      <div class="flex gap-3 mb-3">
                          <div class="w-20 h-20 flex-shrink-0 bg-slate-100 rounded border border-slate-200 relative overflow-hidden">
@@ -334,6 +372,8 @@ export default {
             lastSelectedId: null,
             renderLimit: 48,
             pollInterval: null,
+            isCheckingStatus: false,
+            filterErrorOnly: false,
             albumCategories: [],
             resyncCategoryCode: '',
             resyncJobs: [],
@@ -372,9 +412,23 @@ export default {
             return this.renderLimit < this.stagingFiles.length;
         },
         batchComplete() {
-            return this.groups.length > 0 && !this.pollInterval &&
+            return this.groups.length > 0 && !this.uploading && !this.pollInterval &&
                 this.groups.some(g => Boolean(g.sessionId)) &&
                 this.groups.every(g => !g.sessionId || g.status === 'SUCCESS' || g.status === 'ERROR');
+        },
+        completedGroupCount() {
+            return this.successGroupCount + this.errorGroupCount;
+        },
+        uploadProgressPct() {
+            if (!this.groups.length) return 0;
+            return Math.min(100, Math.round((this.completedGroupCount / this.groups.length) * 100));
+        },
+        uploadProgressStatus() {
+            if (!this.batchComplete) return undefined;
+            return this.errorGroupCount > 0 ? 'exception' : 'success';
+        },
+        showUploadProgress() {
+            return this.groups.length > 0 && (this.uploading || Boolean(this.pollInterval) || this.completedGroupCount > 0);
         },
         successGroups() {
             return this.groups.filter(g => g.status === 'SUCCESS');
@@ -594,7 +648,15 @@ export default {
             group.main = newMain;
         },
         clearGroups() {
+            this.filterErrorOnly = false;
             this.groups.forEach((g, idx) => this.disbandGroup(idx));
+        },
+        toggleErrorFilter() {
+            if (this.errorGroupCount === 0) {
+                this.filterErrorOnly = false;
+                return;
+            }
+            this.filterErrorOnly = !this.filterErrorOnly;
         },
         clearSuccessGroups() {
             const count = this.successGroupCount;
@@ -625,36 +687,45 @@ export default {
             });
         },
         async checkStatus() {
-            const pendingGroups = this.groups.filter(g => g.sessionId && g.status !== 'SUCCESS' && g.status !== 'ERROR');
-            
-            if (pendingGroups.length) {
-                const sessionIds = pendingGroups.map(g => g.sessionId);
-                 try {
-                    const res = await axios.get('/salev2/api/upload-logs', { params: { session_ids: sessionIds.join(',') } });
-                    const logs = res.data;
-                    
-                    logs.forEach(log => {
-                        const group = this.groups.find(g => g.sessionId === log.session_id && g.main.file.name === log.file_name);
-                        if (group) {
-                            group.status = (log.status === 'FAILED' ? 'ERROR' : log.status); 
-                            group.error = log.message;
-                            group.productName = log.product_code;
-                            group.productId = log.product_id;
-                        }
-                    });
-                } catch (e) {
-                    console.error("Polling error", e);
-                }
-            }
+            if (this.isCheckingStatus) return;
+            this.isCheckingStatus = true;
 
-            // Detect completion
-            const stillPending = this.groups.filter(g => g.sessionId && g.status !== 'SUCCESS' && g.status !== 'ERROR');
-            if (!stillPending.length) {
-                clearInterval(this.pollInterval);
-                this.pollInterval = null;
-                // Run post-upload verification
-                this.detectBatchDuplicates();
-                this.summaryModalVisible = true;
+            try {
+                const pendingGroups = this.groups.filter(g => g.sessionId && g.status !== 'SUCCESS' && g.status !== 'ERROR');
+                
+                if (pendingGroups.length) {
+                    const sessionIds = pendingGroups.map(g => g.sessionId);
+                    try {
+                        const res = await axios.get('/salev2/api/upload-logs', { params: { session_ids: sessionIds.join(',') } });
+                        const logs = res.data;
+                        
+                        logs.forEach(log => {
+                            const group = this.groups.find(g => g.sessionId === log.session_id && g.main.file.name === log.file_name);
+                            if (group) {
+                                group.status = (log.status === 'FAILED' ? 'ERROR' : log.status); 
+                                group.error = log.message;
+                                group.productName = log.product_code;
+                                group.productId = log.product_id;
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Polling error", e);
+                    }
+                }
+
+                // Detect completion only after all upload requests have finished
+                const stillPending = this.groups.filter(g => g.sessionId && g.status !== 'SUCCESS' && g.status !== 'ERROR');
+                if (!this.uploading && !stillPending.length) {
+                    if (this.pollInterval) {
+                        clearInterval(this.pollInterval);
+                        this.pollInterval = null;
+                    }
+                    // Run post-upload verification
+                    this.detectBatchDuplicates();
+                    this.summaryModalVisible = true;
+                }
+            } finally {
+                this.isCheckingStatus = false;
             }
         },
         async uploadAll() {
@@ -664,6 +735,9 @@ export default {
                 return;
             }
             this.uploading = true;
+            this.filterErrorOnly = false;
+            // Start polling immediately so completed items update while remaining items are still uploading
+            this.startPolling();
             
             // Unified ID for the batch
             const batchId = 'BATCH_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
@@ -701,14 +775,15 @@ export default {
                      // Small pause between sequential uploads to avoid overwhelming memory and network
                      await new Promise(r => setTimeout(r, 400));
                 }
-                this.startPolling();
             } catch (e) {
                 console.error(e);
             } finally {
-                this.uploading = false; 
+                this.uploading = false;
+                this.checkStatus();
             }
         },
         retryErrors() {
+            this.filterErrorOnly = false;
             this.groups.forEach(g => {
                 if (g.status === 'ERROR') {
                     g.status = 'PENDING';
