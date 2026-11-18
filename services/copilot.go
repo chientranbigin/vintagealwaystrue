@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -68,6 +69,7 @@ type CopilotOrderDraft struct {
 type CopilotSession struct {
 	ThreadID         string                `json:"thread_id"`
 	CustomerName     string                `json:"customer_name"`
+	AvatarURL        string                `json:"avatar_url,omitempty"`
 	Action           string                `json:"action"`
 	Messages         []CopilotMessage      `json:"messages"`
 	DetectedProducts []CopilotProductMatch `json:"detected_products"`
@@ -651,4 +653,345 @@ func (s *CopilotService) formatMediaPath(path string) string {
 		return clean
 	}
 	return s.MediaBase + "/" + clean
+}
+
+
+// FetchFBUserProfile queries Facebook Graph API for the real customer name and profile picture.
+func (s *CopilotService) FetchFBUserProfile(psid, pageToken string) (string, string) {
+	if psid == "" || pageToken == "" {
+		return "", ""
+	}
+	endpoint := fmt.Sprintf("https://graph.facebook.com/v21.0/%s?fields=name,profile_pic&access_token=%s", url.PathEscape(psid), url.QueryEscape(pageToken))
+	resp, err := s.Client.Get(endpoint)
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", ""
+	}
+	var out struct {
+		Name       string `json:"name"`
+		ProfilePic string `json:"profile_pic"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", ""
+	}
+	return strings.TrimSpace(out.Name), strings.TrimSpace(out.ProfilePic)
+}
+
+// UpsertFBMessage persists an incoming webhook/Graph API message to DB (deduplicating by fb_message_id)
+// and runs Vision OCR if it's an image.
+func (s *CopilotService) UpsertFBMessage(
+	psid, customerName, avatarURL, fbMsgID, sender, msgType, text, imageURL string,
+	msgTime time.Time,
+	pageToken string,
+) (*models.CopilotConversation, bool, error) {
+	if s.DB == nil {
+		return nil, false, fmt.Errorf("database not initialized")
+	}
+	if msgTime.IsZero() {
+		msgTime = time.Now()
+	}
+
+	var conv models.CopilotConversation
+	err := s.DB.Where("psid = ?", psid).First(&conv).Error
+	if err != nil {
+		if customerName == "" && pageToken != "" {
+			name, pic := s.FetchFBUserProfile(psid, pageToken)
+			if name != "" {
+				customerName = name
+			}
+			if avatarURL == "" && pic != "" {
+				avatarURL = pic
+			}
+		}
+		if customerName == "" {
+			customerName = "Khách Facebook"
+		}
+		conv = models.CopilotConversation{
+			PSID:         psid,
+			CustomerName: customerName,
+			AvatarURL:    avatarURL,
+		}
+		if err := s.DB.Create(&conv).Error; err != nil {
+			return nil, false, err
+		}
+	} else {
+		updates := map[string]interface{}{}
+		if (conv.CustomerName == "" || conv.CustomerName == "Khách Facebook") && pageToken != "" && customerName == "" {
+			name, pic := s.FetchFBUserProfile(psid, pageToken)
+			if name != "" {
+				customerName = name
+			}
+			if pic != "" {
+				avatarURL = pic
+			}
+		}
+		if customerName != "" && customerName != "Khách Facebook" && conv.CustomerName != customerName {
+			updates["customer_name"] = customerName
+			conv.CustomerName = customerName
+		}
+		if avatarURL != "" && conv.AvatarURL != avatarURL {
+			updates["avatar_url"] = avatarURL
+			conv.AvatarURL = avatarURL
+		}
+		if len(updates) > 0 {
+			s.DB.Model(&conv).Updates(updates)
+		}
+	}
+
+	if fbMsgID != "" {
+		var existing models.CopilotMessageRecord
+		if err := s.DB.Where("fb_message_id = ?", fbMsgID).First(&existing).Error; err == nil {
+			// Already processed
+			return &conv, false, nil
+		}
+	}
+
+	var ocrText string
+	if msgType == "image" && imageURL != "" && s.Vision != nil {
+		if txt, err := s.Vision.ExtractTextFromImage(imageURL); err == nil {
+			ocrText = strings.TrimSpace(txt)
+		}
+	}
+
+	rec := models.CopilotMessageRecord{
+		ConversationID: conv.ID,
+		FBMessageID:    fbMsgID,
+		Sender:         sender,
+		Type:           msgType,
+		Text:           text,
+		ImageURL:       imageURL,
+		OCRText:        ocrText,
+		MsgTimestamp:   msgTime,
+	}
+	if err := s.DB.Create(&rec).Error; err != nil {
+		return &conv, false, err
+	}
+	s.DB.Model(&conv).Update("updated_at", time.Now())
+	return &conv, true, nil
+}
+
+// RebuildAndAnalyzeSession loads messages after LastOrderAt from DB, runs AI & DB matching, and returns a CopilotSession.
+func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid string, action string) (*CopilotSession, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	var conv models.CopilotConversation
+	if err := s.DB.Where("psid = ?", psid).First(&conv).Error; err != nil {
+		return nil, err
+	}
+
+	query := s.DB.Where("conversation_id = ?", conv.ID)
+	if conv.LastOrderAt != nil {
+		query = query.Where("msg_timestamp > ?", *conv.LastOrderAt)
+	}
+	var recs []models.CopilotMessageRecord
+	if err := query.Order("msg_timestamp ASC, id ASC").Limit(30).Find(&recs).Error; err != nil {
+		return nil, err
+	}
+
+	var msgs []CopilotMessage
+	var allCodes []string
+	seenCode := make(map[string]bool)
+	addCodes := func(codes []string) {
+		for _, c := range codes {
+			if !seenCode[c] {
+				seenCode[c] = true
+				allCodes = append(allCodes, c)
+			}
+		}
+	}
+
+	for _, r := range recs {
+		msgs = append(msgs, CopilotMessage{
+			Sender:   r.Sender,
+			Type:     r.Type,
+			Text:     r.Text,
+			ImageURL: r.ImageURL,
+			OCRText:  r.OCRText,
+		})
+		if r.Type == "text" && r.Text != "" {
+			addCodes(s.ExtractProductCodesFromText(r.Text))
+		}
+		if r.Type == "image" && r.OCRText != "" {
+			addCodes(s.ExtractProductCodesFromText(r.OCRText))
+		}
+	}
+
+	detectedProducts := s.lookupProductsByCodes(allCodes)
+	convText := s.buildConversationTranscript(msgs)
+	recommendedProducts := s.recommendProductsByMeasurements(convText, detectedProducts)
+	allMatched := append(detectedProducts, recommendedProducts...)
+
+	aiRes := s.generateAISuggestion(ctx, conv.CustomerName, action, msgs, allMatched)
+
+	var createdOrder *models.Order
+	if conv.LastOrderID != nil {
+		var ord models.Order
+		if err := s.DB.Preload("Products").First(&ord, *conv.LastOrderID).Error; err == nil {
+			createdOrder = &ord
+		}
+	}
+
+	sess := &CopilotSession{
+		ThreadID:         conv.PSID,
+		CustomerName:     conv.CustomerName,
+		AvatarURL:        conv.AvatarURL,
+		Action:           action,
+		Messages:         msgs,
+		DetectedProducts: allMatched,
+		SuggestedReply:   aiRes.SuggestedReply,
+		SizeAdvice:       aiRes.SizeAdvice,
+		NeedsHuman:       aiRes.NeedsHuman,
+		HumanReason:      aiRes.HumanReason,
+		OrderDraft:       aiRes.OrderDraft,
+		CreatedOrder:     createdOrder,
+		UpdatedAt:        conv.UpdatedAt,
+	}
+	return sess, nil
+}
+
+func (s *CopilotService) MarkConversationOrdered(psid string, orderID uint) {
+	if s.DB == nil {
+		return
+	}
+	now := time.Now()
+	s.DB.Model(&models.CopilotConversation{}).
+		Where("psid = ?", psid).
+		Updates(map[string]interface{}{
+			"last_order_at": now,
+			"last_order_id": orderID,
+			"updated_at":    now,
+		})
+}
+
+// LoadRecentSessionsFromDB hydrates in-memory sessions from DB after server restart.
+func (s *CopilotService) LoadRecentSessionsFromDB(ctx context.Context) []*CopilotSession {
+	if s.DB == nil {
+		return nil
+	}
+	var convs []models.CopilotConversation
+	if err := s.DB.Order("updated_at DESC").Limit(15).Find(&convs).Error; err != nil {
+		return nil
+	}
+	var out []*CopilotSession
+	for _, conv := range convs {
+		if sess, err := s.RebuildAndAnalyzeSession(ctx, conv.PSID, "suggest"); err == nil {
+			out = append(out, sess)
+			s.mu.Lock()
+			s.sessions[sess.ThreadID] = sess
+			s.sessionList = append(s.sessionList, sess.ThreadID)
+			s.mu.Unlock()
+		}
+	}
+	return out
+}
+
+// SyncRecentFBConversations fetches the latest Messenger threads via Graph API and stores them in DB.
+func (s *CopilotService) SyncRecentFBConversations(ctx context.Context, pageID, pageToken string) (int, error) {
+	if pageID == "" || pageToken == "" {
+		return 0, fmt.Errorf("thiếu FB_MAIN_PAGE_ID hoặc FB_MAIN_PAGE_TOKEN")
+	}
+	fields := "participants,updated_time,messages.limit(15){id,message,from,attachments,created_time}"
+	endpoint := fmt.Sprintf(
+		"https://graph.facebook.com/v21.0/%s/conversations?platform=messenger&fields=%s&limit=10&access_token=%s",
+		url.PathEscape(pageID),
+		url.QueryEscape(fields),
+		url.QueryEscape(pageToken),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("Graph API error (%d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var parsed struct {
+		Data []struct {
+			ID           string `json:"id"`
+			Participants struct {
+				Data []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"data"`
+			} `json:"participants"`
+			Messages struct {
+				Data []struct {
+					ID          string `json:"id"`
+					Message     string `json:"message"`
+					CreatedTime string `json:"created_time"`
+					From        struct {
+						ID   string `json:"id"`
+						Name string `json:"name"`
+					} `json:"from"`
+					Attachments struct {
+						Data []struct {
+							MimeType  string `json:"mime_type"`
+							ImageData struct {
+								URL string `json:"url"`
+							} `json:"image_data"`
+						} `json:"data"`
+					} `json:"attachments"`
+				} `json:"data"`
+			} `json:"messages"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
+		return 0, err
+	}
+
+	synced := 0
+	for _, conv := range parsed.Data {
+		var customerPSID, customerName string
+		for _, p := range conv.Participants.Data {
+			if p.ID != pageID {
+				customerPSID = p.ID
+				customerName = p.Name
+				break
+			}
+		}
+		if customerPSID == "" {
+			continue
+		}
+
+		// Messages from Graph API are newest-first; iterate backwards
+		msgs := conv.Messages.Data
+		for i := len(msgs) - 1; i >= 0; i-- {
+			m := msgs[i]
+			sender := "customer"
+			if m.From.ID == pageID {
+				sender = "shop"
+			}
+			ts, _ := time.Parse("2006-01-02T15:04:05-0700", m.CreatedTime)
+			if ts.IsZero() {
+				ts = time.Now()
+			}
+			if m.Message != "" {
+				_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", m.ID, sender, "text", m.Message, "", ts, pageToken)
+			}
+			for idx, att := range m.Attachments.Data {
+				if att.ImageData.URL != "" {
+					attID := fmt.Sprintf("%s_att_%d", m.ID, idx)
+					_, _, _ = s.UpsertFBMessage(customerPSID, customerName, "", attID, sender, "image", "", att.ImageData.URL, ts, pageToken)
+				}
+			}
+		}
+
+		if sess, err := s.RebuildAndAnalyzeSession(ctx, customerPSID, "suggest"); err == nil {
+			s.SaveAndBroadcast(sess)
+			synced++
+		}
+	}
+	return synced, nil
 }

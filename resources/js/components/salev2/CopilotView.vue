@@ -14,10 +14,13 @@
           </span>
         </h1>
         <p class="text-xs text-slate-500 mt-1 mb-0">
-          Đồng bộ trực tiếp từ Meta Business Suite • Nhận diện mã sản phẩm chuẩn Smart Upload • Tư vấn size & lên đơn
+          Đồng bộ trực tiếp qua Facebook Webhook & Graph API • Nhận diện mã sản phẩm chuẩn Smart Upload • Tư vấn size & lên đơn
         </p>
       </div>
       <div class="flex items-center gap-2">
+        <el-button type="primary" size="small" icon="el-icon-download" :loading="syncingFB" @click="syncFromFacebook">
+          Đồng bộ hộp thư FB
+        </el-button>
         <el-button size="small" icon="el-icon-refresh" @click="fetchSessions">Làm mới</el-button>
       </div>
     </div>
@@ -26,9 +29,12 @@
     <div v-if="sessions.length === 0" class="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
       <i class="el-icon-chat-dot-round text-5xl text-slate-300 mb-3 block"></i>
       <h3 class="text-lg font-bold text-slate-700 mb-1">Chưa có cuộc hội thoại nào được đồng bộ</h3>
-      <p class="text-sm text-slate-500 max-w-md mx-auto">
-        Mở tab <strong>Meta Business Suite Inbox</strong> có cài Chrome Extension, chọn cuộc hội thoại khách hàng (hoặc bấm <strong>Sync ngay</strong> ở góc phải dưới).
+      <p class="text-sm text-slate-500 max-w-md mx-auto mb-4">
+        Bấm nút <strong>Đồng bộ hộp thư FB</strong> để kéo hội thoại gần nhất từ Fanpage, hoặc nhắn tin thử vào Page khi đã gắn Webhook.
       </p>
+      <el-button type="primary" size="small" icon="el-icon-download" :loading="syncingFB" @click="syncFromFacebook">
+        Đồng bộ hộp thư FB ngay
+      </el-button>
     </div>
 
     <!-- 3-Column Copilot Workspace -->
@@ -46,7 +52,12 @@
             class="w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 focus:outline-none flex items-start gap-3"
             :class="activeThreadId === s.thread_id ? 'bg-blue-50/80 border-l-4 border-blue-600' : 'border-l-4 border-transparent'"
           >
-            <div class="w-9 h-9 rounded-full bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center shrink-0 uppercase">
+            <img
+              v-if="s.avatar_url"
+              :src="s.avatar_url"
+              class="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-200"
+            />
+            <div v-else class="w-9 h-9 rounded-full bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center shrink-0 uppercase">
               {{ (s.customer_name || 'K').charAt(0) }}
             </div>
             <div class="flex-1 min-w-0">
@@ -331,6 +342,7 @@ export default {
       receiptCanvas: null,
       renderingReceipt: false,
       creatingOrder: false,
+      syncingFB: false,
       previewVisible: false,
       previewSrc: '',
       brokenImages: {}
@@ -374,6 +386,24 @@ export default {
         }
       } catch (e) {
         console.error('Failed to fetch copilot sessions', e);
+      }
+    },
+    async syncFromFacebook() {
+      this.syncingFB = true;
+      try {
+        const res = await axios.post('/salev2/api/copilot/sync-fb');
+        if (res.data && res.data.sessions) {
+          this.sessions = res.data.sessions;
+          if (!this.activeThreadId && this.sessions.length > 0) {
+            this.selectSession(this.sessions[0].thread_id);
+          }
+          this.$message.success(`Đã đồng bộ ${res.data.synced || 0} cuộc hội thoại từ Facebook!`);
+        }
+      } catch (e) {
+        const msg = (e.response && e.response.data && e.response.data.error) || 'Không thể đồng bộ từ Facebook (kiểm tra quyền pages_messaging / token)';
+        this.$message.error(msg);
+      } finally {
+        this.syncingFB = false;
       }
     },
     connectSSE() {

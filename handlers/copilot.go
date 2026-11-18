@@ -86,8 +86,12 @@ func (h *CopilotHandler) Ingest(c *gin.Context) {
 
 // ListSessions returns recent copilot sessions for the /salev2/copilot screen.
 func (h *CopilotHandler) ListSessions(c *gin.Context) {
+	sessions := h.Copilot.ListSessions()
+	if len(sessions) == 0 {
+		sessions = h.Copilot.LoadRecentSessionsFromDB(c.Request.Context())
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"sessions": h.Copilot.ListSessions(),
+		"sessions": sessions,
 	})
 }
 
@@ -153,6 +157,8 @@ func (h *CopilotHandler) CreateOrderFromSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.Copilot.MarkConversationOrdered(req.ThreadID, order.ID)
 
 	if sess, ok := h.Copilot.GetSession(req.ThreadID); ok {
 		sess.CreatedOrder = order

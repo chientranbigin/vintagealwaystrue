@@ -38,7 +38,7 @@ func main() {
 	db.Exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE DEFAULT 0")
 	db.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS needs_album_reorder BOOLEAN DEFAULT FALSE")
 	db.Exec("ALTER TABLE products ADD COLUMN IF NOT EXISTS fb_album_app INT DEFAULT 1")
-	if err := db.AutoMigrate(&models.AlbumResyncJob{}); err != nil {
+	if err := db.AutoMigrate(&models.AlbumResyncJob{}, &models.CopilotConversation{}, &models.CopilotMessageRecord{}); err != nil {
 		log.Printf("Warning: AutoMigrate AlbumResyncJob error: %v\n", err)
 	}
 	fmt.Println("Connected to TiDB Cloud successfully (time_zone = +07:00)!")
@@ -231,12 +231,18 @@ func main() {
 		api.POST("/facebook/publish-main-post", v2.FacebookPublishMainPost)
 	}
 
-	// Sales Copilot Routes (Chrome Extension ingest + Real-time SSE screen)
+	// Sales Copilot Routes (Facebook Webhook + Graph API Sync + Real-time SSE screen)
 	copilot := handlers.NewCopilotHandler(db, cfg, v1.FB)
+	r.GET("/privacy-policy", copilot.PrivacyPolicy)
+	r.GET("/data-deletion", copilot.DataDeletion)
+	r.POST("/data-deletion", copilot.DataDeletion)
+	r.GET("/webhook/facebook", copilot.VerifyWebhook)
+	r.POST("/webhook/facebook", copilot.ReceiveWebhook)
 	r.POST("/api/copilot/ingest", copilot.Ingest)
 	api.GET("/copilot/sessions", copilot.ListSessions)
 	api.GET("/copilot/stream", copilot.Stream)
 	api.POST("/copilot/order", copilot.CreateOrderFromSession)
+	api.POST("/copilot/sync-fb", copilot.SyncFBConversations)
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)
 	r.GET("/api/images/cleanup", v2.CleanupImages)
