@@ -216,3 +216,34 @@ func tailMessages(msgs []CopilotMessage, n int) []CopilotMessage {
 	}
 	return msgs
 }
+
+// PurgeThreads removes sessions stored under invalid thread ids (e.g. the Page id that older
+// extension builds used when selected_item_id was missing, which split one customer in two).
+func (s *CopilotService) PurgeThreads(ids ...string) {
+	var valid []string
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			valid = append(valid, id)
+		}
+	}
+	if len(valid) == 0 {
+		return
+	}
+	s.mu.Lock()
+	for _, id := range valid {
+		delete(s.sessions, id)
+	}
+	kept := s.sessionList[:0]
+	for _, id := range s.sessionList {
+		if _, ok := s.sessions[id]; ok {
+			kept = append(kept, id)
+		}
+	}
+	s.sessionList = kept
+	s.mu.Unlock()
+	if s.DB != nil {
+		if err := s.DB.Where("thread_id IN ?", valid).Delete(&CopilotSessionRecord{}).Error; err != nil {
+			log.Printf("[copilot] purge threads error: %v", err)
+		}
+	}
+}

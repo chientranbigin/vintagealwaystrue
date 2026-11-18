@@ -25,12 +25,25 @@ type CopilotHandler struct {
 }
 
 func NewCopilotHandler(db *gorm.DB, cfg *config.Config, fb *services.FacebookService) *CopilotHandler {
-	return &CopilotHandler{
+	h := &CopilotHandler{
 		DB:      db,
 		Cfg:     cfg,
 		Copilot: services.NewCopilotService(db, services.NewVisionService(), cfg.MediaBaseURL),
 		FB:      fb,
 	}
+	// Page ids are never a conversation id; drop sessions wrongly stored under them.
+	h.Copilot.PurgeThreads(cfg.FBPageID, cfg.FBMainPageID)
+	return h
+}
+
+// isInvalidThreadID rejects ids that would merge/split conversations wrongly:
+// empty ids and the Facebook Page id (asset_id) that old extension builds sent.
+func (h *CopilotHandler) isInvalidThreadID(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return true
+	}
+	return (h.Cfg.FBPageID != "" && id == h.Cfg.FBPageID) || (h.Cfg.FBMainPageID != "" && id == h.Cfg.FBMainPageID)
 }
 
 // Ingest receives conversation snapshots & images from the Chrome Extension.
@@ -47,6 +60,11 @@ func (h *CopilotHandler) Ingest(c *gin.Context) {
 	var req services.CopilotIngestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload: " + err.Error()})
+		return
+	}
+
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Thiếu ID hội thoại (selected_item_id), hãy reload extension"})
 		return
 	}
 

@@ -302,14 +302,28 @@
     return "Khách Facebook";
   }
 
+  /**
+   * Stable conversation id = Meta's selected_item_id (customer PSID).
+   * When the inbox is opened without it in the URL (e.g. /inbox/all?asset_id=...), Meta still
+   * puts the open conversation's id into the mailbox tab links ("Tất cả tin nhắn", "Messenger").
+   * Never fall back to asset_id (that is the Page id): it would split one customer into 2 threads.
+   */
   function extractConversationThreadId() {
     const url = new URL(location.href);
-    return (
-      url.searchParams.get("selected_item_id") ||
-      url.searchParams.get("thread_id") ||
-      url.searchParams.get("asset_id") ||
-      location.pathname + location.search
-    );
+    const fromUrl = url.searchParams.get("selected_item_id") || url.searchParams.get("thread_id");
+    if (fromUrl) return fromUrl;
+
+    for (const a of document.querySelectorAll('a[href*="selected_item_id="]')) {
+      try {
+        const u = new URL(a.href, location.origin);
+        const id = u.searchParams.get("selected_item_id");
+        const type = u.searchParams.get("thread_type") || "";
+        if (id && /MESSAGE/i.test(type)) return id;
+      } catch (e) {
+        /* ignore malformed href */
+      }
+    }
+    return "";
   }
 
   /**
@@ -805,8 +819,12 @@
       return;
     }
 
-    const customerName = extractCustomerName(chatPane);
     const threadId = extractConversationThreadId();
+    if (!threadId) {
+      if (force) updateBadgeStatus("Không xác định được hội thoại", "#fbbf24");
+      return;
+    }
+    const customerName = extractCustomerName(chatPane);
     const { action, messages } = sliceSessionAndDetectAction(rawMessages);
 
     if (messages.length === 0) return;
