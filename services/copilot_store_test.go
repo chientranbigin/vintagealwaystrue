@@ -88,3 +88,13 @@ func TestFBSystemNoticeAndLikeSticker(t *testing.T) {
 		t.Fatal("photo detected as like")
 	}
 }
+
+func TestOpenAICostUSD(t *testing.T) {
+	// 1M input + 1M output on gpt-4o-mini = 0.15 + 0.60
+	if c := openAICostUSD("gpt-4o-mini", 1_000_000, 1_000_000); c < 0.749 || c > 0.751 {
+		t.Fatalf("gpt-4o-mini cost = %v", c)
+	}
+	if c := openAICostUSD("gpt-4o-mini-2024-07-18", 1_000_000, 0); c < 0.149 || c > 0.151 {
+		t.Fatalf("dated model should match prefix pricing, got %v", c)
+	}
+}

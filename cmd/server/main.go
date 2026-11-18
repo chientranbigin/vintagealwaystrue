@@ -11,6 +11,7 @@ import (
 	"sale-app/config"
 	"sale-app/handlers"
 	"sale-app/models"
+	"sale-app/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
@@ -41,6 +42,7 @@ func main() {
 	if err := db.AutoMigrate(&models.AlbumResyncJob{}, &models.CopilotConversation{}, &models.CopilotMessageRecord{}); err != nil {
 		log.Printf("Warning: AutoMigrate AlbumResyncJob error: %v\n", err)
 	}
+	services.InitUsageTracking(db)
 	fmt.Println("Connected to TiDB Cloud successfully (time_zone = +07:00)!")
 
 	r := gin.Default()
@@ -248,6 +250,7 @@ func main() {
 	api.POST("/copilot/send-text", copilot.SendText)
 	api.POST("/copilot/reanalyze", copilot.Reanalyze)
 	api.POST("/copilot/link-order", copilot.LinkOrder)
+	api.GET("/usage", copilot.Usage)
 
 	// Direct endpoint for external cron jobs (e.g. cron-job.org)
 	r.GET("/api/images/cleanup", v2.CleanupImages)

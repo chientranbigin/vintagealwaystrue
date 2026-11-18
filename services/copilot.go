@@ -106,6 +106,7 @@ func NewCopilotService(db *gorm.DB, vision *VisionService, mediaBase string) *Co
 	if vision == nil {
 		vision = NewVisionService()
 	}
+	vision.Feature = "copilot"
 	svc := &CopilotService{
 		DB:          db,
 		Vision:      vision,
@@ -521,10 +522,12 @@ Trả về JSON thuần theo schema:
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage OpenAITokenUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(respBytes, &openAIResp); err != nil || len(openAIResp.Choices) == 0 {
 		return s.fallbackSuggestion(customerName, action, transcript, products)
 	}
+	RecordOpenAIUsage("copilot", "gpt-4o-mini", openAIResp.Usage)
 
 	var out aiCopilotOutput
 	if err := json.Unmarshal([]byte(openAIResp.Choices[0].Message.Content), &out); err != nil {

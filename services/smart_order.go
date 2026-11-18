@@ -90,6 +90,7 @@ type openAIChatResponse struct {
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+	Usage OpenAITokenUsage `json:"usage"`
 }
 
 func (s *SmartOrderService) callOpenAI(ctx context.Context, text string) (*SmartOrderParsedResult, error) {
@@ -159,6 +160,7 @@ Yêu cầu: Trả về duy nhất 1 JSON object hợp lệ.
 	if len(chatResp.Choices) == 0 {
 		return nil, fmt.Errorf("empty choices from openai")
 	}
+	RecordOpenAIUsage("smart_order", s.Model, chatResp.Usage)
 
 	content := strings.TrimSpace(chatResp.Choices[0].Message.Content)
 	// Strip markdown code fences if present (e.g. ```json ... ```)

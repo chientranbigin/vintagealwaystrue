@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -461,4 +462,15 @@ func (h *CopilotHandler) LinkOrder(c *gin.Context) {
 		sess = &cp
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
+}
+
+// Usage reports paid API usage (Google Vision OCR + OpenAI) per day and for the current month.
+func (h *CopilotHandler) Usage(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "31"))
+	rep, err := services.BuildUsageReport(h.DB, days)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, rep)
 }

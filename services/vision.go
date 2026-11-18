@@ -16,6 +16,8 @@ import (
 type VisionService struct {
 	APIKey string
 	Client *http.Client
+	// Feature labels usage records (api_usage_daily), e.g. "smart_upload" or "copilot".
+	Feature string
 }
 
 func NewVisionService() *VisionService {
@@ -25,8 +27,9 @@ func NewVisionService() *VisionService {
 	}
 
 	return &VisionService{
-		APIKey: apiKey,
-		Client: &http.Client{Timeout: 60 * time.Second},
+		APIKey:  apiKey,
+		Client:  &http.Client{Timeout: 60 * time.Second},
+		Feature: "smart_upload",
 	}
 }
 
@@ -140,6 +143,7 @@ func (v *VisionService) ExtractTextFromBytes(imgBytes []byte) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("vision api error (%d): %s", resp.StatusCode, string(respBytes))
 	}
+	RecordVisionCall(v.Feature)
 
 	var visionResp struct {
 		Responses []struct {

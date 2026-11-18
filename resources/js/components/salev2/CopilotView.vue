@@ -16,6 +16,13 @@
             </span>
             <button
               class="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:bg-slate-200"
+              aria-label="Chi phí AI và OCR"
+              @click="openUsage"
+            >
+              <i class="el-icon-coin"></i>
+            </button>
+            <button
+              class="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:bg-slate-200"
               aria-label="Đồng bộ hộp thư Facebook"
               @click="syncFromFacebook"
             >
@@ -106,14 +113,6 @@
             @click="sheet = 'products'"
           >
             <i class="el-icon-goods"></i>{{ (activeSession.detected_products || []).length }}
-          </button>
-          <button
-            v-if="!activeSession.created_order"
-            class="h-9 px-3 rounded-full bg-emerald-600 text-white text-sm font-bold flex items-center gap-1 active:bg-emerald-700 disabled:opacity-60"
-            :disabled="goingToOrder"
-            @click="goCreateOrder"
-          >
-            <i :class="goingToOrder ? 'el-icon-loading' : 'el-icon-shopping-cart-full'"></i> Lên đơn
           </button>
         </div>
 
@@ -288,6 +287,7 @@
         </div>
         <div class="flex items-center gap-2">
           <el-input v-model="search" size="small" prefix-icon="el-icon-search" placeholder="Tìm khách / mã SP" clearable style="width: 220px" />
+          <el-button size="small" icon="el-icon-coin" @click="openUsage">Chi phí AI</el-button>
           <el-button type="primary" size="small" icon="el-icon-download" :loading="syncingFB" @click="syncFromFacebook">Đồng bộ hộp thư FB</el-button>
           <el-button size="small" icon="el-icon-refresh" @click="fetchSessions">Làm mới</el-button>
         </div>
@@ -498,6 +498,43 @@
       </div>
     </div>
 
+    <!-- Usage / cost dialog -->
+    <el-dialog title="Chi phí AI & OCR" :visible.sync="usageVisible" :width="isMobile ? '94%' : '560px'" append-to-body>
+      <div v-if="usageLoading" class="text-center py-6 text-slate-400"><i class="el-icon-loading"></i> Đang tải…</div>
+      <div v-else-if="usage" class="text-slate-700">
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div class="bg-slate-50 rounded-xl p-3">
+            <div class="text-[12px] text-slate-500">Tháng {{ usage.month }} (đã tính)</div>
+            <div class="text-xl font-bold text-slate-900">{{ usd(usage.month_total_usd) }}</div>
+            <div class="text-[12px] text-slate-500">≈ {{ vnd(usage.month_total_usd) }}</div>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-3">
+            <div class="text-[12px] text-slate-500">Dự kiến cả tháng</div>
+            <div class="text-xl font-bold text-slate-900">{{ usd(usage.projected_month_usd) }}</div>
+            <div class="text-[12px] text-slate-500">≈ {{ vnd(usage.projected_month_usd) }}</div>
+          </div>
+        </div>
+        <div class="text-[13px] space-y-1 mb-3">
+          <div class="flex justify-between"><span>OpenAI (gợi ý trả lời, Smart Paste…)</span><b>{{ usage.month_openai_calls }} lượt · {{ usd(usage.month_openai_usd) }}</b></div>
+          <div class="flex justify-between"><span>Google Vision OCR (Copilot + Smart Upload)</span><b>{{ usage.month_vision_calls }} ảnh · {{ usd(usage.month_vision_usd) }}</b></div>
+          <div class="text-[12px] text-slate-400">Vision miễn phí 1.000 ảnh đầu mỗi tháng, sau đó $1,5 / 1.000 ảnh. Đếm từ {{ usage.tracking_since || 'hôm nay' }}.</div>
+        </div>
+        <div class="text-[12px] font-bold text-slate-500 uppercase mb-1">Theo ngày</div>
+        <div class="max-h-[40vh] overflow-y-auto border border-slate-100 rounded-lg">
+          <table class="w-full text-[12px]">
+            <tr v-for="r in usage.days" :key="r.day + r.provider + r.feature" class="border-b border-slate-100">
+              <td class="py-1.5 px-2 whitespace-nowrap">{{ r.day.slice(5) }}</td>
+              <td class="py-1.5 px-2">{{ r.provider === 'openai' ? 'AI' : 'OCR' }} · {{ r.feature }}</td>
+              <td class="py-1.5 px-2 text-right whitespace-nowrap">{{ r.calls }} lượt</td>
+              <td class="py-1.5 px-2 text-right whitespace-nowrap text-slate-400">{{ r.provider === 'openai' ? Math.round((r.input_tokens + r.output_tokens) / 1000) + 'k tok' : '' }}</td>
+              <td class="py-1.5 px-2 text-right whitespace-nowrap font-semibold">{{ usd(r.cost_usd) }}</td>
+            </tr>
+            <tr v-if="!usage.days.length"><td class="p-3 text-center text-slate-400">Chưa có dữ liệu — bắt đầu ghi từ bây giờ.</td></tr>
+          </table>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- Image Preview Modal -->
     <el-dialog :visible.sync="previewVisible" :width="isMobile ? '94%' : '520px'" append-to-body custom-class="copilot-preview">
       <img v-if="previewSrc" :src="previewSrc" class="w-full h-auto rounded-lg block" />
@@ -594,6 +631,9 @@ export default {
       mobileView: 'list',
       sheet: null,
       replyDirty: false,
+      usageVisible: false,
+      usageLoading: false,
+      usage: null,
       goingToOrder: false,
       search: '',
       seen: readSeen(),
@@ -871,6 +911,26 @@ export default {
       } finally {
         this.goingToOrder = false;
       }
+    },
+    async openUsage() {
+      this.usageVisible = true;
+      this.usageLoading = true;
+      try {
+        const res = await axios.get('/salev2/api/usage', { params: { days: 31 } });
+        this.usage = res.data;
+      } catch (e) {
+        this.$message.error('Không tải được số liệu chi phí');
+      } finally {
+        this.usageLoading = false;
+      }
+    },
+    usd(v) {
+      const n = Number(v || 0);
+      return '$' + (n < 1 ? n.toFixed(3) : n.toFixed(2));
+    },
+    vnd(v) {
+      // Approximate rate, for a quick feel only.
+      return Math.round(Number(v || 0) * 26000).toLocaleString('vi-VN') + 'đ';
     },
     clearReply() {
       this.editableReply = '';

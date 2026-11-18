@@ -113,10 +113,12 @@ Không dùng markdown dấu sao quá nhiều, dùng định dạng văn bản Fa
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage OpenAITokenUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil || len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("invalid openai response")
 	}
+	RecordOpenAIUsage("ai_content", "gpt-4o-mini", chatResp.Usage)
 
 	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
 }
