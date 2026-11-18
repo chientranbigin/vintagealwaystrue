@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 	"strings"
@@ -314,6 +315,10 @@ func (s *CopilotService) refreshMessagesFromRecords(sess *CopilotSession) {
 	if err := q.Order("msg_timestamp DESC, id DESC").Limit(30).Find(&recs).Error; err != nil {
 		return
 	}
+	oldTail := ""
+	if n := len(sess.Messages); n > 0 {
+		oldTail = fmt.Sprintf("%d|%s", n, messageKey(sess.Messages[n-1]))
+	}
 	msgs := make([]CopilotMessage, 0, len(recs))
 	for i := len(recs) - 1; i >= 0; i-- {
 		r := recs[i]
@@ -321,6 +326,13 @@ func (s *CopilotService) refreshMessagesFromRecords(sess *CopilotSession) {
 			continue
 		}
 		msgs = append(msgs, CopilotMessage{Sender: r.Sender, Type: r.Type, Text: r.Text, ImageURL: r.ImageURL, OCRText: r.OCRText})
+	}
+	newTail := ""
+	if n := len(msgs); n > 0 {
+		newTail = fmt.Sprintf("%d|%s", n, messageKey(msgs[n-1]))
+	}
+	if newTail != oldTail {
+		sess.AIStale = true
 	}
 	sess.Messages = msgs
 	if len(recs) > 0 {

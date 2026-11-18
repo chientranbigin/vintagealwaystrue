@@ -425,3 +425,26 @@ func (h *CopilotHandler) SendText(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
+
+// Reanalyze recomputes the AI suggestion / products / order draft for one thread from the stored
+// messages (used when the UI opens a session flagged ai_stale).
+func (h *CopilotHandler) Reanalyze(c *gin.Context) {
+	var req struct {
+		ThreadID string `json:"thread_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	sess, err := h.Copilot.RebuildAndAnalyzeSession(c.Request.Context(), req.ThreadID, "suggest")
+	if err != nil || sess == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Không tìm thấy hội thoại"})
+		return
+	}
+	h.Copilot.SaveAndBroadcast(sess)
+	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
+}

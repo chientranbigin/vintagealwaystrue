@@ -122,7 +122,7 @@
           <i class="el-icon-warning-outline"></i> Cần nhân viên: {{ activeSession.human_reason || 'khách hỏi thông tin chưa có dữ liệu' }}
         </div>
 
-        <div ref="mobileChat" class="flex-1 overflow-y-auto px-3 py-3 space-y-1.5 bg-white">
+        <div ref="mobileChat" class="flex-1 overflow-y-auto px-3 py-3 space-y-1.5 bg-white" @scroll="onChatScroll">
           <div
             v-for="(msg, idx) in activeSession.messages"
             :key="'mm-' + idx"
@@ -136,6 +136,7 @@
                 referrerpolicy="no-referrer"
                 loading="lazy"
                 class="max-h-[260px] rounded-2xl object-cover block border border-slate-100"
+                @load="onChatImageLoad"
                 @click="previewImage(msg.image_base64 || msg.image_url)"
                 @error="markImageBroken(msg.image_base64 || msg.image_url)"
               />
@@ -160,8 +161,8 @@
             <button class="font-bold text-amber-300" @click="undoSend">Hoàn tác</button>
           </div>
           <div class="flex items-center gap-1.5 text-[12px] font-bold text-blue-700 mb-1">
-            <i class="el-icon-magic-stick"></i>
-            <span class="flex-1">Gợi ý trả lời</span>
+            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : 'el-icon-magic-stick'"></i>
+            <span class="flex-1">{{ reanalyzing[activeSession.thread_id] ? 'AI đang phân tích lại…' : 'Gợi ý trả lời' }}</span>
             <button class="text-slate-500 font-semibold" @click="replyExpanded = !replyExpanded">
               {{ replyExpanded ? 'Thu gọn' : 'Sửa' }}
             </button>
@@ -378,7 +379,7 @@
             </div>
             <span class="text-xs font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 shrink-0">{{ (activeSession.messages || []).length }} tin</span>
           </div>
-          <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-2 bg-[#f4f6f9]">
+          <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-2 bg-[#f4f6f9]" @scroll="onChatScroll">
             <div
               v-for="(msg, idx) in activeSession.messages"
               :key="'dm-' + idx"
@@ -399,6 +400,7 @@
                     referrerpolicy="no-referrer"
                     loading="lazy"
                     class="max-w-[230px] max-h-[260px] rounded-xl object-cover cursor-pointer block"
+                    @load="onChatImageLoad"
                     @click="previewImage(msg.image_base64 || msg.image_url)"
                     @error="markImageBroken(msg.image_base64 || msg.image_url)"
                   />
@@ -619,7 +621,9 @@ export default {
       orderForm: { name: '', phone: '', address: '', note: '', product_codes: [] },
       orderFormError: '',
       lastDraftKey: '',
-      renderedOrderId: null
+      renderedOrderId: null,
+      reanalyzing: {},
+      stickToBottom: true
     };
   },
   computed: {
@@ -770,10 +774,31 @@ export default {
         this.receiptCanvas = null;
       }
       this.activeThreadId = threadId;
+      this.stickToBottom = true;
       if (this.activeSession) {
         this.markSeen(this.activeSession);
         this.syncActiveState(this.activeSession, true);
+        if (this.activeSession.ai_stale) this.reanalyze(threadId);
       }
+    },
+    async reanalyze(threadId) {
+      if (this.reanalyzing[threadId]) return;
+      this.$set(this.reanalyzing, threadId, true);
+      try {
+        const res = await axios.post('/salev2/api/copilot/reanalyze', { thread_id: threadId });
+        if (res.data && res.data.session) this.upsertSession(res.data.session);
+      } catch (e) {
+        console.error('Reanalyze failed', e);
+      } finally {
+        this.$delete(this.reanalyzing, threadId);
+      }
+    },
+    onChatScroll(e) {
+      const el = e.target;
+      this.stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    },
+    onChatImageLoad() {
+      if (this.stickToBottom) this.scrollChatToBottom();
     },
     openChat(threadId) {
       this.selectSession(threadId);
@@ -844,6 +869,7 @@ export default {
       }
     },
     scrollChatToBottom() {
+      this.stickToBottom = true;
       ['chatContainer', 'mobileChat'].forEach((ref) => {
         const el = this.$refs[ref];
         if (el) el.scrollTop = el.scrollHeight;

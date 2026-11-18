@@ -84,6 +84,8 @@ type CopilotSession struct {
 	UpdatedAt        time.Time             `json:"updated_at"`
 	// LastMessageAt is the time of the newest message; the Copilot list is sorted by it.
 	LastMessageAt time.Time `json:"last_message_at"`
+	// AIStale: messages changed since the AI fields were computed (e.g. reloaded after a restart).
+	AIStale bool `json:"ai_stale,omitempty"`
 }
 
 type CopilotService struct {
