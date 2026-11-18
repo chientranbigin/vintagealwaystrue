@@ -82,6 +82,8 @@ type CopilotSession struct {
 	OrderDraft       *CopilotOrderDraft    `json:"order_draft,omitempty"`
 	CreatedOrder     *models.Order         `json:"created_order,omitempty"`
 	UpdatedAt        time.Time             `json:"updated_at"`
+	// LastMessageAt is the time of the newest message; the Copilot list is sorted by it.
+	LastMessageAt time.Time `json:"last_message_at"`
 }
 
 type CopilotService struct {
@@ -178,6 +180,9 @@ func (s *CopilotService) ListSessions() []*CopilotSession {
 			res = append(res, sess)
 		}
 	}
+	sort.SliceStable(res, func(i, j int) bool {
+		return res[i].SortTime().After(res[j].SortTime())
+	})
 	return res
 }
 
@@ -295,6 +300,7 @@ func (s *CopilotService) AnalyzeIngest(ctx context.Context, req CopilotIngestReq
 		OrderDraft:       aiRes.OrderDraft,
 		CreatedOrder:     prevCreatedOrder,
 		UpdatedAt:        time.Now(),
+		LastMessageAt:    time.Now(),
 	}
 
 	return sess
@@ -875,6 +881,9 @@ func (s *CopilotService) RebuildAndAnalyzeSession(ctx context.Context, psid stri
 		CreatedOrder:     createdOrder,
 		UpdatedAt:        conv.UpdatedAt,
 	}
+	if n := len(recs); n > 0 {
+		sess.LastMessageAt = recs[n-1].MsgTimestamp
+	}
 	return sess, nil
 }
 
@@ -1160,6 +1169,51 @@ func (s *CopilotService) SendFBImage(ctx context.Context, psid string, img []byt
 		return err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		var fbErr struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    int    `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &fbErr) == nil && fbErr.Error.Message != "" {
+			return fmt.Errorf("Facebook (%d): %s", fbErr.Error.Code, fbErr.Error.Message)
+		}
+		return fmt.Errorf("Facebook HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// SortTime is the newest-message time, falling back to UpdatedAt for older stored sessions.
+func (sess *CopilotSession) SortTime() time.Time {
+	if !sess.LastMessageAt.IsZero() {
+		return sess.LastMessageAt
+	}
+	return sess.UpdatedAt
+}
+
+// SendFBText sends a plain text message to a Messenger user (PSID) via the Page Send API.
+func (s *CopilotService) SendFBText(ctx context.Context, psid, text, pageToken string) error {
+	if psid == "" || pageToken == "" {
+		return fmt.Errorf("thiếu PSID hoặc FB_MAIN_PAGE_TOKEN")
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"recipient":      map[string]string{"id": psid},
+		"messaging_type": "RESPONSE",
+		"message":        map[string]string{"text": text},
+	})
+	endpoint := "https://graph.facebook.com/v21.0/me/messages?access_token=" + url.QueryEscape(pageToken)
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		return err

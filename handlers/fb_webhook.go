@@ -394,3 +394,34 @@ func (h *CopilotHandler) SendReceipt(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
+
+// SendText sends a (suggested / edited) reply to the customer's Messenger thread.
+func (h *CopilotHandler) SendText(c *gin.Context) {
+	var req struct {
+		ThreadID string `json:"thread_id" binding:"required"`
+		Text     string `json:"text" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	if text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nội dung trống"})
+		return
+	}
+	if len([]rune(text)) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tin nhắn quá dài (tối đa 2000 ký tự)"})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	_, pageToken := h.getMainPageCredentials()
+	if err := h.Copilot.SendFBText(c.Request.Context(), req.ThreadID, text, pageToken); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
