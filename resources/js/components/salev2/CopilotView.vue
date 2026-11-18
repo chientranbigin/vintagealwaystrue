@@ -699,7 +699,8 @@ export default {
       pendingSend: null,
       renderedOrderId: null,
       reanalyzing: {},
-      stickToBottom: true
+      stickToBottom: true,
+      pinUntil: 0
     };
   },
   computed: {
@@ -852,7 +853,7 @@ export default {
         this.receiptCanvas = null;
       }
       this.activeThreadId = threadId;
-      this.stickToBottom = true;
+      this.pinToBottom();
       if (this.activeSession) {
         this.markSeen(this.activeSession);
         this.syncActiveState(this.activeSession, true);
@@ -889,17 +890,27 @@ export default {
       this.replyDirty = false;
       await this.reanalyze(this.activeSession.thread_id);
     },
+    // Opening a chat always lands on the newest message, even while images above are loading.
+    pinToBottom() {
+      this.stickToBottom = true;
+      this.pinUntil = Date.now() + 2500;
+      [0, 150, 400, 900, 1600, 2400].forEach((ms) => setTimeout(() => {
+        if (this.stickToBottom) this.scrollChatToBottom();
+      }, ms));
+    },
     onChatScroll(e) {
+      if (Date.now() < this.pinUntil) return; // ignore layout jumps right after opening
       const el = e.target;
       this.stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     },
     onChatImageLoad() {
-      if (this.stickToBottom) this.scrollChatToBottom();
+      if (this.stickToBottom || Date.now() < this.pinUntil) this.scrollChatToBottom();
     },
     openChat(threadId) {
       this.selectSession(threadId);
       this.mobileView = 'chat';
       this.sheet = null;
+      this.pinToBottom();
       // Let the phone's back gesture / button close the chat instead of leaving the page.
       try {
         window.history.pushState({ copilotChat: true }, '');
@@ -932,7 +943,7 @@ export default {
         // Never overwrite what the user is typing; they can pull the new suggestion back in.
         if (!this.replyDirty) this.editableReply = nextReply;
       }
-      if (shouldScroll) this.$nextTick(() => this.scrollChatToBottom());
+      if (shouldScroll || this.stickToBottom) this.$nextTick(() => this.scrollChatToBottom());
       if (sess.created_order && (!this.receiptImg || !this.renderedOrderId || this.renderedOrderId !== sess.created_order.id)) {
         this.renderReceipt(sess.created_order);
       } else if (!sess.created_order) {
