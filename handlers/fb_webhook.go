@@ -309,3 +309,36 @@ func (h *CopilotHandler) DataDeletion(c *gin.Context) {
 </html>`
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
+
+// TermsOfService serves the public Terms of Service page required by Meta App Settings.
+func (h *CopilotHandler) TermsOfService(c *gin.Context) {
+	html := `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Điều khoản dịch vụ - Vintage Always True</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1e293b; }
+    h1 { color: #0f172a; }
+    h2 { margin-top: 24px; color: #334155; font-size: 18px; }
+    .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin: 16px 0; }
+  </style>
+</head>
+<body>
+  <h1>Điều Khoản Dịch Vụ (Terms of Service)</h1>
+  <div class="box">
+    <strong>Đơn vị vận hành:</strong> Hộ kinh doanh Vintage Always True<br/>
+    <strong>Website:</strong> https://vintagealwaystrue.id.vn<br/>
+    <strong>Email liên hệ:</strong> support@vintagealwaystrue.id.vn
+  </div>
+  <h2>1. Phạm vi áp dụng</h2>
+  <p>Hệ thống quản trị nội bộ và công cụ hỗ trợ tư vấn khách hàng của Vintage Always True được sử dụng để tiếp nhận thông tin sản phẩm, kiểm tra tồn kho, tư vấn kích thước và xử lý đơn hàng khi khách hàng chủ động liên hệ qua Trang Facebook chính thức.</p>
+  <h2>2. Quyền và trách nhiệm</h2>
+  <p>Chúng tôi cam kết sử dụng thông tin liên hệ và đơn hàng đúng mục đích giao nhận hàng hóa, bảo mật thông tin khách hàng và tuân thủ đầy đủ chính sách nền tảng của Meta.</p>
+  <h2>3. Liên hệ</h2>
+  <p>Mọi thắc mắc về đơn hàng hoặc điều khoản dịch vụ, vui lòng liên hệ trực tiếp qua Fanpage Vintage Always True hoặc email support@vintagealwaystrue.id.vn.</p>
+</body>
+</html>`
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+}

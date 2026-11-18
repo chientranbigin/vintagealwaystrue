@@ -236,6 +236,7 @@ func main() {
 	r.GET("/privacy-policy", copilot.PrivacyPolicy)
 	r.GET("/data-deletion", copilot.DataDeletion)
 	r.POST("/data-deletion", copilot.DataDeletion)
+	r.GET("/terms", copilot.TermsOfService)
 	r.GET("/webhook/facebook", copilot.VerifyWebhook)
 	r.POST("/webhook/facebook", copilot.ReceiveWebhook)
 	r.POST("/api/copilot/ingest", copilot.Ingest)
