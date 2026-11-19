@@ -102,11 +102,8 @@ type CopilotService struct {
 	OpenAIKey  string
 	Client     *http.Client
 
-	mu       sync.RWMutex
-	sessions map[string]*CopilotSession
-	// skipOCR: number of upcoming shop-echo images per PSID that we sent ourselves
-	// (product photos) — no need to pay Vision OCR for them.
-	skipOCR     map[string]*skipOCRBudget
+	mu          sync.RWMutex
+	sessions    map[string]*CopilotSession
 	sessionList []string // ordered newest first
 	subscribers map[chan *CopilotSession]struct{}
 }
@@ -125,7 +122,6 @@ func NewCopilotService(db *gorm.DB, vision *VisionService, mediaBase string) *Co
 		Client:      &http.Client{Timeout: 45 * time.Second},
 		sessions:    make(map[string]*CopilotSession),
 		subscribers: make(map[chan *CopilotSession]struct{}),
-		skipOCR:     make(map[string]*skipOCRBudget),
 	}
 	svc.initStore()
 	return svc
@@ -954,7 +950,7 @@ func (s *CopilotService) UpsertFBMessage(
 	}
 
 	var ocrText string
-	if msgType == "image" && imageURL != "" && s.Vision != nil && !(sender == "shop" && s.consumeSkipOCR(psid)) {
+	if msgType == "image" && imageURL != "" && s.Vision != nil && sender != "shop" {
 		if txt, err := s.Vision.ExtractTextFromImage(imageURL); err == nil {
 			ocrText = strings.TrimSpace(txt)
 		}
@@ -1509,39 +1505,6 @@ func (s *CopilotService) productMentionIndex(msgs []CopilotMessage) map[string]i
 		}
 	}
 	return last
-}
-
-type skipOCRBudget struct {
-	left  int
-	until time.Time
-}
-
-// ExpectOwnImages marks that n shop images about to echo back for psid were sent by Copilot.
-func (s *CopilotService) ExpectOwnImages(psid string, n int) {
-	if n <= 0 {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b := s.skipOCR[psid]
-	if b == nil || time.Now().After(b.until) {
-		b = &skipOCRBudget{}
-		s.skipOCR[psid] = b
-	}
-	b.left += n
-	b.until = time.Now().Add(3 * time.Minute)
-}
-
-func (s *CopilotService) consumeSkipOCR(psid string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b := s.skipOCR[psid]
-	if b == nil || b.left <= 0 || time.Now().After(b.until) {
-		delete(s.skipOCR, psid)
-		return false
-	}
-	b.left--
-	return true
 }
 
 // ProductImagesForSend returns the original photo URLs of a product: kind "main" = the main

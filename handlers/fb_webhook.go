@@ -525,7 +525,6 @@ func (h *CopilotHandler) SendProductImages(c *gin.Context) {
 		return
 	}
 	_, pageToken := h.getMainPageCredentials()
-	h.Copilot.ExpectOwnImages(req.ThreadID, len(urls))
 	sent := 0
 	for _, u := range urls {
 		if err := h.Copilot.SendFBImageURL(c.Request.Context(), req.ThreadID, u, pageToken); err != nil {
