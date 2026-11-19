@@ -220,11 +220,8 @@
             <div v-for="p in activeSession.detected_products" :key="'sp-' + p.id" class="flex gap-3 py-2.5 border-b border-slate-100">
               <img v-if="p.thumb_url" :src="p.thumb_url" class="w-16 h-20 rounded-lg object-cover border border-slate-100 shrink-0" @click="previewImage(p.thumb_url)" />
               <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="font-bold text-[15px] text-slate-900 flex-1 min-w-[64px]">{{ p.code }}</span>
-                  <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="p.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">
-                    {{ p.status === 'AVAILABLE' ? 'Còn hàng' : 'Đã bán' }}
-                  </span>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-[15px] text-slate-900 flex-1 min-w-0 truncate">{{ p.code }}</span>
 <button
                     class="h-7 px-2 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center gap-1 active:bg-slate-200 disabled:opacity-50 shrink-0"
                     :disabled="!canSendToCustomer || !!sendingImg[p.id + ':main']"
@@ -239,7 +236,12 @@
                     @click.stop="sendProductImages(p, 'detail')"
                   ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length - 1 }}</button>
                 </div>
-                <div class="text-sm font-bold text-slate-700">{{ formatPrice(p.price) }}</div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-sm font-bold text-slate-700">{{ formatPrice(p.price) }}</span>
+                  <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="p.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">
+                    {{ p.status === 'AVAILABLE' ? 'Còn hàng' : 'Đã bán' }}
+                  </span>
+                </div>
                 <div v-if="p.sizes && p.sizes.length" class="text-[12px] text-slate-500 flex flex-wrap gap-x-2">
                   <span v-for="sz in p.sizes" :key="sz.name">{{ sz.name }} <b>{{ sz.value }}</b></span>
                 </div>
