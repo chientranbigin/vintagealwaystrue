@@ -172,13 +172,32 @@
           </div>
         </div>
 
-        <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
+        <!-- Composer: quick replies dropdown, AI suggestion & auto-growing 1-3 line input -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 8px)">
-          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="showingAISuggestion ? 'text-violet-700' : 'text-slate-500'">
-            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (showingAISuggestion ? 'el-icon-magic-stick' : 'el-icon-edit')"></i>
-            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (showingAISuggestion ? 'Gợi ý AI' : 'Tin nhắn của bạn') }}</span>
+          <div class="flex items-center justify-between gap-2 text-[11px] font-bold mb-1.5">
+            <div class="flex items-center gap-2 min-w-0">
+              <el-dropdown trigger="click" size="small" @command="handleQuickReply">
+                <button
+                  type="button"
+                  class="h-6 px-2.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold hover:bg-slate-200 active:bg-slate-200 flex items-center gap-1"
+                >
+                  <span>⚡ Tin nhắn mẫu</span>
+                  <i class="el-icon-arrow-down text-[10px]"></i>
+                </button>
+                <el-dropdown-menu slot="dropdown">
+                  <el-dropdown-item command="shipping_info">📦 Cho e xin thông tin giao hàng</el-dropdown-item>
+                  <el-dropdown-item command="detail_photos">📸 E gửi ảnh chi tiết ạ</el-dropdown-item>
+                  <el-dropdown-item command="shipping_fee">🚚 Phí ship 20k → 25k tùy nơi + khối lượng</el-dropdown-item>
+                  <el-dropdown-item divided command="qr_payment">💳 Gửi mã QR chuyển khoản</el-dropdown-item>
+                </el-dropdown-menu>
+              </el-dropdown>
+              <span v-if="reanalyzing[activeSession.thread_id] || showingAISuggestion" class="text-violet-700 truncate">
+                <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : 'el-icon-magic-stick'"></i>
+                {{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : 'Gợi ý AI' }}
+              </span>
+            </div>
             <button
-              class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
+              class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50 shrink-0"
               :disabled="!!reanalyzing[activeSession.thread_id]"
               :title="showingAISuggestion ? 'Gọi AI soạn câu mới (~11đ)' : 'Dùng gợi ý AI (gọi AI nếu chưa có)'"
               @click="askAI"
@@ -187,11 +206,13 @@
           <div class="flex items-end gap-2">
             <div class="relative flex-1">
               <textarea
+                ref="mobileTextarea"
                 v-model="editableReply"
-                rows="3"
+                rows="1"
                 placeholder="Nhập tin nhắn…"
-                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-10 py-2 text-[16px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
-                @input="replyDirty = true"
+                style="max-height: 76px; overflow-y: hidden;"
+                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-9 py-2 text-[16px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
+                @input="onReplyInput"
               ></textarea>
               <button
                 v-if="editableReply"
@@ -423,13 +444,32 @@
               </div>
             </div>
           </div>
-          <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
+          <!-- Composer: quick replies dropdown, AI suggestion & auto-growing 1-3 line input -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2 pb-3" >
-          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="showingAISuggestion ? 'text-violet-700' : 'text-slate-500'">
-            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (showingAISuggestion ? 'el-icon-magic-stick' : 'el-icon-edit')"></i>
-            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (showingAISuggestion ? 'Gợi ý AI' : 'Tin nhắn của bạn') }}</span>
+          <div class="flex items-center justify-between gap-2 text-[11px] font-bold mb-1.5">
+            <div class="flex items-center gap-2 min-w-0">
+              <el-dropdown trigger="click" size="small" @command="handleQuickReply">
+                <button
+                  type="button"
+                  class="h-6 px-2.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold hover:bg-slate-200 active:bg-slate-200 flex items-center gap-1"
+                >
+                  <span>⚡ Tin nhắn mẫu</span>
+                  <i class="el-icon-arrow-down text-[10px]"></i>
+                </button>
+                <el-dropdown-menu slot="dropdown">
+                  <el-dropdown-item command="shipping_info">📦 Cho e xin thông tin giao hàng</el-dropdown-item>
+                  <el-dropdown-item command="detail_photos">📸 E gửi ảnh chi tiết ạ</el-dropdown-item>
+                  <el-dropdown-item command="shipping_fee">🚚 Phí ship 20k → 25k tùy nơi + khối lượng</el-dropdown-item>
+                  <el-dropdown-item divided command="qr_payment">💳 Gửi mã QR chuyển khoản</el-dropdown-item>
+                </el-dropdown-menu>
+              </el-dropdown>
+              <span v-if="reanalyzing[activeSession.thread_id] || showingAISuggestion" class="text-violet-700 truncate">
+                <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : 'el-icon-magic-stick'"></i>
+                {{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : 'Gợi ý AI' }}
+              </span>
+            </div>
             <button
-              class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
+              class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50 shrink-0"
               :disabled="!!reanalyzing[activeSession.thread_id]"
               :title="showingAISuggestion ? 'Gọi AI soạn câu mới (~11đ)' : 'Dùng gợi ý AI (gọi AI nếu chưa có)'"
               @click="askAI"
@@ -438,11 +478,13 @@
           <div class="flex items-end gap-2">
             <div class="relative flex-1">
               <textarea
+                ref="desktopTextarea"
                 v-model="editableReply"
-                rows="3"
+                rows="1"
                 placeholder="Nhập tin nhắn…"
-                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-10 py-2 text-[16px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
-                @input="replyDirty = true"
+                style="max-height: 76px; overflow-y: hidden;"
+                class="block w-full rounded-2xl border border-slate-300 bg-slate-50 pl-3 pr-9 py-2 text-[15px] leading-snug outline-none focus:border-blue-500 focus:bg-white resize-none"
+                @input="onReplyInput"
               ></textarea>
               <button
                 v-if="editableReply"
@@ -722,6 +764,11 @@ export default {
     },
     canSendToCustomer() {
       return Boolean(this.activeSession && /^\d+$/.test(this.activeSession.thread_id || ''));
+    }
+  },
+  watch: {
+    editableReply() {
+      this.autoResizeComposers();
     }
   },
   mounted() {
@@ -1070,9 +1117,77 @@ export default {
       // Approximate rate, for a quick feel only.
       return Math.round(Number(v || 0) * 26000).toLocaleString('vi-VN') + 'đ';
     },
+    onReplyInput() {
+      this.replyDirty = true;
+      this.autoResizeComposers();
+    },
+    autoResizeComposers() {
+      this.$nextTick(() => {
+        ['mobileTextarea', 'desktopTextarea'].forEach((ref) => {
+          const el = this.$refs[ref];
+          if (!el) return;
+          el.style.height = 'auto';
+          const maxH = 76; // ~3 lines
+          const nextH = Math.min(el.scrollHeight, maxH);
+          el.style.height = nextH + 'px';
+          el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+        });
+      });
+    },
+    handleQuickReply(cmd) {
+      const templates = {
+        shipping_info: 'Dạ cho em xin thông tin giao hàng (Tên, SĐT, Địa chỉ) để em lên đơn nha ạ.',
+        detail_photos: 'Dạ em gửi ảnh chi tiết sản phẩm ạ.',
+        shipping_fee: 'Dạ phí ship bên em từ 20k → 25k tùy nơi và khối lượng hàng ạ.'
+      };
+      if (templates[cmd]) {
+        this.editableReply = templates[cmd];
+        this.replyDirty = true;
+        this.autoResizeComposers();
+        return;
+      }
+      if (cmd === 'qr_payment') {
+        this.sendPaymentQR();
+      }
+    },
+    async sendPaymentQR() {
+      if (!this.activeSession || !this.canSendToCustomer) return;
+      try {
+        await this.$confirm(
+          `Gửi ảnh mã QR chuyển khoản cho ${this.activeSession.customer_name}?`,
+          'Gửi mã QR',
+          { confirmButtonText: 'Gửi ngay', cancelButtonText: 'Huỷ', type: 'info' }
+        );
+      } catch (e) {
+        return;
+      }
+      this.sendingReceipt = true;
+      try {
+        const resp = await fetch('/images/vietqr-payment.jpg');
+        if (!resp.ok) throw new Error('Không tải được ảnh QR');
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        await axios.post('/salev2/api/copilot/send-receipt', {
+          thread_id: this.activeSession.thread_id,
+          image_base64: dataUrl
+        });
+        this.$message.success('Đã gửi mã QR chuyển khoản cho khách');
+      } catch (e) {
+        const msg = (e.response && e.response.data && e.response.data.error) || e.message;
+        this.$message.error('Gửi QR thất bại: ' + msg);
+      } finally {
+        this.sendingReceipt = false;
+      }
+    },
     clearReply() {
       this.editableReply = '';
       this.replyDirty = true;
+      this.autoResizeComposers();
     },
     openOrderSheet() {
       this.sheet = 'order';

@@ -81,6 +81,7 @@ func main() {
 	// Serve Static assets
 	r.Static("/js", "./public/js")
 	r.Static("/css", "./public/css")
+	r.Static("/images", "./public/images")
 	r.Static("/admin-theme", "./public/admin-theme")
 	r.Static("/customer-theme", "./public/customer-theme")
 

@@ -127,6 +127,7 @@ func (a *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 			path == "/api/copilot/ingest" ||
 			strings.HasPrefix(path, "/js/") ||
 			strings.HasPrefix(path, "/css/") ||
+			strings.HasPrefix(path, "/images/") ||
 			strings.HasPrefix(path, "/admin-theme/") ||
 			strings.HasPrefix(path, "/customer-theme/") ||
 			strings.HasPrefix(path, "/storage/") {
