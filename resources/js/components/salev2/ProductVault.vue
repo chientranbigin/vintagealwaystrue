@@ -160,9 +160,9 @@
                 <el-button type="success" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75 font-bold" 
                            icon="el-icon-document-copy" @click.stop="copyProductInfo(product)">COPY SIZE</el-button>
                 <el-button type="info" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-100 font-bold" 
-                           icon="el-icon-camera" @click.stop="copyMain(product)">COPY MAIN</el-button>
+                           icon="el-icon-camera" @click.stop="openShareModal(product, 'main')">SHARE MAIN</el-button>
                 <el-button type="warning" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-125 font-bold" 
-                           icon="el-icon-picture-outline" @click.stop="copyDetail(product)">COPY DETAIL</el-button>
+                           icon="el-icon-picture-outline" @click.stop="openShareModal(product, 'detail')">SHARE DETAIL</el-button>
                 <el-button type="danger" size="medium" class="w-40 shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-150 font-bold" 
                            icon="el-icon-delete" @click.stop="confirmDelete(product)">DELETE</el-button>
             </div>
@@ -207,8 +207,8 @@
                         <el-dropdown-menu slot="dropdown">
                             <el-dropdown-item command="edit" icon="el-icon-edit">Detail</el-dropdown-item>
                             <el-dropdown-item command="copy" icon="el-icon-document-copy">Copy Size</el-dropdown-item>
-                            <el-dropdown-item command="copy_main" icon="el-icon-camera">Copy Main</el-dropdown-item>
-                            <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Copy Detail</el-dropdown-item>
+                            <el-dropdown-item command="copy_main" icon="el-icon-camera">Share Main</el-dropdown-item>
+                            <el-dropdown-item command="copy_detail" icon="el-icon-picture-outline">Share Detail</el-dropdown-item>
                             <el-dropdown-item command="delete" icon="el-icon-delete" divided class="text-red-500">Delete</el-dropdown-item>
                         </el-dropdown-menu>
                     </el-dropdown>
@@ -225,6 +225,88 @@
 
       <div class="mt-8 flex justify-center">
         <el-pagination background layout="prev, pager, next" :current-page.sync="page" :total="total" :page-size="60" @current-change="handlePageChange"></el-pagination>
+      </div>
+    </div>
+
+    <!-- Share to Copilot / Copy Modal -->
+    <div v-if="shareModalVisible && shareProduct"
+         class="fixed inset-0 z-[80] flex items-end md:items-center justify-center bg-black/40 p-0 md:p-4"
+         @click="closeShareModal">
+      <div class="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+           @click.stop>
+        <!-- Header -->
+        <div class="shrink-0 px-4 pt-4 pb-3 border-b border-slate-100">
+          <div class="flex items-center gap-3">
+            <img v-if="shareProduct.image_thumb_scale_url || shareProduct.path_thumb"
+                 :src="shareProduct.image_thumb_scale_url || shareProduct.path_thumb"
+                 class="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0 border border-slate-200" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-900 text-sm uppercase truncate">{{ shareProduct.name }}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                      :class="shareKind === 'main' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-700'">
+                  {{ shareKind === 'main' ? 'Ảnh chính' : 'Main + Detail' }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5 m-0">Chọn khách Copilot để gửi thẳng qua Facebook</p>
+            </div>
+            <button type="button"
+                    class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 cursor-pointer"
+                    @click="closeShareModal">
+              <i class="el-icon-close"></i>
+            </button>
+          </div>
+          <div class="mt-3 flex items-center gap-2 bg-slate-100 rounded-xl px-3 h-9">
+            <i class="el-icon-search text-slate-400"></i>
+            <input v-model="copilotSearch"
+                   type="search"
+                   placeholder="Tìm khách hàng Copilot..."
+                   class="flex-1 bg-transparent outline-none text-sm text-slate-800" />
+          </div>
+        </div>
+
+        <!-- Scrollable Copilot Customer List -->
+        <div class="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[200px]">
+          <div v-if="copilotLoading && copilotSessions.length === 0" class="py-12 text-center text-slate-400 text-sm">
+            <i class="el-icon-loading text-2xl block mb-2"></i>
+            Đang tải danh sách khách...
+          </div>
+          <div v-else-if="filteredCopilotSessions.length === 0" class="py-12 text-center text-slate-400 text-sm">
+            <i class="el-icon-chat-dot-round text-3xl block mb-2 text-slate-300"></i>
+            {{ copilotSearch ? 'Không tìm thấy khách phù hợp' : 'Chưa có khách nào bên Copilot' }}
+          </div>
+          <button v-for="s in filteredCopilotSessions"
+                  :key="s.thread_id"
+                  type="button"
+                  :disabled="!!sendingThreadId"
+                  @click="sendToCopilotCustomer(s)"
+                  class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer disabled:opacity-60">
+            <img v-if="s.avatar_url" :src="s.avatar_url" class="w-10 h-10 rounded-full object-cover shrink-0" />
+            <div v-else class="w-10 h-10 rounded-full bg-slate-200 text-slate-600 font-bold flex items-center justify-center uppercase shrink-0">
+              {{ (s.customer_name || 'K').charAt(0) }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-sm text-slate-900 truncate">{{ s.customer_name || 'Khách hàng' }}</div>
+              <div class="text-xs text-slate-400 truncate">{{ copilotLastPreview(s) }}</div>
+            </div>
+            <span class="shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg"
+                  :class="sendingThreadId === s.thread_id ? 'bg-blue-100 text-blue-600' : 'bg-emerald-50 text-emerald-600'">
+              <i v-if="sendingThreadId === s.thread_id" class="el-icon-loading mr-1"></i>
+              {{ sendingThreadId === s.thread_id ? 'Đang gửi...' : 'Gửi FB' }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Fixed Bottom Footer: Copy to clipboard/share like before -->
+        <div class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 flex items-center gap-2"
+             style="padding-bottom: calc(env(safe-area-inset-bottom) + 12px)">
+          <el-button type="primary"
+                     class="w-full font-bold rounded-xl"
+                     icon="el-icon-document-copy"
+                     @click="copyFromShareModal">
+            Copy {{ shareKind === 'main' ? 'Main' : 'Detail' }} (vào bộ nhớ)
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -251,6 +333,13 @@ export default {
       showMobileSearch: true,
       lastScrollTop: 0,
       isSearchFocused: false,
+      shareModalVisible: false,
+      shareProduct: null,
+      shareKind: 'main',
+      copilotSessions: [],
+      copilotLoading: false,
+      copilotSearch: '',
+      sendingThreadId: '',
       productTypes: ['TROUSERS', 'JACKET', 'SHIRT', 'BLAZER', 'TIE', 'GILE', 'BELT', 'POLO SHIRT', 'HAT', 'SUIT'],
       sizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI'],
       sizeMapping: {
@@ -259,6 +348,16 @@ export default {
         'ỐNG': 'Ô', 'DƯ LAI': 'L'
       },
       allSizes: ['VAI', 'NGỰC', 'EO', 'DÀI ÁO', 'DÀI ÁO SAU', 'DÀI TAY', 'EO QUẦN', 'ĐÁY', 'ĐÙI', 'DÀI QUẦN', 'ỐNG', 'DƯ LAI']
+    }
+  },
+  computed: {
+    filteredCopilotSessions() {
+      const q = (this.copilotSearch || '').trim().toLowerCase();
+      return (this.copilotSessions || [])
+        .filter((s) => /^\d+$/.test(s.thread_id || ''))
+        .filter((s) => !q || (s.customer_name || '').toLowerCase().includes(q))
+        .slice()
+        .sort((a, b) => this.copilotSortTime(b) - this.copilotSortTime(a));
     }
   },
   mounted() {
@@ -562,9 +661,75 @@ export default {
     handleMobileAction(command, product) {
         if (command === 'edit') this.editProduct(product);
         if (command === 'copy') this.copyProductInfo(product);
-        if (command === 'copy_main') this.copyMain(product);
-        if (command === 'copy_detail') this.copyDetail(product);
+        if (command === 'copy_main') this.openShareModal(product, 'main');
+        if (command === 'copy_detail') this.openShareModal(product, 'detail');
         if (command === 'delete') this.confirmDelete(product);
+    },
+    openShareModal(product, kind) {
+        this.shareProduct = product;
+        this.shareKind = kind;
+        this.copilotSearch = '';
+        this.shareModalVisible = true;
+        this.fetchCopilotSessions();
+    },
+    closeShareModal() {
+        this.shareModalVisible = false;
+        this.shareProduct = null;
+        this.sendingThreadId = '';
+    },
+    async fetchCopilotSessions() {
+        this.copilotLoading = true;
+        try {
+            const res = await axios.get('/salev2/api/copilot/sessions');
+            this.copilotSessions = (res.data && res.data.sessions) || [];
+        } catch (err) {
+            this.$message.error('Không tải được danh sách khách Copilot');
+        } finally {
+            this.copilotLoading = false;
+        }
+    },
+    copilotSortTime(s) {
+        if (!s) return 0;
+        const last = s.last_message_at && !String(s.last_message_at).startsWith('0001') ? s.last_message_at : s.updated_at;
+        const t = last ? new Date(last).getTime() : 0;
+        return isNaN(t) ? 0 : t;
+    },
+    copilotLastPreview(s) {
+        const msgs = s.messages || [];
+        if (!msgs.length) return 'Chưa có tin nhắn';
+        const m = msgs[msgs.length - 1];
+        if (m.type === 'image') return '[Hình ảnh]';
+        return m.text || '';
+    },
+    async sendToCopilotCustomer(session) {
+        if (!this.shareProduct || !session || this.sendingThreadId) return;
+        this.sendingThreadId = session.thread_id;
+        try {
+            const res = await axios.post('/salev2/api/copilot/send-product-images', {
+                thread_id: session.thread_id,
+                product_id: this.shareProduct.id,
+                kind: this.shareKind
+            });
+            const n = (res.data && res.data.sent) || 0;
+            const kindLabel = this.shareKind === 'main' ? 'ảnh chính' : `${n} ảnh (chính + chi tiết)`;
+            this.$message.success(`Đã gửi ${kindLabel} ${this.shareProduct.name} cho ${session.customer_name || 'khách'}`);
+            this.closeShareModal();
+        } catch (err) {
+            const msg = (err.response && err.response.data && err.response.data.error) || err.message || 'Lỗi không xác định';
+            this.$message.error('Gửi ảnh thất bại: ' + msg);
+        } finally {
+            this.sendingThreadId = '';
+        }
+    },
+    copyFromShareModal() {
+        if (!this.shareProduct) return;
+        const product = this.shareProduct;
+        const kind = this.shareKind;
+        if (kind === 'main') {
+            this.copyMain(product);
+        } else {
+            this.copyDetail(product);
+        }
     }
   }
 }
