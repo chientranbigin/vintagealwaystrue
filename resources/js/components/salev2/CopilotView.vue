@@ -165,9 +165,9 @@
 
         <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2" style="padding-bottom: calc(env(safe-area-inset-bottom) + 8px)">
-          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
-            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
-            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
+          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="showingAISuggestion ? 'text-violet-700' : 'text-slate-500'">
+            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (showingAISuggestion ? 'el-icon-magic-stick' : 'el-icon-edit')"></i>
+            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (showingAISuggestion ? 'Gợi ý AI' : 'Tin nhắn của bạn') }}</span>
             <button
               class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
               :disabled="!!reanalyzing[activeSession.thread_id]"
@@ -410,9 +410,9 @@
           </div>
           <!-- Composer: AI suggestion pre-filled, editable, clear + send -->
         <div class="shrink-0 border-t border-slate-200 bg-white px-3 pt-2 pb-3" >
-          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="replyDirty ? 'text-slate-500' : (activeSession.ai_generated ? 'text-violet-700' : 'text-slate-500')">
-            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (replyDirty ? 'el-icon-edit' : (activeSession.ai_generated ? 'el-icon-magic-stick' : 'el-icon-lightning'))"></i>
-            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (replyDirty ? 'Tin nhắn của bạn' : (activeSession.ai_generated ? 'Gợi ý AI' : 'Gợi ý nhanh (miễn phí)')) }}</span>
+          <div class="flex items-center gap-1.5 text-[11px] font-bold mb-1" :class="showingAISuggestion ? 'text-violet-700' : 'text-slate-500'">
+            <i :class="reanalyzing[activeSession.thread_id] ? 'el-icon-loading' : (showingAISuggestion ? 'el-icon-magic-stick' : 'el-icon-edit')"></i>
+            <span class="flex-1 truncate">{{ reanalyzing[activeSession.thread_id] ? 'AI đang soạn…' : (showingAISuggestion ? 'Gợi ý AI' : 'Tin nhắn của bạn') }}</span>
             <button
               class="h-6 px-2 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-bold active:bg-violet-100 disabled:opacity-50"
               :disabled="!!reanalyzing[activeSession.thread_id]"
@@ -820,6 +820,7 @@ export default {
     // ---------- navigation ----------
     selectSession(threadId) {
       if (this.activeThreadId !== threadId) {
+        this.editableReply = '';
         this.replyDirty = false;
         this.lastServerReply = '';
         this.receiptImg = '';
@@ -835,13 +836,18 @@ export default {
       }
     },
     async reanalyze(threadId) {
-      if (this.reanalyzing[threadId]) return;
+      if (this.reanalyzing[threadId]) return null;
       this.$set(this.reanalyzing, threadId, true);
       try {
         const res = await axios.post('/salev2/api/copilot/reanalyze', { thread_id: threadId });
-        if (res.data && res.data.session) this.upsertSession(res.data.session);
+        if (res.data && res.data.session) {
+          this.upsertSession(res.data.session);
+          return res.data.session;
+        }
+        return null;
       } catch (e) {
         console.error('Reanalyze failed', e);
+        return null;
       } finally {
         this.$delete(this.reanalyzing, threadId);
       }
@@ -858,8 +864,7 @@ export default {
       this.sheet = 'products';
       if (this.activeSession) this.refreshSession(this.activeSession.thread_id);
     },
-    // 1st tap: put the existing AI suggestion (for the latest message) back in the composer — free.
-    // Tap again while it is shown, or when none exists yet: ask OpenAI for a fresh one.
+    // Only fill the composer when the user explicitly clicks the AI suggestion button.
     async askAI() {
       const sess = this.activeSession;
       if (!sess) return;
@@ -869,7 +874,11 @@ export default {
         return;
       }
       this.replyDirty = false;
-      await this.reanalyze(sess.thread_id);
+      const updated = await this.reanalyze(sess.thread_id);
+      if (updated && this.activeThreadId === sess.thread_id) {
+        this.editableReply = updated.suggested_reply || '';
+        this.replyDirty = false;
+      }
     },
     // Opening a chat always lands on the newest message, even while images above are loading.
     pinToBottom() {
@@ -917,12 +926,7 @@ export default {
       }
     },
     syncActiveState(sess, shouldScroll) {
-      const nextReply = sess.suggested_reply || '';
-      if (nextReply !== this.lastServerReply) {
-        this.lastServerReply = nextReply;
-        // Never overwrite what the user is typing; they can pull the new suggestion back in.
-        if (!this.replyDirty) this.editableReply = nextReply;
-      }
+      this.lastServerReply = sess.suggested_reply || '';
       if (shouldScroll || this.stickToBottom) this.$nextTick(() => this.scrollChatToBottom());
       if (sess.created_order && (!this.receiptImg || !this.renderedOrderId || this.renderedOrderId !== sess.created_order.id)) {
         this.renderReceipt(sess.created_order);
