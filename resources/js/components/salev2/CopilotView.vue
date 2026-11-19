@@ -136,30 +136,39 @@
           <div
             v-for="(msg, idx) in activeSession.messages"
             :key="'mm-' + idx"
-            class="flex"
-            :class="msg.sender === 'shop' ? 'justify-end' : 'justify-start'"
           >
-            <div v-if="msg.type === 'image'" class="max-w-[70%]">
-              <img
-                v-if="(msg.image_base64 || msg.image_url) && !brokenImages[msg.image_base64 || msg.image_url]"
-                :src="msg.image_base64 || msg.image_url"
-                referrerpolicy="no-referrer"
-                loading="lazy"
-                class="max-h-[260px] rounded-2xl object-cover block border border-slate-100"
-                @load="onChatImageLoad"
-                @click="previewImage(msg.image_base64 || msg.image_url)"
-                @error="markImageBroken(msg.image_base64 || msg.image_url)"
-              />
-              <div v-else class="px-3 py-2 rounded-2xl bg-slate-100 text-xs italic text-slate-500">[Ảnh]</div>
+            <div v-if="shouldShowDateDivider(activeSession.messages, idx)" class="flex items-center justify-center my-2.5">
+              <span class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold">
+                {{ formatDateDivider(msg.timestamp) }}
+              </span>
             </div>
-            <div
-              v-else
-              class="max-w-[78%] px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap break-words rounded-[18px]"
-              :class="[
-                msg.sender === 'shop' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900',
-                msg.pending ? 'opacity-60' : ''
-              ]"
-            >{{ msg.text }}</div>
+            <div class="flex" :class="msg.sender === 'shop' ? 'justify-end' : 'justify-start'">
+              <div v-if="msg.type === 'image'" class="max-w-[70%]">
+                <img
+                  v-if="(msg.image_base64 || msg.image_url) && !brokenImages[msg.image_base64 || msg.image_url]"
+                  :src="msg.image_base64 || msg.image_url"
+                  referrerpolicy="no-referrer"
+                  loading="lazy"
+                  class="max-h-[260px] rounded-2xl object-cover block border border-slate-100"
+                  @load="onChatImageLoad"
+                  @click="previewImage(msg.image_base64 || msg.image_url)"
+                  @error="markImageBroken(msg.image_base64 || msg.image_url)"
+                />
+                <div v-else class="px-3 py-2 rounded-2xl bg-slate-100 text-xs italic text-slate-500">[Ảnh]</div>
+                <div v-if="msg.timestamp" class="text-[10px] text-slate-400 mt-0.5 px-1" :class="msg.sender === 'shop' ? 'text-right' : 'text-left'">{{ formatMsgTime(msg.timestamp) }}</div>
+              </div>
+              <div
+                v-else
+                class="max-w-[78%] px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap break-words rounded-[18px]"
+                :class="[
+                  msg.sender === 'shop' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900',
+                  msg.pending ? 'opacity-60' : ''
+                ]"
+              >
+                <div>{{ msg.text }}</div>
+                <div v-if="msg.timestamp" class="text-[10px] mt-0.5" :class="msg.sender === 'shop' ? 'text-blue-100 text-right' : 'text-slate-400'">{{ formatMsgTime(msg.timestamp) }}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -381,30 +390,36 @@
             <div
               v-for="(msg, idx) in activeSession.messages"
               :key="'dm-' + idx"
-              class="flex"
-              :class="msg.sender === 'shop' ? 'justify-end' : 'justify-start'"
             >
-              <div
-                class="max-w-[80%] rounded-2xl px-3.5 py-2 text-[13px] shadow-sm"
-                :class="[
-                  msg.sender === 'shop' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-sm',
-                  msg.pending ? 'opacity-60' : ''
-                ]"
-              >
-                <div v-if="msg.type === 'image'">
-                  <img
-                    v-if="(msg.image_base64 || msg.image_url) && !brokenImages[msg.image_base64 || msg.image_url]"
-                    :src="msg.image_base64 || msg.image_url"
-                    referrerpolicy="no-referrer"
-                    loading="lazy"
-                    class="max-w-[230px] max-h-[260px] rounded-xl object-cover cursor-pointer block"
-                    @load="onChatImageLoad"
-                    @click="previewImage(msg.image_base64 || msg.image_url)"
-                    @error="markImageBroken(msg.image_base64 || msg.image_url)"
-                  />
-                  <div v-else class="text-xs italic opacity-75 py-1">[Ảnh]</div>
+              <div v-if="shouldShowDateDivider(activeSession.messages, idx)" class="flex items-center justify-center my-3">
+                <span class="px-3 py-0.5 rounded-full bg-slate-200/80 text-slate-600 text-[11px] font-semibold">
+                  {{ formatDateDivider(msg.timestamp) }}
+                </span>
+              </div>
+              <div class="flex" :class="msg.sender === 'shop' ? 'justify-end' : 'justify-start'">
+                <div
+                  class="max-w-[80%] rounded-2xl px-3.5 py-2 text-[13px] shadow-sm"
+                  :class="[
+                    msg.sender === 'shop' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-sm',
+                    msg.pending ? 'opacity-60' : ''
+                  ]"
+                >
+                  <div v-if="msg.type === 'image'">
+                    <img
+                      v-if="(msg.image_base64 || msg.image_url) && !brokenImages[msg.image_base64 || msg.image_url]"
+                      :src="msg.image_base64 || msg.image_url"
+                      referrerpolicy="no-referrer"
+                      loading="lazy"
+                      class="max-w-[230px] max-h-[260px] rounded-xl object-cover cursor-pointer block"
+                      @load="onChatImageLoad"
+                      @click="previewImage(msg.image_base64 || msg.image_url)"
+                      @error="markImageBroken(msg.image_base64 || msg.image_url)"
+                    />
+                    <div v-else class="text-xs italic opacity-75 py-1">[Ảnh]</div>
+                  </div>
+                  <div v-else class="whitespace-pre-wrap break-words leading-relaxed">{{ msg.text }}</div>
+                  <div v-if="msg.timestamp" class="text-[10px] mt-1" :class="msg.sender === 'shop' ? 'text-blue-100 text-right' : 'text-slate-400'">{{ formatMsgTime(msg.timestamp) }}</div>
                 </div>
-                <div v-else class="whitespace-pre-wrap break-words leading-relaxed">{{ msg.text }}</div>
               </div>
             </div>
           </div>
@@ -1219,6 +1234,37 @@ export default {
         return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
       }
       return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    },
+    messageDateKey(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    },
+    shouldShowDateDivider(messages, idx) {
+      if (!messages || !messages[idx]) return false;
+      const cur = this.messageDateKey(messages[idx].timestamp);
+      if (!cur) return false;
+      if (idx === 0) return true;
+      const prev = this.messageDateKey(messages[idx - 1] && messages[idx - 1].timestamp);
+      return cur !== prev;
+    },
+    formatDateDivider(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      if (d.toDateString() === now.toDateString()) return 'Hôm nay';
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      if (d.toDateString() === yesterday.toDateString()) return 'Hôm qua';
+      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    },
+    formatMsgTime(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     }
   }
 };

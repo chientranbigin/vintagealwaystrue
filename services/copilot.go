@@ -35,6 +35,7 @@ type CopilotMessage struct {
 	ImageBase64 string `json:"image_base64,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
 	OCRText     string `json:"ocr_text,omitempty"`
+	Timestamp   string `json:"timestamp,omitempty"`
 }
 
 type CopilotIngestRequest struct {
@@ -1021,12 +1022,17 @@ func (s *CopilotService) RebuildSession(ctx context.Context, psid string, useAI 
 		if r.Type == "text" && IsFBSystemNotice(r.Text) {
 			continue
 		}
+		var tsStr string
+		if !r.MsgTimestamp.IsZero() {
+			tsStr = r.MsgTimestamp.Format(time.RFC3339)
+		}
 		msgs = append(msgs, CopilotMessage{
-			Sender:   r.Sender,
-			Type:     r.Type,
-			Text:     r.Text,
-			ImageURL: r.ImageURL,
-			OCRText:  r.OCRText,
+			Sender:    r.Sender,
+			Type:      r.Type,
+			Text:      r.Text,
+			ImageURL:  r.ImageURL,
+			OCRText:   r.OCRText,
+			Timestamp: tsStr,
 		})
 	}
 	// Products + AI work on the recent part of the chat only, so old purchases don't flood the
