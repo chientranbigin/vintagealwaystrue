@@ -188,6 +188,10 @@
                   <el-dropdown-item command="shipping_info">📦 Cho e xin thông tin giao hàng</el-dropdown-item>
                   <el-dropdown-item command="detail_photos">📸 E gửi ảnh chi tiết ạ</el-dropdown-item>
                   <el-dropdown-item command="shipping_fee">🚚 Phí ship 20k → 25k tùy nơi + khối lượng</el-dropdown-item>
+                  <el-dropdown-item command="send_bill">🧾 Em gửi bill nhé ạ</el-dropdown-item>
+                  <el-dropdown-item command="bank_text">🏦 STK Vietcombank (chữ)</el-dropdown-item>
+                  <el-dropdown-item command="received_money">✅ Dạ đã nhận nhé ạ</el-dropdown-item>
+                  <el-dropdown-item command="thank_you">🙏 Dạ em cảm ơn anh nha</el-dropdown-item>
                   <el-dropdown-item divided command="qr_payment">💳 Gửi mã QR chuyển khoản</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
@@ -460,6 +464,10 @@
                   <el-dropdown-item command="shipping_info">📦 Cho e xin thông tin giao hàng</el-dropdown-item>
                   <el-dropdown-item command="detail_photos">📸 E gửi ảnh chi tiết ạ</el-dropdown-item>
                   <el-dropdown-item command="shipping_fee">🚚 Phí ship 20k → 25k tùy nơi + khối lượng</el-dropdown-item>
+                  <el-dropdown-item command="send_bill">🧾 Em gửi bill nhé ạ</el-dropdown-item>
+                  <el-dropdown-item command="bank_text">🏦 STK Vietcombank (chữ)</el-dropdown-item>
+                  <el-dropdown-item command="received_money">✅ Dạ đã nhận nhé ạ</el-dropdown-item>
+                  <el-dropdown-item command="thank_you">🙏 Dạ em cảm ơn anh nha</el-dropdown-item>
                   <el-dropdown-item divided command="qr_payment">💳 Gửi mã QR chuyển khoản</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
@@ -1138,7 +1146,11 @@ export default {
       const templates = {
         shipping_info: 'Dạ cho em xin thông tin giao hàng (Tên, SĐT, Địa chỉ) để em lên đơn nha ạ.',
         detail_photos: 'Dạ em gửi ảnh chi tiết sản phẩm ạ.',
-        shipping_fee: 'Dạ phí ship bên em từ 20k → 25k tùy nơi và khối lượng hàng ạ.'
+        shipping_fee: 'Dạ phí ship bên em từ 20k → 25k tùy nơi và khối lượng hàng ạ.',
+        send_bill: 'Em gửi bill nhé ạ',
+        bank_text: 'Vietcombank\n0441000814334\nTran Quoc Chien',
+        received_money: 'Dạ đã nhận nhé ạ',
+        thank_you: 'Dạ em cảm ơn anh nha'
       };
       if (templates[cmd]) {
         this.editableReply = templates[cmd];
