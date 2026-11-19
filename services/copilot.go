@@ -1543,7 +1543,7 @@ func (s *CopilotService) consumeSkipOCR(psid string) bool {
 }
 
 // ProductImagesForSend returns the original photo URLs of a product: kind "main" = the main
-// photo; kind "detail" = the other photos (only for AVAILABLE products).
+// photo; kind "detail" = main + all detail photos (only for AVAILABLE products).
 func (s *CopilotService) ProductImagesForSend(productID uint, kind string) ([]string, string, error) {
 	if s.DB == nil {
 		return nil, "", fmt.Errorf("database not initialized")
@@ -1566,7 +1566,7 @@ func (s *CopilotService) ProductImagesForSend(productID uint, kind string) ([]st
 	if len(all) < 2 {
 		return nil, code, fmt.Errorf("%s chưa có ảnh chi tiết", code)
 	}
-	return all[1:], code, nil
+	return all, code, nil // main photo first, then the detail photos
 }
 
 // SendFBImageURL sends one image to a Messenger user by public URL (Facebook downloads it).

@@ -232,9 +232,9 @@
                     v-if="p.status === 'AVAILABLE' && (p.images || []).length > 1"
                     class="h-7 px-2 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center gap-1 active:bg-blue-700 disabled:opacity-50 shrink-0"
                     :disabled="!canSendToCustomer || !!sendingImg[p.id + ':detail']"
-                    title="Gửi ảnh chi tiết vào chat"
+                    title="Gửi ảnh chính + chi tiết vào chat"
                     @click.stop="sendProductImages(p, 'detail')"
-                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length - 1 }}</button>
+                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length }}</button>
                 </div>
                 <div class="flex items-center gap-2 mt-0.5">
                   <span class="text-sm font-bold text-slate-700">{{ formatPrice(p.price) }}</span>
@@ -488,9 +488,9 @@
                     v-if="p.status === 'AVAILABLE' && (p.images || []).length > 1"
                     class="h-6 px-2 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center gap-1 active:bg-blue-700 disabled:opacity-50 shrink-0"
                     :disabled="!canSendToCustomer || !!sendingImg[p.id + ':detail']"
-                    title="Gửi ảnh chi tiết vào chat"
+                    title="Gửi ảnh chính + chi tiết vào chat"
                     @click.stop="sendProductImages(p, 'detail')"
-                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length - 1 }}</button>
+                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length }}</button>
                     </div>
                   </div>
                   <div class="text-xs font-bold text-slate-700 mt-0.5">{{ formatPrice(p.price) }}</div>
@@ -998,7 +998,7 @@ export default {
           kind
         });
         const n = (res.data && res.data.sent) || 0;
-        this.$message.success(`Đã gửi ${kind === 'main' ? 'ảnh chính' : n + ' ảnh chi tiết'} ${p.code}`);
+        this.$message.success(`Đã gửi ${kind === 'main' ? 'ảnh chính' : n + ' ảnh (chính + chi tiết)'} ${p.code}`);
       } catch (e) {
         const msg = (e.response && e.response.data && e.response.data.error) || e.message;
         this.$message.error('Gửi ảnh thất bại: ' + msg);
