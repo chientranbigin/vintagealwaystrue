@@ -97,7 +97,10 @@
           <span class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">2</span>
           <h2 class="font-bold text-slate-800 text-base">Nội dung bài viết (AI Generated)</h2>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <el-button size="small" icon="el-icon-tickets" type="primary" plain :loading="loadingTemplate" @click="handleUseTemplateContent">
+            Dùng mẫu có sẵn
+          </el-button>
           <el-button size="small" icon="el-icon-refresh" type="warning" plain :loading="loadingRegen" @click="handleRegenContent">
             Viết lại với AI (Regen)
           </el-button>
@@ -355,6 +358,7 @@ export default {
       hasPreviewLoaded: false,
       loadingPreview: false,
       loadingRegen: false,
+      loadingTemplate: false,
       postMessage: '',
       products: [],
       draggedIndex: null,
@@ -436,21 +440,33 @@ export default {
         this.loadingPreview = false;
       }
     },
-    async generateContent() {
+    async generateContent(useTemplate = false) {
       const cat = this.currentCategory;
       const res = await axios.post('/salev2/api/facebook/generate-content', {
         category_code: this.selectedCategoryCode,
         category_name: cat ? cat.name : '',
         album_url: cat ? cat.album_url : '',
         include_event: this.includeEvent,
-        event_name: this.includeEvent ? this.eventName : ''
+        event_name: this.includeEvent ? this.eventName : '',
+        use_template: useTemplate
       });
       this.postMessage = res.data.content || '';
+    },
+    async handleUseTemplateContent() {
+      this.loadingTemplate = true;
+      try {
+        await this.generateContent(true);
+        this.$message.success('Đã tạo nội dung theo mẫu có sẵn!');
+      } catch (err) {
+        this.$message.error('Lỗi tạo nội dung mẫu: ' + (err.response?.data?.error || err.message));
+      } finally {
+        this.loadingTemplate = false;
+      }
     },
     async handleRegenContent() {
       this.loadingRegen = true;
       try {
-        await this.generateContent();
+        await this.generateContent(false);
         this.$message.success('Đã viết lại nội dung mới thành công!');
       } catch (err) {
         this.$message.error('Lỗi tạo lại nội dung: ' + (err.response?.data?.error || err.message));

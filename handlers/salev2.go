@@ -2799,6 +2799,7 @@ type GenerateContentInput struct {
 	AlbumURL     string `json:"album_url"`
 	IncludeEvent bool   `json:"include_event"`
 	EventName    string `json:"event_name"`
+	UseTemplate  bool   `json:"use_template"`
 }
 
 func (h *SaleV2Handler) FacebookGenerateContent(c *gin.Context) {
@@ -2821,6 +2822,7 @@ func (h *SaleV2Handler) FacebookGenerateContent(c *gin.Context) {
 		AlbumURL:     input.AlbumURL,
 		IncludeEvent: input.IncludeEvent,
 		EventName:    input.EventName,
+		UseTemplate:  input.UseTemplate,
 	}
 
 	content, err := h.AIContent.GeneratePostContent(c.Request.Context(), req)

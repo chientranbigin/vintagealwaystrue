@@ -20,6 +20,7 @@ type ContentGenerationRequest struct {
 	IncludeEvent bool   `json:"include_event"`
 	EventName    string `json:"event_name"` // "Giáng Sinh / Noel", "Tết Nguyên Đán", "Mùa Thu Đông", "Tiệc cuối năm", etc.
 	CustomPrompt string `json:"custom_prompt,omitempty"`
+	UseTemplate  bool   `json:"use_template,omitempty"`
 }
 
 type AIContentService struct {
@@ -38,6 +39,10 @@ func NewAIContentService() *AIContentService {
 
 // GeneratePostContent produces an engaging vintage Facebook post caption
 func (s *AIContentService) GeneratePostContent(ctx context.Context, req ContentGenerationRequest) (string, error) {
+	if req.UseTemplate {
+		return s.GenerateProceduralContent(req), nil
+	}
+
 	// If OpenAI Key is available, attempt OpenAI generation first
 	if s.OpenAIKey != "" {
 		if content, err := s.callOpenAI(ctx, req); err == nil && content != "" {
@@ -50,38 +55,52 @@ func (s *AIContentService) GeneratePostContent(ctx context.Context, req ContentG
 }
 
 func (s *AIContentService) callOpenAI(ctx context.Context, req ContentGenerationRequest) (string, error) {
-	prompt := fmt.Sprintf(`Bạn là copywriter chuyên nghiệp cho shop thời trang nam Vintage Always True.
-Hãy viết một bài đăng Facebook bán hàng cực kỳ hấp dẫn cho danh mục: %s (%s).
+	baseTemplate := s.GenerateProceduralContent(req)
+	eventInstruction := "KHÔNG thêm nội dung dịp lễ."
+	if req.IncludeEvent && req.EventName != "" {
+		eventInstruction = "Giữ nguyên tinh thần dịp lễ/sự kiện: " + req.EventName + "."
+	}
 
-Yêu cầu nội dung:
-1. Tiêu đề (Hook): Bắt mắt với icon, nêu rõ loại sản phẩm và mức giá đặc trưng (nếu quần âu thì đồng giá 180k, gile 120k, blazer/jacket giá trên từng ảnh).
-2. Sự kiện / Mùa lễ: %s
-3. Điểm nổi bật: Tôn lên nét đẹp cổ điển (classic vintage), chất liệu vải, độ mới cao, tính đa dụng dễ phối đồ.
-4. Thông số: Nhắc nhở người mua đọc kỹ thông số (ngang ngực, vai, eo, dài vạt...) đã ghi trực tiếp trên từng ảnh.
-5. Cam kết của shop: Hàng 2hand tuyển chọn, mỗi mẫu 1 chiếc duy nhất, đã giặt ủi sạch sẽ, ship COD toàn quốc hỗ trợ đồng kiểm.
-6. Kết bài bắt buộc:
+	prompt := fmt.Sprintf(`Bạn là copywriter cho shop thời trang nam Vintage Always True.
+Hãy viết lại (paraphrase) bài đăng Facebook mẫu dưới đây cho danh mục %s (%s) để câu chữ mới mẻ, tự nhiên hơn nhưng PHẢI GIỮ SÁT BỐ CỤC VÀ NỘI DUNG CŨ.
+
+BÀI MẪU CHUẨN:
+"""
+%s
+"""
+
+QUY TẮC BẮT BUỘC:
+1. Chỉ đổi cách diễn đạt / từ ngữ cho mượt mà, tự nhiên theo đúng văn phong shop (xưng "shop", gọi khách "anh em"). Không bịa thêm ý dài dòng, độ dài tương đương bài mẫu.
+2. Giữ NGUYÊN TOÀN BỘ thông tin thực tế từ bài mẫu:
+   - Mức giá (ví dụ: đồng giá 120k, giá trên từng ảnh / đồng giá 180k, v.v. — tuyệt đối không tự đổi giá).
+   - Các thông số đo đạc đúng như bài mẫu (không tự thêm bớt tên thông số).
+   - Các cam kết (2hand tuyển chọn mỗi mẫu 1 chiếc duy nhất, giặt ủi sạch sẽ, ship COD đồng kiểm, lưu ý nếu có).
+   - %s
+3. Giữ nguyên cấu trúc các đoạn phân cách (--- hoặc ———) và icon đầu dòng hợp lý.
+4. Giữ nguyên phần kết bài và link trơn:
 👉 Để xem thêm sp và check sp còn hàng tại:
 %s
-7. Hashtags phù hợp ở cuối bài.
-Không dùng markdown dấu sao quá nhiều, dùng định dạng văn bản Facebook tự nhiên, gạch ngang phân đoạn, icon phù hợp.`,
+và giữ nguyên các hashtag ở cuối bài.
+5. TUYỆT ĐỐI KHÔNG dùng Markdown: không viết **in đậm**, *in nghiêng*, # tiêu đề, hay [Link](url). Chỉ xuất văn bản thuần (plain text) để dán thẳng lên Facebook.`,
 		req.CategoryCode,
 		req.CategoryName,
+		baseTemplate,
+		eventInstruction,
 		func() string {
-			if req.IncludeEvent && req.EventName != "" {
-				return "BẮT BUỘC lồng ghép khéo léo không khí: " + req.EventName + " (ví dụ: sắm đồ ấm đi chơi Noel, dự tiệc cuối năm, du xuân, lên đồ ấm áp ngày đông...)"
+			if req.AlbumURL != "" {
+				return req.AlbumURL
 			}
-			return "KHÔNG lồng ghép dịp lễ, viết theo phong cách chuẩn mực Vintage hằng ngày (timeless classic)."
+			return "https://www.facebook.com/236648362875702"
 		}(),
-		req.AlbumURL,
 	)
 
 	payload := map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
-			{"role": "system", "content": "Bạn là chuyên gia viết content bán hàng thời trang Vintage chất lượng cao, súc tích, tinh tế và có gu."},
+			{"role": "system", "content": "Bạn là chuyên gia viết content bán hàng thời trang Vintage. Luôn bám sát bài mẫu, chỉ thay đổi câu chữ cho tự nhiên và tuyệt đối không dùng Markdown."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.8,
+		"temperature": 0.6,
 	}
 
 	jsonBytes, err := json.Marshal(payload)
