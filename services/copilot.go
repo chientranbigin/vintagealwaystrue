@@ -577,10 +577,12 @@ func (s *CopilotService) callCopilotAI(ctx context.Context, systemPrompt, userPr
 }
 
 func (s *CopilotService) fallbackSuggestion(customerName, action, transcript string, messages []CopilotMessage, products []CopilotProductMatch) aiCopilotOutput {
-	parsed := s.SmartOrder.FallbackParse(transcript)
-	if parsed.Name == "" {
-		parsed.Name = customerName
-	}
+	// Parse order info only from what the customer typed: shop messages and photo OCR (bank QR,
+	// product labels, receipts) produced garbage names/addresses.
+	parsed := s.SmartOrder.FallbackParse(CustomerTextForOrderParse(messages))
+	// The rule parser often takes a chat line ("cho mình lấy quần này nhé") as the name;
+	// the Facebook name is the reliable default (editable on the Create Order page).
+	parsed.Name = customerName
 
 	// Only answer codes the customer asked about after the shop's last reply.
 	pending := s.pendingCustomerCodes(messages)
@@ -1609,4 +1611,19 @@ func (s *CopilotService) SendFBImageURL(ctx context.Context, psid, imageURL, pag
 		return fmt.Errorf("Facebook HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// CustomerTextForOrderParse joins the customer's own text messages (newest 20, no OCR, no shop
+// messages) — the input used to extract name / phone / address for an order.
+func CustomerTextForOrderParse(messages []CopilotMessage) string {
+	var lines []string
+	for _, m := range messages {
+		if m.Sender == "customer" && m.Type != "image" && strings.TrimSpace(m.Text) != "" {
+			lines = append(lines, strings.TrimSpace(m.Text))
+		}
+	}
+	if len(lines) > 20 {
+		lines = lines[len(lines)-20:]
+	}
+	return strings.Join(lines, "\n")
 }

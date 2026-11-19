@@ -153,3 +153,19 @@ func TestBuildProductContextGroups(t *testing.T) {
 		t.Fatalf("context:\n%s", ctx)
 	}
 }
+
+func TestCustomerTextForOrderParseSkipsShopAndOCR(t *testing.T) {
+	msgs := []CopilotMessage{
+		{Sender: "shop", Type: "image", OCRText: "Vietcombank napas 247 TRAN QUOC CHIEN"},
+		{Sender: "customer", Type: "text", Text: "cho mình lấy quần này nhé"},
+		{Sender: "shop", Type: "text", Text: "A chốt thì cho e xin thông tin giao hàng"},
+		{Sender: "customer", Type: "image", OCRText: "TS4681 E96"},
+		{Sender: "customer", Type: "text", Text: "175 Bùi Xương Trạch, Khương Đình, Thanh Xuân, Hà Nội"},
+		{Sender: "customer", Type: "text", Text: "sđt 0977869251"},
+	}
+	got := CustomerTextForOrderParse(msgs)
+	want := "cho mình lấy quần này nhé\n175 Bùi Xương Trạch, Khương Đình, Thanh Xuân, Hà Nội\nsđt 0977869251"
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+}

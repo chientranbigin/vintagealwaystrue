@@ -955,6 +955,36 @@ export default {
         const avail = this.availableProducts.map((p) => p.code);
         let codes = (draft.product_codes || []).filter((c) => avail.includes(c));
         if (!codes.length && avail.length === 1) codes = avail;
+
+        // Customer info: parse only what the customer typed (no shop messages, no photo OCR)
+        // with the same Smart Paste parser as the Create Order page.
+        let info = { name: '', phone: draft.phone || '', address: draft.address || '', note: draft.note || '' };
+        const customerText = (sess.messages || [])
+          .filter((m) => m.sender === 'customer' && m.type !== 'image' && (m.text || '').trim())
+          .slice(-20)
+          .map((m) => m.text.trim())
+          .join('\n');
+        if (customerText) {
+          try {
+            const pr = await axios.post('/salev2/api/order/smart-parse', { description: customerText });
+            const parsed = (pr.data && pr.data.parsed) || {};
+            // Smart Paste answered: trust it fully (the rule-based draft can put questions in "address").
+            // Note: only an explicit "ghi chú:/note:" (rule parser) — the AI puts chit-chat there.
+            info = {
+              name: parsed.name || '',
+              phone: parsed.phone || '',
+              address: parsed.address || '',
+              note: draft.note || ''
+            };
+            (pr.data.matched_products || []).forEach((mp) => {
+              if (mp.status === 'AVAILABLE' && avail.includes(mp.name) && !codes.includes(mp.name)) codes.push(mp.name);
+            });
+          } catch (e) {
+            /* keep the rule-based draft */
+          }
+        }
+        const looksLikeName = (n) => n && n.length <= 40 && !/[:\[\]\d]/.test(n);
+        info.name = looksLikeName(info.name) ? info.name : (sess.customer_name || '');
         let matched = [];
         if (codes.length) {
           const res = await axios.get('/salev2/api/products', {
@@ -968,12 +998,7 @@ export default {
         sessionStorage.setItem(
           'smart_order_prefill',
           JSON.stringify({
-            parsed: {
-              name: draft.name || sess.customer_name || '',
-              phone: draft.phone || '',
-              address: draft.address || '',
-              note: draft.note || ''
-            },
+            parsed: info,
             matched_products: matched,
             copilot_thread: sess.thread_id
           })
