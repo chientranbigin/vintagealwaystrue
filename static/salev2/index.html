@@ -29,6 +29,7 @@
         /* POS Button Active Override */
         .router-link-active.pos-link { background-color: transparent !important; }
         .router-link-active.pos-link i { color: white !important; }
+        [v-cloak] { display: none !important; }
     </style>
 </head>
 <body>
@@ -48,10 +49,6 @@
                         <i class="el-icon-odometer text-lg"></i>
                         <span>Dashboard</span>
                     </router-link>
-                    <router-link to="/salev2/order/create" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
-                        <i class="el-icon-plus text-lg font-bold"></i>
-                         <span>POS</span>
-                    </router-link>
                     <router-link to="/salev2/orders" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
                         <i class="el-icon-shopping-cart-2 text-lg"></i>
                         <span>Orders</span>
@@ -60,32 +57,51 @@
                         <i class="el-icon-box text-lg"></i>
                         <span>Products</span>
                     </router-link>
-                     <router-link to="/salev2/customers" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
+                    <router-link to="/salev2/customers" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
                         <i class="el-icon-user text-lg"></i>
                         <span>Customers</span>
                     </router-link>
-                    <div class="w-px h-6 bg-slate-200 mx-2"></div>
-                    <router-link to="/salev2/upload" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
-                        <i class="el-icon-upload text-lg"></i>
-                        <span>Upload</span>
-                    </router-link>
-                    <router-link to="/salev2/upload-sessions" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
-                        <i class="el-icon-folder-opened text-lg"></i>
-                        <span>Sessions</span>
-                    </router-link>
-                    <router-link to="/salev2/facebook-post" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-blue-50 text-slate-700 hover:text-blue-600 font-bold text-sm bg-slate-50 border border-slate-200/80">
-                        <i class="el-icon-s-promotion text-lg text-blue-600"></i>
-                        <span>Đăng FB</span>
-                    </router-link>
-                    <router-link to="/salev2/copilot" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-emerald-50 text-slate-700 hover:text-emerald-600 font-bold text-sm bg-emerald-50/50 border border-emerald-200/80">
-                        <i class="el-icon-chat-dot-round text-lg text-emerald-600"></i>
-                        <span>Copilot</span>
-                    </router-link>
-                    
-                    <a href="/sale" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-blue-50 text-blue-600 font-bold text-sm ml-2 border border-blue-100">
-                        <i class="el-icon-refresh-left text-lg"></i>
-                        <span>Switch to V1</span>
-                    </a>
+
+                    <!-- Desktop More Dropdown -->
+                    <div class="relative">
+                        <button type="button"
+                                @click.stop="desktopMoreOpen = !desktopMoreOpen; mobileMoreOpen = false"
+                                :class="isDesktopMoreActive || desktopMoreOpen ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'"
+                                class="flex items-center gap-1.5 px-4 h-10 rounded-lg transition-all font-medium text-sm cursor-pointer">
+                            <i class="el-icon-menu text-lg"></i>
+                            <span>Thêm</span>
+                            <i class="el-icon-arrow-down text-xs transition-transform duration-150" :class="desktopMoreOpen ? 'rotate-180' : ''"></i>
+                        </button>
+
+                        <div v-if="desktopMoreOpen" v-cloak @click.stop
+                             class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
+                            <router-link to="/salev2/order/create" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                                <i class="el-icon-plus text-base font-bold"></i>
+                                <span>Tạo đơn (POS)</span>
+                            </router-link>
+                            <router-link to="/salev2/upload" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                                <i class="el-icon-upload text-base"></i>
+                                <span>Upload</span>
+                            </router-link>
+                            <router-link to="/salev2/upload-sessions" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                                <i class="el-icon-folder-opened text-base"></i>
+                                <span>Sessions</span>
+                            </router-link>
+                            <router-link to="/salev2/facebook-post" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                                <i class="el-icon-s-promotion text-base text-blue-600"></i>
+                                <span>Đăng FB</span>
+                            </router-link>
+                            <router-link to="/salev2/copilot" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                                <i class="el-icon-chat-dot-round text-base text-emerald-600"></i>
+                                <span>Copilot</span>
+                            </router-link>
+                            <div class="my-1.5 border-t border-slate-100"></div>
+                            <a href="/sale" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
+                                <i class="el-icon-refresh-left text-base"></i>
+                                <span>Switch to V1</span>
+                            </a>
+                        </div>
+                    </div>
                 </nav>
 
                 <!-- Profile -->
@@ -102,11 +118,38 @@
                 <router-view></router-view>
             </main>
 
+            <!-- Mobile More Dropup Backdrop & Menu -->
+            <div v-if="mobileMoreOpen" v-cloak @click="mobileMoreOpen = false" class="md:hidden fixed inset-0 bg-black/20 z-40"></div>
+            <div v-if="mobileMoreOpen" v-cloak @click.stop
+                 class="md:hidden fixed bottom-20 right-3 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50">
+                <router-link to="/salev2" exact class="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <i class="el-icon-odometer text-lg"></i>
+                    <span>Dashboard</span>
+                </router-link>
+                <router-link to="/salev2/customers" class="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <i class="el-icon-user text-lg"></i>
+                    <span>Customers</span>
+                </router-link>
+                <router-link to="/salev2/upload" class="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <i class="el-icon-upload text-lg"></i>
+                    <span>Upload</span>
+                </router-link>
+                <router-link to="/salev2/facebook-post" class="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-blue-50">
+                    <i class="el-icon-s-promotion text-lg text-blue-600"></i>
+                    <span>Đăng FB</span>
+                </router-link>
+                <div class="my-1 border-t border-slate-100"></div>
+                <a href="/sale" class="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-blue-600 hover:bg-blue-50">
+                    <i class="el-icon-refresh-left text-lg"></i>
+                    <span>Switch to V1</span>
+                </a>
+            </div>
+
             <!-- Bottom Navigation (Mobile) -->
-            <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 z-50 px-2 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-                <router-link to="/salev2" exact class="flex flex-col items-center justify-center w-full h-full text-slate-400">
-                    <i class="el-icon-odometer text-xl"></i>
-                    <span class="text-[10px] font-bold uppercase mt-1">Dash</span>
+            <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 z-50 px-1 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+                <router-link to="/salev2/products" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+                    <i class="el-icon-box text-xl"></i>
+                    <span class="text-[10px] font-bold uppercase mt-1">Products</span>
                 </router-link>
                 <router-link to="/salev2/orders" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
                     <i class="el-icon-shopping-cart-2 text-xl"></i>
@@ -117,14 +160,6 @@
                         <i class="el-icon-plus text-xl font-bold"></i>
                      </div>
                 </router-link>
-                 <router-link to="/salev2/products" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
-                    <i class="el-icon-box text-xl"></i>
-                    <span class="text-[10px] font-bold uppercase mt-1">Products</span>
-                </router-link>
-                <!-- <router-link to="/salev2/customers" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
-                    <i class="el-icon-user text-xl"></i>
-                    <span class="text-[10px] font-bold uppercase mt-1">Customers</span>
-                </router-link> -->
                 <router-link to="/salev2/copilot" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
                     <i class="el-icon-chat-dot-round text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Copilot</span>
@@ -133,10 +168,13 @@
                     <i class="el-icon-folder-opened text-xl"></i>
                     <span class="text-[10px] font-bold uppercase mt-1">Sessions</span>
                 </router-link>
-                <a href="/sale" class="flex flex-col items-center justify-center w-full h-full text-blue-500 ">
-                    <i class="el-icon-refresh-left text-xl"></i>
-                    <span class="text-[10px] font-bold uppercase mt-1">V1</span>
-                </a>
+                <button type="button"
+                        @click.stop="mobileMoreOpen = !mobileMoreOpen; desktopMoreOpen = false"
+                        :class="isMobileMoreActive || mobileMoreOpen ? 'text-blue-600' : 'text-slate-400'"
+                        class="flex flex-col items-center justify-center w-full h-full cursor-pointer">
+                    <i class="el-icon-more text-xl"></i>
+                    <span class="text-[10px] font-bold uppercase mt-1">Thêm</span>
+                </button>
             </nav>
         </div>
     </div>
@@ -151,6 +189,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
 
-    <script src="/js/app.js?v=20261119_copilot_parse"></script>
+    <script src="/js/app.js?v=20261119_menu_dropdown"></script>
 </body>
 </html>

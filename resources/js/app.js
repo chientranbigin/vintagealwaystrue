@@ -57,5 +57,48 @@ if (token) {
 
 const app = new Vue({
     el: '#app',
-    router
+    router,
+    data: {
+        desktopMoreOpen: false,
+        mobileMoreOpen: false
+    },
+    computed: {
+        isDesktopMoreActive() {
+            const p = this.$route ? this.$route.path : '';
+            return [
+                '/salev2/order/create',
+                '/salev2/upload',
+                '/salev2/upload-sessions',
+                '/salev2/facebook-post',
+                '/salev2/copilot'
+            ].includes(p);
+        },
+        isMobileMoreActive() {
+            const p = this.$route ? this.$route.path : '';
+            return [
+                '/salev2',
+                '/salev2/customers',
+                '/salev2/upload',
+                '/salev2/facebook-post'
+            ].includes(p);
+        }
+    },
+    watch: {
+        $route() {
+            this.desktopMoreOpen = false;
+            this.mobileMoreOpen = false;
+        }
+    },
+    mounted() {
+        document.addEventListener('click', this.closeMenus);
+    },
+    beforeDestroy() {
+        document.removeEventListener('click', this.closeMenus);
+    },
+    methods: {
+        closeMenus() {
+            this.desktopMoreOpen = false;
+            this.mobileMoreOpen = false;
+        }
+    }
 });
