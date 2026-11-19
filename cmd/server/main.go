@@ -250,6 +250,7 @@ func main() {
 	api.POST("/copilot/send-text", copilot.SendText)
 	api.POST("/copilot/reanalyze", copilot.Reanalyze)
 	api.POST("/copilot/refresh", copilot.Refresh)
+	api.POST("/copilot/send-product-images", copilot.SendProductImages)
 	api.POST("/copilot/link-order", copilot.LinkOrder)
 	api.GET("/usage", copilot.Usage)
 

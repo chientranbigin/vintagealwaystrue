@@ -220,17 +220,24 @@
             <div v-for="p in activeSession.detected_products" :key="'sp-' + p.id" class="flex gap-3 py-2.5 border-b border-slate-100">
               <img v-if="p.thumb_url" :src="p.thumb_url" class="w-16 h-20 rounded-lg object-cover border border-slate-100 shrink-0" @click="previewImage(p.thumb_url)" />
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-[15px] text-slate-900 flex-1">{{ p.code }}</span>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="font-bold text-[15px] text-slate-900 flex-1 min-w-[64px]">{{ p.code }}</span>
                   <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="p.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">
                     {{ p.status === 'AVAILABLE' ? 'Còn hàng' : 'Đã bán' }}
                   </span>
+<button
+                    class="h-7 px-2 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center gap-1 active:bg-slate-200 disabled:opacity-50 shrink-0"
+                    :disabled="!canSendToCustomer || !!sendingImg[p.id + ':main']"
+                    title="Gửi ảnh chính vào chat"
+                    @click.stop="sendProductImages(p, 'main')"
+                  ><i :class="sendingImg[p.id + ':main'] ? 'el-icon-loading' : 'el-icon-picture-outline'"></i>Chính</button>
                   <button
-                    class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:bg-slate-200 shrink-0"
-                    aria-label="Copy ảnh gốc sản phẩm"
-                    title="Copy ảnh gốc (chính + chi tiết)"
-                    @click.stop="openProductImages(p)"
-                  ><i class="el-icon-document-copy text-[13px]"></i></button>
+                    v-if="p.status === 'AVAILABLE' && (p.images || []).length > 1"
+                    class="h-7 px-2 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center gap-1 active:bg-blue-700 disabled:opacity-50 shrink-0"
+                    :disabled="!canSendToCustomer || !!sendingImg[p.id + ':detail']"
+                    title="Gửi ảnh chi tiết vào chat"
+                    @click.stop="sendProductImages(p, 'detail')"
+                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length - 1 }}</button>
                 </div>
                 <div class="text-sm font-bold text-slate-700">{{ formatPrice(p.price) }}</div>
                 <div v-if="p.sizes && p.sizes.length" class="text-[12px] text-slate-500 flex flex-wrap gap-x-2">
@@ -465,16 +472,23 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center justify-between gap-2">
                     <router-link :to="`/salev2/product/${p.id}/edit`" class="font-bold text-sm text-blue-600 hover:underline">{{ p.code }}</router-link>
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex flex-wrap items-center justify-end gap-1.5">
                       <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" :class="p.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'">
                         {{ p.status === 'AVAILABLE' ? 'CÒN HÀNG' : 'ĐÃ BÁN' }}
                       </span>
-                      <button
-                    class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center active:bg-slate-200 shrink-0"
-                    aria-label="Copy ảnh gốc sản phẩm"
-                    title="Copy ảnh gốc (chính + chi tiết)"
-                    @click.stop="openProductImages(p)"
-                  ><i class="el-icon-document-copy text-[13px]"></i></button>
+    <button
+                    class="h-6 px-2 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center gap-1 active:bg-slate-200 disabled:opacity-50 shrink-0"
+                    :disabled="!canSendToCustomer || !!sendingImg[p.id + ':main']"
+                    title="Gửi ảnh chính vào chat"
+                    @click.stop="sendProductImages(p, 'main')"
+                  ><i :class="sendingImg[p.id + ':main'] ? 'el-icon-loading' : 'el-icon-picture-outline'"></i>Chính</button>
+                  <button
+                    v-if="p.status === 'AVAILABLE' && (p.images || []).length > 1"
+                    class="h-6 px-2 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center gap-1 active:bg-blue-700 disabled:opacity-50 shrink-0"
+                    :disabled="!canSendToCustomer || !!sendingImg[p.id + ':detail']"
+                    title="Gửi ảnh chi tiết vào chat"
+                    @click.stop="sendProductImages(p, 'detail')"
+                  ><i :class="sendingImg[p.id + ':detail'] ? 'el-icon-loading' : 'el-icon-s-promotion'"></i>Chi tiết {{ (p.images || []).length - 1 }}</button>
                     </div>
                   </div>
                   <div class="text-xs font-bold text-slate-700 mt-0.5">{{ formatPrice(p.price) }}</div>
@@ -517,36 +531,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Product original images (copy / share) -->
-    <el-dialog :title="imgDialog.code ? 'Ảnh gốc ' + imgDialog.code : 'Ảnh gốc'" :visible.sync="imgDialog.visible" :width="isMobile ? '94%' : '600px'" append-to-body>
-      <div class="flex flex-wrap gap-2 mb-3">
-        <el-button
-          v-if="canShareFiles"
-          type="primary"
-          size="small"
-          icon="el-icon-share"
-          :loading="imgDialog.loading"
-          :disabled="!imgDialog.files.length"
-          @click="shareAllImages"
-        >Copy / Chia sẻ tất cả ({{ imgDialog.urls.length }})</el-button>
-        <el-button size="small" icon="el-icon-download" :disabled="!imgDialog.files.length" @click="downloadAllImages">Tải tất cả</el-button>
-      </div>
-      <div v-if="!imgDialog.urls.length" class="text-sm text-slate-400">Sản phẩm chưa có ảnh gốc.</div>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <div v-for="(u, i) in imgDialog.urls" :key="u" class="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-          <img :src="u" class="w-full h-40 object-cover block" @click="previewImage(u)" />
-          <span v-if="i === 0" class="absolute top-1 left-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-600 text-white">Ảnh chính</span>
-          <button
-            class="absolute bottom-1 right-1 h-7 px-2 rounded-full bg-white/95 text-slate-700 text-[12px] font-semibold border border-slate-200 active:bg-slate-100"
-            @click="copyOneImage(i)"
-          ><i class="el-icon-document-copy"></i> Copy</button>
-        </div>
-      </div>
-      <p class="text-[12px] text-slate-400 mt-2 mb-0">
-        {{ canShareFiles ? 'Bấm "Copy / Chia sẻ tất cả" rồi chọn Sao chép, Lưu ảnh hoặc gửi Messenger.' : 'Trình duyệt chỉ copy được 1 ảnh mỗi lần — dùng nút Copy trên từng ảnh hoặc Tải tất cả.' }}
-      </p>
-    </el-dialog>
 
     <!-- Usage / cost dialog -->
     <el-dialog title="Chi phí AI & OCR" :visible.sync="usageVisible" :width="isMobile ? '94%' : '560px'" append-to-body>
@@ -680,7 +664,7 @@ export default {
       mobileView: 'list',
       sheet: null,
       replyDirty: false,
-      imgDialog: { visible: false, code: '', urls: [], files: [], loading: false },
+      sendingImg: {},
       usageVisible: false,
       usageLoading: false,
       usage: null,
@@ -718,13 +702,6 @@ export default {
     showingAISuggestion() {
       const sess = this.activeSession;
       return Boolean(sess && sess.ai_generated && sess.suggested_reply && this.editableReply === sess.suggested_reply);
-    },
-    canShareFiles() {
-      try {
-        return !!(navigator.canShare && navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] }));
-      } catch (e) {
-        return false;
-      }
     },
     canSendToCustomer() {
       return Boolean(this.activeSession && /^\d+$/.test(this.activeSession.thread_id || ''));
@@ -1006,75 +983,26 @@ export default {
         this.goingToOrder = false;
       }
     },
-    // ---------- product original images ----------
-    async openProductImages(p) {
-      const urls = (p.images && p.images.length ? p.images : [p.thumb_url]).filter(Boolean);
-      this.imgDialog = { visible: true, code: p.code, urls, files: [], loading: true };
-      // Fetch originals up-front so the share sheet opens instantly on tap (keeps the user gesture).
-      const files = await Promise.all(
-        urls.map(async (u, i) => {
-          try {
-            const res = await fetch(u, { mode: 'cors' });
-            const blob = await res.blob();
-            const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-            return new File([blob], `${p.code}_${i === 0 ? 'main' : 'detail' + i}.${ext}`, { type: blob.type || 'image/jpeg' });
-          } catch (e) {
-            return null;
-          }
-        })
-      );
-      if (this.imgDialog.code === p.code) {
-        this.imgDialog.files = files.filter(Boolean);
-        this.imgDialog.loading = false;
-      }
-    },
-    async shareAllImages() {
-      const files = this.imgDialog.files;
-      if (!files.length) return;
+    // ---------- send product photos into the chat ----------
+    async sendProductImages(p, kind) {
+      if (!this.activeSession || !this.canSendToCustomer) return;
+      const key = p.id + ':' + kind;
+      if (this.sendingImg[key]) return;
+      this.$set(this.sendingImg, key, true);
       try {
-        await navigator.share({ files, title: this.imgDialog.code });
+        const res = await axios.post('/salev2/api/copilot/send-product-images', {
+          thread_id: this.activeSession.thread_id,
+          product_id: p.id,
+          kind
+        });
+        const n = (res.data && res.data.sent) || 0;
+        this.$message.success(`Đã gửi ${kind === 'main' ? 'ảnh chính' : n + ' ảnh chi tiết'} ${p.code}`);
       } catch (e) {
-        if (e && e.name !== 'AbortError') this.$message.error('Không mở được chia sẻ: ' + e.message);
+        const msg = (e.response && e.response.data && e.response.data.error) || e.message;
+        this.$message.error('Gửi ảnh thất bại: ' + msg);
+      } finally {
+        this.$delete(this.sendingImg, key);
       }
-    },
-    toPngBlob(blob) {
-      if (blob.type === 'image/png') return Promise.resolve(blob);
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        const url = URL.createObjectURL(blob);
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          c.width = img.naturalWidth;
-          c.height = img.naturalHeight;
-          c.getContext('2d').drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
-          c.toBlob((b) => (b ? resolve(b) : reject(new Error('convert failed'))), 'image/png');
-        };
-        img.onerror = reject;
-        img.src = url;
-      });
-    },
-    async copyOneImage(i) {
-      const file = this.imgDialog.files[i];
-      try {
-        if (!file) throw new Error('Ảnh chưa tải xong');
-        // Pass a promise so Safari keeps the click as the user gesture.
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': this.toPngBlob(file) })]);
-        this.$message.success('Đã copy ảnh ' + (i === 0 ? 'chính' : 'chi tiết ' + i));
-      } catch (e) {
-        this.$message.error('Không copy được ảnh: ' + (e.message || e));
-      }
-    },
-    downloadAllImages() {
-      this.imgDialog.files.forEach((f, idx) => {
-        setTimeout(() => {
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(f);
-          a.download = f.name;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        }, idx * 300);
-      });
     },
     async openUsage() {
       this.usageVisible = true;

@@ -102,8 +102,11 @@ type CopilotService struct {
 	OpenAIKey  string
 	Client     *http.Client
 
-	mu          sync.RWMutex
-	sessions    map[string]*CopilotSession
+	mu       sync.RWMutex
+	sessions map[string]*CopilotSession
+	// skipOCR: number of upcoming shop-echo images per PSID that we sent ourselves
+	// (product photos) — no need to pay Vision OCR for them.
+	skipOCR     map[string]*skipOCRBudget
 	sessionList []string // ordered newest first
 	subscribers map[chan *CopilotSession]struct{}
 }
@@ -122,6 +125,7 @@ func NewCopilotService(db *gorm.DB, vision *VisionService, mediaBase string) *Co
 		Client:      &http.Client{Timeout: 45 * time.Second},
 		sessions:    make(map[string]*CopilotSession),
 		subscribers: make(map[chan *CopilotSession]struct{}),
+		skipOCR:     make(map[string]*skipOCRBudget),
 	}
 	svc.initStore()
 	return svc
@@ -948,7 +952,7 @@ func (s *CopilotService) UpsertFBMessage(
 	}
 
 	var ocrText string
-	if msgType == "image" && imageURL != "" && s.Vision != nil {
+	if msgType == "image" && imageURL != "" && s.Vision != nil && !(sender == "shop" && s.consumeSkipOCR(psid)) {
 		if txt, err := s.Vision.ExtractTextFromImage(imageURL); err == nil {
 			ocrText = strings.TrimSpace(txt)
 		}
@@ -1503,4 +1507,106 @@ func (s *CopilotService) productMentionIndex(msgs []CopilotMessage) map[string]i
 		}
 	}
 	return last
+}
+
+type skipOCRBudget struct {
+	left  int
+	until time.Time
+}
+
+// ExpectOwnImages marks that n shop images about to echo back for psid were sent by Copilot.
+func (s *CopilotService) ExpectOwnImages(psid string, n int) {
+	if n <= 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.skipOCR[psid]
+	if b == nil || time.Now().After(b.until) {
+		b = &skipOCRBudget{}
+		s.skipOCR[psid] = b
+	}
+	b.left += n
+	b.until = time.Now().Add(3 * time.Minute)
+}
+
+func (s *CopilotService) consumeSkipOCR(psid string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.skipOCR[psid]
+	if b == nil || b.left <= 0 || time.Now().After(b.until) {
+		delete(s.skipOCR, psid)
+		return false
+	}
+	b.left--
+	return true
+}
+
+// ProductImagesForSend returns the original photo URLs of a product: kind "main" = the main
+// photo; kind "detail" = the other photos (only for AVAILABLE products).
+func (s *CopilotService) ProductImagesForSend(productID uint, kind string) ([]string, string, error) {
+	if s.DB == nil {
+		return nil, "", fmt.Errorf("database not initialized")
+	}
+	var p models.Product
+	if err := s.DB.Preload("Images").First(&p, productID).Error; err != nil {
+		return nil, "", fmt.Errorf("không tìm thấy sản phẩm")
+	}
+	code := strPtrVal(p.Name)
+	all := s.originalImages(p)
+	if len(all) == 0 {
+		return nil, code, fmt.Errorf("sản phẩm %s chưa có ảnh", code)
+	}
+	if kind == "main" {
+		return all[:1], code, nil
+	}
+	if !strings.EqualFold(strPtrVal(p.Status), "AVAILABLE") {
+		return nil, code, fmt.Errorf("%s đã bán — không gửi ảnh chi tiết", code)
+	}
+	if len(all) < 2 {
+		return nil, code, fmt.Errorf("%s chưa có ảnh chi tiết", code)
+	}
+	return all[1:], code, nil
+}
+
+// SendFBImageURL sends one image to a Messenger user by public URL (Facebook downloads it).
+func (s *CopilotService) SendFBImageURL(ctx context.Context, psid, imageURL, pageToken string) error {
+	if psid == "" || pageToken == "" {
+		return fmt.Errorf("thiếu PSID hoặc FB_MAIN_PAGE_TOKEN")
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"recipient":      map[string]string{"id": psid},
+		"messaging_type": "RESPONSE",
+		"message": map[string]interface{}{
+			"attachment": map[string]interface{}{
+				"type":    "image",
+				"payload": map[string]interface{}{"url": imageURL, "is_reusable": true},
+			},
+		},
+	})
+	endpoint := "https://graph.facebook.com/v21.0/me/messages?access_token=" + url.QueryEscape(pageToken)
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		var fbErr struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    int    `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &fbErr) == nil && fbErr.Error.Message != "" {
+			return fmt.Errorf("Facebook (%d): %s", fbErr.Error.Code, fbErr.Error.Message)
+		}
+		return fmt.Errorf("Facebook HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

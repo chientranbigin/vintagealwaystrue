@@ -498,3 +498,41 @@ func (h *CopilotHandler) Refresh(c *gin.Context) {
 	h.Copilot.SaveAndBroadcast(sess)
 	c.JSON(http.StatusOK, gin.H{"success": true, "session": sess})
 }
+
+// SendProductImages sends a detected product's main photo (any status) or its detail photos
+// (available products only) to the customer's Messenger thread, in order.
+func (h *CopilotHandler) SendProductImages(c *gin.Context) {
+	var req struct {
+		ThreadID  string `json:"thread_id" binding:"required"`
+		ProductID uint   `json:"product_id" binding:"required"`
+		Kind      string `json:"kind" binding:"required"` // "main" | "detail"
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Kind != "main" && req.Kind != "detail" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "kind phải là main hoặc detail"})
+		return
+	}
+	if h.isInvalidThreadID(req.ThreadID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hội thoại không hợp lệ"})
+		return
+	}
+	urls, code, err := h.Copilot.ProductImagesForSend(req.ProductID, req.Kind)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_, pageToken := h.getMainPageCredentials()
+	h.Copilot.ExpectOwnImages(req.ThreadID, len(urls))
+	sent := 0
+	for _, u := range urls {
+		if err := h.Copilot.SendFBImageURL(c.Request.Context(), req.ThreadID, u, pageToken); err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "sent": sent, "code": code})
+			return
+		}
+		sent++
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "sent": sent, "code": code})
+}
