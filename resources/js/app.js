@@ -67,10 +67,9 @@ const app = new Vue({
             const p = this.$route ? this.$route.path : '';
             return [
                 '/salev2/order/create',
+                '/salev2/customers',
                 '/salev2/upload',
-                '/salev2/upload-sessions',
-                '/salev2/facebook-post',
-                '/salev2/copilot'
+                '/salev2/facebook-post'
             ].includes(p);
         },
         isMobileMoreActive() {

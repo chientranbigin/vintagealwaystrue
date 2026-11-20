@@ -57,9 +57,13 @@
                         <i class="el-icon-box text-lg"></i>
                         <span>Products</span>
                     </router-link>
-                    <router-link to="/salev2/customers" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
-                        <i class="el-icon-user text-lg"></i>
-                        <span>Customers</span>
+                    <router-link to="/salev2/copilot" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-emerald-50 text-slate-700 hover:text-emerald-600 font-bold text-sm bg-emerald-50/50 border border-emerald-200/80">
+                        <i class="el-icon-chat-dot-round text-lg text-emerald-600"></i>
+                        <span>Copilot</span>
+                    </router-link>
+                    <router-link to="/salev2/upload-sessions" class="flex items-center gap-2 px-4 h-10 rounded-lg transition-all hover:bg-slate-50 text-slate-600 hover:text-blue-600 font-medium text-sm">
+                        <i class="el-icon-folder-opened text-lg"></i>
+                        <span>Sessions</span>
                     </router-link>
 
                     <!-- Desktop More Dropdown -->
@@ -79,21 +83,17 @@
                                 <i class="el-icon-plus text-base font-bold"></i>
                                 <span>Tạo đơn (POS)</span>
                             </router-link>
+                            <router-link to="/salev2/customers" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                                <i class="el-icon-user text-base"></i>
+                                <span>Customers</span>
+                            </router-link>
                             <router-link to="/salev2/upload" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
                                 <i class="el-icon-upload text-base"></i>
                                 <span>Upload</span>
                             </router-link>
-                            <router-link to="/salev2/upload-sessions" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
-                                <i class="el-icon-folder-opened text-base"></i>
-                                <span>Sessions</span>
-                            </router-link>
                             <router-link to="/salev2/facebook-post" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
                                 <i class="el-icon-s-promotion text-base text-blue-600"></i>
                                 <span>Đăng FB</span>
-                            </router-link>
-                            <router-link to="/salev2/copilot" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
-                                <i class="el-icon-chat-dot-round text-base text-emerald-600"></i>
-                                <span>Copilot</span>
                             </router-link>
                             <div class="my-1.5 border-t border-slate-100"></div>
                             <a href="/sale" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
@@ -189,6 +189,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
 
-    <script src="/js/app.js?v=20261119_share_copilot"></script>
+    <script src="/js/app.js?v=20261120_desktop_menu"></script>
 </body>
 </html>
